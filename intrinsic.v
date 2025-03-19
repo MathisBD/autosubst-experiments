@@ -1,25 +1,14 @@
-From Coq Require Import String List.
+From Coq Require Import String List Morphisms.
 Import ListNotations.
 
 (** Convenience tactic. *)
 Ltac inv H := inversion H ; subst.
 
-(** Forall combinator in Type. *)
-(*Inductive All {A} (P : A -> Type) : list A -> Type :=
-| All_nil : All P []
-| All_cons : forall (x : A) (l : list A),
-    P x -> All P l -> All P (x :: l).
-Arguments All {A} P%_type _.
-Arguments All_nil {_ _}.
-Arguments All_cons {_ _ _ _}.
-#[global] Hint Constructors All : core.*)
-
 (** Argument types over a set of base types. *)
 Inductive arg_ty {base} :=
-  | TBase : base -> arg_ty
-  | TVar : arg_ty
-  | TTerm : arg_ty
-  | TBind : arg_ty -> arg_ty.
+| AT_base : base -> arg_ty
+| AT_term : arg_ty
+| AT_bind : arg_ty -> arg_ty.
 
 (** Signatures for abstract terms. *)
 Module Type Signature.
@@ -40,31 +29,145 @@ Module AbstractTerms (S : Signature).
 Export S.
 Definition arg_ty := @arg_ty base.
 
-(** Term grammar. Terms are well-formed by construction,
+(** Terms from the sigma calculus. Terms are well-formed by construction,
     i.e. we enforce that constructors are applied to the right number 
     and types of arguments _intrinsically_ instead of _extrinsically_. *)
 Inductive term : Type :=
-| Actor : forall c, arg_list (ctor_type c) -> term
-(** [arg_list tys] represents a list of arguments of types [tys]. *)
-with arg_list : list arg_ty -> Type :=
-| ANil : arg_list []
-| ACons {ty tys} : arg ty -> arg_list tys -> arg_list (ty :: tys)
+| (* A term variable. *)
+  T_var : nat -> term
+| (* A term constructor, applied to a list of arguments. *)
+  T_ctor : forall c, args (ctor_type c) -> term
+| (* An explicit substitution, applied to a term. *)
+  T_subst : term -> subst -> term
+with args : list arg_ty -> Type :=
+| AS_nil : args []
+| AS_cons {ty tys} : arg ty -> args tys -> args (ty :: tys)
+| AS_subst {tys} : args tys -> subst -> args tys
 (** [arg ty] represents a single argument of type [ty]. *)
 with arg : arg_ty -> Type :=
-| ABase : forall b, base_type b -> arg (TBase b)
-| AVar : nat -> arg TVar
-| ATerm : term -> arg TTerm
-| ABind {ty} : arg ty -> arg (TBind ty).
+| A_base : forall b, base_type b -> arg (AT_base b)
+| A_term : term -> arg AT_term
+| A_bind {ty} : arg ty -> arg (AT_bind ty)
+| A_subst {ty} : arg ty -> subst -> arg ty
+(** Explicit substitutions. *)
+with subst : Type :=
+| (* The successor subsitution: it maps [n] to [n+1]. *)
+  S_succ : subst
+| S_cons : term -> subst -> subst
+| (* [S_comp s1 s2] applies [s2] followed by [s1]. 
+     It is equivalent to [s1 ∘ s2]. *)
+  S_comp : subst -> subst -> subst.
 
-(* TODO: prove a proper induction principle for terms. *)
+(* Custom notations to ease writing terms and substitutions. *)
+Notation "t .: s" := (S_cons t s) (at level 70, right associativity).
+Notation "s1 ∘ s2" := (S_comp s1 s2) (at level 50, left associativity).
+Notation "t '[:' s ']'" := (T_subst t s) (at level 40, s at level 0, no associativity).
+Notation "b '[,' s ']'" := (AS_subst b s) (at level 40, s at level 0, no associativity).
+Notation "a '[.' s ']'" := (A_subst a s) (at level 40, s at level 0, no associativity).
 
-(** Lift a renaming, e.g. when we pass through a binder. *)
-Definition up_ren (f : nat -> nat) : nat -> nat :=
-  fun n =>
-    match n with 
-    | 0 => 0
-    | S n => S (f n)
-    end.
+(** The identity substitution. *)
+Definition S_id : subst := T_var 0 .: S_succ.
+
+Scheme term_ind' := Induction for term Sort Prop
+  with args_ind' := Induction for args Sort Prop
+  with arg_ind' := Induction for arg Sort Prop
+  with subst_ind' := Induction for subst Sort Prop.
+
+Reserved Notation "t1 =t= t2" (at level 75, no associativity).
+Reserved Notation "as1 =al= as2" (at level 75, no associativity).
+Reserved Notation "a1 =a= a2" (at level 75, no associativity).
+Reserved Notation "s1 =s= s2" (at level 75, no associativity).
+
+(** [t =t= t'] means that the terms [t] and [t'] are equal 
+    modulo the equational theory of sigma calculus. *)
+Inductive seq_term : term -> term -> Prop :=
+(* Congruence. *)
+| seq_term_var n : T_var n =t= T_var n
+| seq_term_ctor c args1 args2 : 
+    args1 =al= args2 -> T_ctor c args1 =t= T_ctor c args2
+| seq_term_subst t1 t2 s1 s2 : 
+    t1 =t= t2 -> s1 =s= s2 -> t1[: s1 ] =t= t2[: s2 ] 
+(* Sigma. *)
+| seq_term_zero_cons s t : (T_var 0)[: t .: s ] =t= t
+| seq_term_push_subst c args s : (T_ctor c args)[: s ] =t= T_ctor c (args[, s])
+with seq_args : forall tys, args tys -> args tys -> Prop :=
+| seq_args_nil : AS_nil =al= AS_nil
+| seq_args_cons ty tys (a1 a2 : arg ty) (b1 b2 : args tys) : 
+    a1 =a= a2 -> b1 =al= b2 -> AS_cons a1 b1 =al= AS_cons a2 b2
+| seq_args_subst tys (a1 a2 : args tys) s1 s2 :
+    a1 =al= a2 -> s1 =s= s2 -> AS_subst a1 s1 =al= AS_subst a2 s2
+| seq_args_push_subst ty tys (a : arg ty) (b : args tys) s :
+    (AS_cons a b)[, s ] =al= AS_cons (a[.s]) (b[,s])
+with seq_arg : forall ty, arg ty -> arg ty -> Prop :=
+(* Congruence. *)
+| seq_arg_congr_base b x : A_base b x =a= A_base b x 
+| seq_arg_congr_term t1 t2 : t1 =t= t2 -> A_term t1 =a= A_term t2
+| seq_arg_congr_bind ty (a1 a2 : arg ty) : a1 =a= a2 -> A_bind a1 =a= A_bind a2
+| seq_arg_congr_subst ty (a1 a2 : arg ty) s1 s2 : 
+    a1 =a= a2 -> s1 =s= s2 -> a1[. s1 ] =a= a2[. s2 ]
+(* Sigma. *) 
+| seq_arg_bind ty (a : arg ty) s : 
+    (A_bind a)[. s ] =a= A_bind (a[. T_var 0 .: s ∘ S_succ ])
+with seq_subst : subst -> subst -> Prop :=
+(* Congruence. *)
+| seq_subst_congr_succ : S_succ =s= S_succ
+| seq_subst_congr_cons t1 t2 s1 s2 : 
+    t1 =t= t2 -> s1 =s= s2 -> t1 .: s1 =s= t2 .: s2
+| seq_subst_congr_comp s1 s2 r1 r2 : 
+    s1 =s= s2 -> r1 =s= r2 -> s1 ∘ r1 =s= s2 ∘ r2
+(* Sigma. *)
+| seq_subst_id_left s :  S_id ∘ s =s= s 
+| seq_subst_id_right s : s ∘ S_id =s= s 
+| seq_subst_assoc s1 s2 s3 : s1 ∘ (s2 ∘ s3) =s= (s1 ∘ s2) ∘ s3
+| seq_subst_distrib t s1 s2 : (t .: s1) ∘ s2 =s= t[: s2 ] .: s1 ∘ s2
+| seq_subst_succ_cons t s : S_succ ∘ (t .: s) =s= s
+where "t1 =t= t2" := (seq_term t1 t2)
+  and "as1 =al= as2" := (seq_args _ as1 as2)
+  and "a1 =a= a2" := (seq_arg _ a1 a2)
+  and "s1 =s= s2" := (seq_subst s1 s2).
+
+Hint Constructors seq_term  : core.
+Hint Constructors seq_args  : core.
+Hint Constructors seq_arg   : core.
+Hint Constructors seq_subst : core.
+
+Scheme seq_term_min  := Minimality for seq_term Sort Prop 
+  with seq_args_min  := Minimality for seq_args Sort Prop 
+  with seq_arg_min   := Minimality for seq_arg Sort Prop 
+  with seq_subst_min := Minimality for seq_subst Sort Prop.  
+
+Lemma seq_equiv : Equivalence seq_term.
+Proof.
+constructor.
+- intros t. 
+  apply (term_ind' 
+    (fun t => t =t= t) (fun tys b => b =al= b) 
+    (fun ty a => a =a= a) (fun s => s =s= s)).
+  all: now auto.
+- intros t1.
+  apply (term_ind' 
+    (fun t1 => forall t2, t1 =t= t2 -> t2 =t= t1) (fun _ a1 => forall a2, a1 =al= a2 -> a2 =al= a1)
+    (fun _ a1 => forall a2, a1 =a= a2 -> a2 =a= a1) (fun s1 => forall s2, s1 =s= s2 -> s2 =s= s1)).
+  +  
+    all: try now auto.
+
+  apply (seq_term_min
+    (fun t1 t2 => t1 =t= t2 -> t2 =t= t1) (fun _ a1 a2 => a1 =al= a2 -> a2 =al= a1)
+    (fun _ a1 a2 => a1 =a= a2 -> a2 =a= a1) (fun s1 s2 => s1 =s= s2 -> s2 =s= s1)).
+  all: try now auto.
+  + intros.
+admit.
+Admitted.
+
+Instance eq_term_refl : Symmetric seq_term.
+Proof.
+intros t. 
+apply (term_ind' (fun t => t =t= t) (fun ty a => a =a= a) (fun s => s =s= s)).
+all: try (intros ; now constructor).
+admit.
+Admitted.
+
+
 
 (** Apply a renaming - i.e. a mapping [nat -> nat] - to a term. *)
 Fixpoint ren_term (f : nat -> nat) (t : term) : term :=
