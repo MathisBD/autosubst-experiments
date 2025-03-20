@@ -1,4 +1,4 @@
-From Coq Require Import String List Morphisms Relations Lia.
+From Coq Require Import String List Morphisms Relations.
 From Ltac2 Require Import Ltac2.
 Import ListNotations.
 
@@ -6,9 +6,8 @@ Import ListNotations.
 Ltac inv H := inversion H ; subst.
 
 (** Add some power to [auto]. *)
-Hint Extern 5 => f_equal : core.
-Hint Extern 5 => simpl : core.
-Hint Extern 10 => lia : core.
+Hint Extern 10 => f_equal : core.
+Hint Extern 10 => simpl : core.
 
 (** Argument types over a set of base types. *)
 Inductive arg_ty {base} :=
@@ -73,8 +72,8 @@ Fixpoint lift {so} (n : nat) (t : term so) : term so :=
 (** The identity substitution. *)
 Definition sid (n : nat) : term T := T_var n.
 
-(** [sshift k] shifts indices by [k]. *)
-Definition sshift (k : nat) (n : nat) : term T := T_var (n + k).
+(** The shift substitution. *)
+Definition sshift (n : nat) : term T := T_var (S n).
 
 (** Cons a term with a substitution. *)
 Definition scons (t : term T) (s : nat -> term T) (n : nat) : term T :=
@@ -132,12 +131,10 @@ Inductive term : sort -> Type :=
 (** A list of arguments of type [tys]. *)
 | AL_nil : term (AL [])
 | AL_cons {ty tys} : term (A ty) -> term (AL tys) -> term (AL (ty :: tys))
-| AL_subst {tys} : term (AL tys) -> term S -> term (AL tys)
 (** A single argument of type [ty]. *)
 | A_base : forall b, base_type b -> term (A (AT_base b))
 | A_term : term T -> term (A AT_term)
 | A_bind {ty} : term (A ty) -> term (A (AT_bind ty))
-| A_subst {ty} : term (A ty) -> term S -> term (A ty)
 (** Explicit substitutions. *)
 | (* [S_shift k] maps [n] to [n+k]. *)
   S_shift : nat -> term S
@@ -147,27 +144,29 @@ Inductive term : sort -> Type :=
      Notice the right to left evaluation order (as usual with composition). *)
   S_comp : term S -> term S -> term S.
 
+(** The identity substitution. *)
+Definition S_id : term S := S_shift 0.
+
 (* Custom notations to ease writing terms and substitutions. *)
-Notation "t .: s" := (S_cons t s) (at level 70, right associativity).
+Notation "t '.:' s" := (S_cons t s) (at level 70, right associativity).
 Notation "s1 ∘ s2" := (S_comp s1 s2) (at level 50, left associativity).
 
 Class Subst (X : Type) := { subst : X -> term S -> X }.
 Instance t_subst : Subst (term T) := { subst := T_subst }.
-Instance a_subst ty : Subst (term (A ty)) := { subst := A_subst }.
-Instance al_subst tys : Subst (term (AL tys)) := { subst := AL_subst }.
+(*Instance a_subst ty : Subst (term (A ty)) := { subst := A_subst }.
+Instance al_subst tys : Subst (term (AL tys)) := { subst := AL_subst }.*)
 Notation "t '[:' s ']'" := (subst t s) (at level 40, s at level 0, no associativity).
 
-(** The identity substitution. *)
-Definition S_id : term S := S_shift 0.
-
-(** Apply a substitution to an index. *)
-Fixpoint apply_subst (s : term S) (n : nat) : term T :=
-  match n, s with 
-  | n, S_shift k => T_var (n + k)
-  | 0, t .: s => t
-  | Datatypes.S n, t .: s => apply_subst s n
-  | n, s2 ∘ s1 => (apply_subst s1 n)[: s2]
-  end.
+(** Push a substitution in a term/substitution, 
+    and stop when we reach a [term T] or [term S]. *)
+Fixpoint apply_subst {so} (t : term so) (s : term T) : term so :=
+  match t with 
+  | T_var n => 
+    match n, s with 
+    | n, S_shift k => T_var (n + k)
+    | 0, t .: s => t
+    | S n, t .: s => s n
+    | n, s2 ∘ s1 => T_subst 
 
 (** [t σ= t'] means that the terms/substitutions [t] and [t'] are equal 
     modulo the equational theory of sigma calculus. *)
@@ -204,7 +203,7 @@ Inductive seq : forall s, term s -> term s -> Prop :=
 
 (** Sigma equations. *)
 
-| seq_push_subst_var n s : (T_var n)[: s] =σ apply_subst s n
+| seq_push_subst_var n s : 
 | seq_push_subst_ctor c args s : (T_ctor c args)[: s] =σ T_ctor c (args[: s])
 | seq_push_subst_al_nil s : AL_nil[: s] =σ AL_nil
 | seq_push_subst_al_cons ty tys (a : term (A ty)) (args : term (AL tys)) s : 
@@ -215,10 +214,12 @@ Inductive seq : forall s, term s -> term s -> Prop :=
     (A_bind a)[: s] =σ A_bind (a[: T_var 0 .: S_shift 1 ∘ s])
 
 | seq_shift k : S_shift (k+1) =σ S_shift 1 ∘ S_shift k 
-| seq_id_left s : S_id ∘ s =σ s 
+| seq_zero_cons s t : (T_var 0)[: t .: s ] =σ t
+| seq_id_left s :  S_id ∘ s =σ s 
 | seq_id_right s : s ∘ S_id =σ s 
 | seq_assoc s1 s2 s3 : s1 ∘ (s2 ∘ s3) =σ (s1 ∘ s2) ∘ s3
 | seq_distrib t s1 s2 : s2 ∘ (t .: s1) =σ t[: s2 ] .: s2 ∘ s1
+| seq_shift_cons t s : (t .: s) ∘ S_shift 1 =σ s
 
 where "t1 '=σ' t2" := (seq _ t1 t2).
 Hint Constructors seq  : core.
@@ -238,7 +239,7 @@ Definition simpl {so} (t : term so) : term so :=
   match t in term so0 return term so0 with 
   | T_subst t' s' => 
     match s' with 
-    | T_var 0 .: S_shift 1 => t'
+    | T_var 0 .: S_shift => t'
     | _ => t' [: s']
     end
   | t' => t'
@@ -327,7 +328,7 @@ Definition denote_sort (s : Two.sort) : Type :=
 (** Mapping from level two terms/substitutions to level one terms/substitutions. *)
 Fixpoint denote {s : Two.sort} (t : Two.term s) : denote_sort s :=
   match t in Two.term s0 return denote_sort s0  with
-  | Two.S_shift k => sshift k
+  | Two.S_shift => sshift
   | Two.S_cons t s => scons (denote t) (denote s)
   | Two.S_comp s1 s2 => scomp (denote s1) (denote s2)
 
@@ -374,23 +375,22 @@ simpl. f_equal. rewrite <-IHt at 2. apply subst_proper.
 - intros [|n] ; auto.
 Qed.
 
-Lemma lift_subst so (t : term so) k : 
-  lift k t = subst t (fun n => if Nat.ltb n k then T_var n else T_var (S n)).
-Proof.
-revert k. induction t ; intros k ; simpl ; try (now auto).
-f_equal. rewrite IHt. apply subst_proper ; auto.
-intros [|n] ; simpl ; auto.
-destruct (PeanoNat.Nat.ltb_spec n k) ; destruct (PeanoNat.Nat.ltb_spec (S n) (S k)) ; 
-simpl ; solve [ ltac1:(lia) | reflexivity ].
-Qed.
+Lemma subst_lift so (t : term so) s :
+  subst (lift 0 t) (up_subst s) =  lift 0 (subst t s).
+Proof. 
+revert s. induction t ; simpl ; intros s ; try (now auto).
+f_equal.
+Admitted.
 
-Lemma subst_comp so (t : term so) s1 s2 : subst (subst t s1) s2 = subst t (scomp s2 s1).
+Lemma subst_comp so (t : term so) s1 s2 : subst (subst t s2) s1 = subst t (scomp s1 s2).
 Proof.
 revert s1 s2. induction t ; intros s1 s2 ; simpl ; try (now auto).
 f_equal. rewrite IHt. apply subst_proper ; auto.
 intros n. cbv [scomp]. destruct n as [|n] ; simpl ; auto.
-generalize (s1 n) ; intros t'.
-Admitted.
+apply subst_lift.
+Qed.
+
+Lemma lift_subst so (t : term so) : lift 0 t = subst t sshift.
 
 Lemma denote_proper so : Proper (Two.seq so ==> one_eq so) denote.
 Proof.
@@ -401,14 +401,10 @@ intros t1 t2 Ht. induction Ht ; simpl in * ; try (now auto).
 - now rewrite IHHt1, IHHt2. 
 - intros [|n] ; auto.
 - intros [|n] ; cbv [scomp] ; now rewrite IHHt1, IHHt2.
-- admit.
 - f_equal. apply subst_proper ; auto.
-  intros [|n] ; simpl ; auto. cbv [scomp]. rewrite lift_subst.
-  apply subst_proper ; auto. intros [|] ; auto. simpl. cbv [sshift]. f_equal.
-  ltac1:(lia).
-- intros n. cbv [scomp]. simpl. cbv [sshift]. auto.  
+  intros [|n] ; simpl ; auto. cbv [scomp]. 
 - intros n. cbv [scomp]. rewrite <- subst_id. apply subst_proper ; auto.
-  intros [|n'] ; auto. cbv [sshift]. auto. 
+  intros [|n'] ; auto.
 - intros n. cbv [scomp]. destruct n as [|n] ; auto.
 - intros n. cbv [scomp]. rewrite subst_comp. reflexivity.
 - intros n. cbv [scomp]. destruct n as [|n] ; auto.    
@@ -455,7 +451,7 @@ Fixpoint csubst (t : cterm) (s : nat -> cterm) {struct t} : cterm :=
 Definition ccomp (s1 : nat -> cterm) (s2 : nat -> cterm) (n : nat) : cterm :=
   csubst (s2 n) s1.
 
-(*Instance csubst_proper : Proper (eq ==> pointwise_relation nat eq ==> eq) csubst.
+Instance csubst_proper : Proper (eq ==> pointwise_relation nat eq ==> eq) csubst.
 Proof.
 intros t ? <-. induction t ; intros s1 s2 Hs ; simpl.
 - auto.
@@ -474,7 +470,7 @@ induction t ; simpl.
 - reflexivity.
 - now rewrite IHt1, IHt2.
 - now rewrite cshift_cid, IHt.
-Qed.  *)
+Qed.  
 
 (** Abstract signature. *)
 
@@ -496,50 +492,26 @@ Module Sig.
 End Sig.
 
 (** Abstract terms. *)
-Module One := LevelOne (Sig).
-Import One.
+Module A := LevelTwo (Sig).
+Import A.
+Definition aterm := term T.
 
-(** Mapping from level one terms/substitutions to level two terms/substitutions. *)
-Ltac2 rec reify (t : constr) : constr :=
-  lazy_match! t with 
-  (* Terms constructors. *)
-  | Var ?n => constr:(T_var $n)
-  | App ?b ?t1 ?t2 => 
-    let b' := constr:(A_base BBool $b) in
-    let t1' := reify t1 in
-    let t2' := reify t2 in
-    constr:(T_ctor CApp 
-      (AL_cons $b' (AL_cons (A_term $t1') (AL_cons (A_term $t2') AL_nil))))
-  | Lam ?str ?t =>
-    let str' := constr:(A_base BString $str) in
-    let t' := reify t in
-    constr:(T_ctor CLam
-      (AL_cons $str' (AL_cons (A_bind (A_term $t')) AL_nil)))
-  (* Substitution applied to a term. *)
-  | @csubst ?t ?s =>
-    let t' := reify t in 
-    let s' := reify_subst s in
-    constr:(@subst T $t' $s')
-  (* Unkown term. *)
-  | _ => Control.throw (Invalid_argument (Some (Message.of_string "reify(concrete): unkown case")))
-  end
-with reify_subst (s : constr) : constr :=
-  lazy_match! s with 
-  (* Usual substitutions. *)
-  | cid => constr:(sid)
-  | cshift => constr:(sshift)
-  | ccons ?t ?s => 
-    let t' := reify t in 
-    let s' := reify_subst s in 
-    constr:(scons $t' $s')
-  | ccomp ?s1 ?s2 =>
-    let s1' := reify_subst s1 in
-    let s2' := reify_subst s2 in
-    constr:(scomp $s1' $s2')
-  (* Unkown substitution. *)
-  | _ => Control.throw (Invalid_argument (Some (Message.of_string "reify: unkown case")))
+(** Mapping from concrete terms to abstract terms. *)
+Fixpoint reify (t : cterm) : aterm :=
+  match t with 
+  | Var n => T_var n
+  | App b t1 t2 => 
+    T_ctor CApp 
+      (AL_cons (A_base BBool b) 
+      (AL_cons (A_term (reify t1)) 
+      (AL_cons (A_term (reify t2))
+       AL_nil)))
+  | Lam s t => 
+    T_ctor CLam 
+      (AL_cons (A_base BString s) 
+      (AL_cons (A_bind (A_term (reify t)))
+       AL_nil))
   end.
-
 
 (**************)
 Section DenoteSort.
@@ -564,6 +536,7 @@ Section DenoteSort.
 
   Definition denote_sort (s : sort) : Type :=
     match s with 
+    | S => nat -> denote_term
     | T => denote_term
     | AL tys => denote_al_ty tys -> denote_term
     | A ty => denote_arg_ty ty
@@ -579,10 +552,14 @@ Definition denote_ctor (c : ctor) : denote_al_ty cterm (ctor_type c) :=
 
 (** Mapping from abstract terms to concrete terms. 
     This uses some continuation passing style (when denoting argument lists). *)
-Fixpoint denote {s} (t : One.term s) : denote_sort cterm s :=
-  match t with
+Fixpoint denote {s} (t : A.term s) : denote_sort cterm s :=
+  match t in A.term s0 return denote_sort cterm s0  with
+  | S_shift => cshift
+  | S_cons t s => ccons (denote t) (denote s)
+  | S_comp s1 s2 => ccomp (denote s1) (denote s2)
   | T_var n => Var n 
   | T_ctor c args => (denote args) (denote_ctor c)
+  | T_subst t s => csubst (denote t) (denote s)
   | AL_nil => fun t => t
   | AL_cons a args => fun f => (denote args) (f (denote a))
   | A_base b x => x
