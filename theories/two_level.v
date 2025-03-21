@@ -145,7 +145,9 @@ Inductive term : sort -> Type :=
   S_cons : term T -> term S -> term S
 | (* [S_comp s1 s2] or [s1 ∘ s2] applies [s2] followed by [s1].
      Notice the right to left evaluation order (as usual with composition). *)
-  S_comp : term S -> term S -> term S.
+  S_comp : term S -> term S -> term S
+| (* Substitution metavariables. *)
+  S_mvar : nat -> term S.
 
 (* Custom notations to ease writing terms and substitutions. *)
 Notation "t .: s" := (S_cons t s) (at level 70, right associativity).
@@ -167,6 +169,7 @@ Fixpoint apply_subst (s : term S) (n : nat) : term T :=
   | 0, t .: s => t
   | Datatypes.S n, t .: s => apply_subst s n
   | n, s2 ∘ s1 => (apply_subst s1 n)[: s2]
+  | _, _ => T_subst (T_var n) s
   end.
 
 (** [t σ= t'] means that the terms/substitutions [t] and [t'] are equal 
@@ -244,7 +247,7 @@ Definition simpl {so} (t : term so) : term so :=
   | t' => t'
   end.
 
-Lemma simpl_seq {so} (t : term so) : simpl t =σ t.
+Lemma simpl_sound {so} (t : term so) : simpl t =σ t.
 Proof.
 destruct t ; simpl ; try (now eauto).
 (* TODO *)
@@ -261,60 +264,70 @@ Module One := LevelOne (Sig).
 Module Two := LevelTwo (Sig). 
 Import Sig One.
   
-(** Mapping from level one terms/substitutions to level two terms/substitutions. *)
-Ltac2 rec reify (t : constr) : constr :=
+Ltac2 rec nat_of_int (n : int) : constr :=
+  if Int.lt 0 n then 
+    let n' := nat_of_int (Int.sub n 1) in
+    constr:(S $n')
+  else 
+    constr:(0).
+
+(** Mapping from level one terms/substitutions to 
+    level two terms/substitutions + environments (lists of level one substitutions). *)
+Ltac2 rec reify (env : constr list) (t : constr) : constr list * constr :=
   lazy_match! t with 
   (* Terms constructors. *)
-  | T_var ?n => constr:(Two.T_var $n)
+  | T_var ?n => (env, constr:(Two.T_var $n))
   | T_ctor ?c ?args => 
-    let args' := reify args in
-    constr:(Two.T_ctor $c $args')
-  | AL_nil => constr:(Two.AL_nil)
+    let (env, args') := reify env args in
+    (env, constr:(Two.T_ctor $c $args'))
+  | AL_nil => (env, constr:(Two.AL_nil))
   | AL_cons ?a ?args =>
-    let a' := reify a in
-    let args' := reify args in
-    constr:(Two.AL_cons $a' $args')
-  | A_base ?b ?x => constr:(Two.A_base $b $x)
+    let (env, a') := reify env a in
+    let (env, args') := reify env args in
+    (env, constr:(Two.AL_cons $a' $args'))
+  | A_base ?b ?x => (env, constr:(Two.A_base $b $x))
   | A_term ?t => 
-    let t' := reify t in
-    constr:(Two.A_term $t') 
+    let (env, t') := reify env t in
+    (env, constr:(Two.A_term $t')) 
   | A_bind ?a =>
-    let a' := reify a in
-    constr:(Two.A_bind $a')
+    let (env, a') := reify env a in
+    (env, constr:(Two.A_bind $a'))
   (* Substitution applied to a term. *)
   | @subst AL ?args ?s =>
-    let args' := reify args in 
-    let s' := reify_subst s in
-    constr:(Two.AL_subst $args' $s')
+    let (env, args') := reify env args in 
+    let (env, s') := reify_subst env s in
+    (env, constr:(Two.AL_subst $args' $s'))
   | @subst A ?t ?s =>
-    let t' := reify t in
-    let s' := reify_subst s in
-    constr:(Two.A_subst $t' $s')
+    let (env, t') := reify env t in
+    let (env, s') := reify_subst env s in
+    (env, constr:(Two.A_subst $t' $s'))
   | @subst T ?t ?s =>
-    let t' := reify t in
-    let s' := reify_subst s in
-    constr:(Two.T_subst $t' $s')
+    let (env, t') := reify env t in
+    let (env, s') := reify_subst env s in
+    (env, constr:(Two.T_subst $t' $s'))
   (* Unkown term. *)
-  | _ => Control.throw (Invalid_argument (Some (Message.of_string "reify: unkown case")))
+  | _ => Control.throw (Invalid_argument (Some (Message.of_string "reify: term mvars not handled yet")))
   end
-with reify_subst (s : constr) : constr :=
+with reify_subst (env : constr list) (s : constr) : constr list * constr :=
   lazy_match! s with 
   (* Usual substitutions. *)
-  | sid => constr:(Two.S_id)
-  | sshift => constr:(Two.S_shift)
+  | sid => (env, constr:(Two.S_id))
+  | sshift ?k => (env, constr:(Two.S_shift $k))
   | scons ?t ?s => 
-    let t' := reify t in 
-    let s' := reify_subst s in 
-    constr:(Two.S_cons $t' $s')
+    let (env, t') := reify env t in 
+    let (env, s') := reify_subst env s in 
+    (env, constr:(Two.S_cons $t' $s'))
   | scomp ?s1 ?s2 =>
-    let s1' := reify_subst s1 in
-    let s2' := reify_subst s2 in
-    constr:(Two.S_comp $s1' $s2')
-  (* Unkown substitution. *)
-  | _ => Control.throw (Invalid_argument (Some (Message.of_string "reify: unkown case")))
+    let (env, s1') := reify_subst env s1 in
+    let (env, s2') := reify_subst env s2 in
+    (env, constr:(Two.S_comp $s1' $s2'))
+  (* Unkown substitutions. *)
+  | _ => 
+    let n := nat_of_int (List.length env) in
+    (s :: env, constr:(Two.S_mvar $n))
   end.
 
-(*Ltac2 Eval reify constr:(subst (T_var 3) (scons (T_var 1) (scomp sid sshift))).*)
+Ltac2 Eval reify [] constr:(subst (T_var 3) (scons (T_var 1) (scomp sid (fun n => T_var (2+n))))).
 
 Definition denote_sort (s : Two.sort) : Type :=
   match s with 
@@ -324,26 +337,32 @@ Definition denote_sort (s : Two.sort) : Type :=
   | Two.A ty => term (A ty)
   end.
 
-(** Mapping from level two terms/substitutions to level one terms/substitutions. *)
-Fixpoint denote {s : Two.sort} (t : Two.term s) : denote_sort s :=
-  match t in Two.term s0 return denote_sort s0  with
-  | Two.S_shift k => sshift k
-  | Two.S_cons t s => scons (denote t) (denote s)
-  | Two.S_comp s1 s2 => scomp (denote s1) (denote s2)
+(*Section Denote.
+  Context (env : list (denote_sort Two.S)).
 
-  | Two.T_var n => T_var n 
-  | Two.T_ctor c args => T_ctor c (denote args)
-  | Two.T_subst t s => subst (denote t) (denote s)
+  Fixpoint lookup_env 
+
+  (** Mapping from level two terms/substitutions to level one terms/substitutions. *)
+  Fixpoint denote {s : Two.sort} (t : Two.term s) : denote_sort s :=
+    match t in Two.term s0 return denote_sort s0  with
+    | Two.S_shift k => sshift k
+    | Two.S_cons t s => scons (denote t) (denote s)
+    | Two.S_comp s1 s2 => scomp (denote s1) (denote s2)
+    | Two.S_mvar n => lookup_env n
+
+    | Two.T_var n => T_var n 
+    | Two.T_ctor c args => T_ctor c (denote args)
+    | Two.T_subst t s => subst (denote t) (denote s)
+    
+    | Two.AL_nil => AL_nil
+    | Two.AL_cons a args => AL_cons (denote a) (denote args)
+    | Two.AL_subst args s => subst (denote args) (denote s)
   
-  | Two.AL_nil => AL_nil
-  | Two.AL_cons a args => AL_cons (denote a) (denote args)
-  | Two.AL_subst args s => subst (denote args) (denote s)
-
-  | Two.A_base b x => A_base b x
-  | Two.A_term t => A_term (denote t)
-  | Two.A_bind a => A_bind (denote a)
-  | Two.A_subst a s => subst (denote a) (denote s)
-  end.
+    | Two.A_base b x => A_base b x
+    | Two.A_term t => A_term (denote t)
+    | Two.A_bind a => A_bind (denote a)
+    | Two.A_subst a s => subst (denote a) (denote s)
+    end.
 
 (** Equality on level one terms/substitutions. 
     We only consider pointwise equality for substitutions, so as to not assume 
@@ -392,7 +411,7 @@ intros n. cbv [scomp]. destruct n as [|n] ; simpl ; auto.
 generalize (s1 n) ; intros t'.
 Admitted.
 
-Lemma denote_proper so : Proper (Two.seq so ==> one_eq so) denote.
+Instance denote_proper so : Proper (Two.seq so ==> one_eq so) denote.
 Proof.
 intros t1 t2 Ht. induction Ht ; simpl in * ; try (now auto).
 - etransitivity ; eauto.
@@ -412,7 +431,17 @@ intros t1 t2 Ht. induction Ht ; simpl in * ; try (now auto).
 - intros n. cbv [scomp]. destruct n as [|n] ; auto.
 - intros n. cbv [scomp]. rewrite subst_comp. reflexivity.
 - intros n. cbv [scomp]. destruct n as [|n] ; auto.    
-Admitted.      
+Admitted.   
+
+(*Lemma test : one_eq Two.T (T_var 0) (subst (T_var 3) (scons (T_var 0) (sshift 1))).
+Proof.
+let t2 := reify constr:(subst (T_var 3) (scons (T_var 0) (sshift 1))) in
+let t1 := constr:(one_eq Two.T (T_var 0) (denote $t2)) in
+change $t1 ;
+rewrite <-(Two.simpl_sound $t2).
+cbn [Two.simpl].
+simpl.
+Admitted.*)
 
 End MappingOneTwo.
 
@@ -640,7 +669,7 @@ with denote_arg {ty} (a : arg ty) : denote_arg_ty cterm ty :=
   | AVar n => n
   | ATerm t => denote t
   | ABind a' => denote_arg a'
-  end.*)
+  end.*)*)
 
   
-
+End MappingOneTwo.
