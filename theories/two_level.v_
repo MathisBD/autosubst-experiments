@@ -2,14 +2,6 @@ From Coq Require Import String List Morphisms Relations Lia.
 From Ltac2 Require Import Ltac2.
 Import ListNotations.
 
-(** Convenience tactic. *)
-Ltac inv H := inversion H ; subst.
-
-(** Add some power to [auto]. *)
-Hint Extern 5 => f_equal : core.
-Hint Extern 5 => simpl : core.
-Hint Extern 10 => lia : core.
-
 
 (*********************************************************************************)
 (** *** Level One. *)

@@ -1,3 +1,5 @@
+From Prototype Require Import Prelude.
+
 (** This file defines the notion of abstract signature of a language. *)
 
 (** Argument types over a set of base types. *)
