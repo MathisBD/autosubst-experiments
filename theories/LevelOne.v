@@ -79,7 +79,9 @@ Fixpoint rename {so} (t : term so) (r : ren) : term so :=
   | A_term t => A_term (rename t r)
   | A_bind a => A_bind (rename a (up_ren r))
   end.
-
+#[global] Instance rename_notation so : Subst (term so) ren :=
+{ gen_subst := rename }.
+  
 (*********************************************************************************)
 (** *** Substitutions. *)
 (*********************************************************************************)
@@ -119,6 +121,8 @@ Fixpoint substitute {so} (t : term so) (s : subst) : term so :=
   | A_term t => A_term (substitute t s)
   | A_bind a => A_bind (substitute a (up_subst s))
   end.
+#[global] Instance substitute_notation so : Subst (term so) subst :=
+{ gen_subst := substitute }.
 
 (** Composition of substitutions (right to left). *)
 Definition scomp (s1 s2 : subst) : subst :=
@@ -132,6 +136,7 @@ Definition scomp (s1 s2 : subst) : subst :=
 
 (** Pointwise equality for functions. *)
 Definition point_eq {A B} : relation (A -> B) := pointwise_relation _ eq.
+Notation "f =₁ g" := (point_eq f g) (at level 75).
 
 #[global] Instance up_ren_proper : Proper (point_eq ==> point_eq) up_ren.
 Proof. 
@@ -155,7 +160,7 @@ intros s1 s2 Hs [|n] ; cbv [up_subst] ; simpl.
 Qed. 
 
 #[global] Instance substitute_proper so : 
-  Proper (eq ==> pointwise_relation _ eq ==> eq) (@substitute so).
+  Proper (eq ==> point_eq ==> eq) (@substitute so).
 Proof. 
 intros t ? <-. induction t ; intros s1 s2 Hs ; simpl ; try (now auto).
 f_equal. apply IHt. now rewrite Hs.
@@ -165,32 +170,88 @@ Qed.
 (** *** Properties of substitution. *)
 (*********************************************************************************)
 
-Lemma up_subst_sid : point_eq (up_subst sid) sid.
+Lemma rshift1 n : rshift 1 n = S n.
+Proof. cbv [rshift]. lia. Qed.
+
+Lemma up_ren_comp r1 r2 : 
+  up_ren r1 ∘ up_ren r2 =₁ up_ren (r1 ∘ r2).
+Proof.
+intros [|n] ; simpl.
+- reflexivity.
+- cbv [rcomp up_ren]. simpl. cbv [rcomp rcons].
+  repeat rewrite rshift1. reflexivity.
+Qed.
+
+Lemma ren_ren so (t : term so) (r1 r2 : ren) : 
+  t[: r1][: r2] = t[: r2 ∘ r1].
+Proof.
+revert r1 r2. induction t ; intros r1 r2 ; simpl ; try (now auto).
+- now setoid_rewrite IHt.
+- setoid_rewrite IHt1. now setoid_rewrite IHt2.
+- now setoid_rewrite IHt.
+- setoid_rewrite IHt. now rewrite up_ren_comp.
+Qed.
+
+Lemma subst_ren so (t : term so) (s : subst) (r : ren) : 
+  t[: s][: r] = t[: fun n => (s n)[: r]].
+Proof.
+revert s r. induction t ; intros s r ; simpl ; try (now auto).
+- now setoid_rewrite IHt.
+- setoid_rewrite IHt1. now setoid_rewrite IHt2.
+- now setoid_rewrite IHt.
+- f_equal. setoid_rewrite IHt. apply substitute_proper ; [reflexivity|].
+  intros [|n] ; simpl ; [reflexivity|].
+  cbv [up_subst]. simpl. repeat setoid_rewrite ren_ren.
+  apply rename_proper ; [reflexivity|].
+  intros [|n'] ; simpl ; [reflexivity|].
+  cbv [rcomp up_ren]. simpl. repeat rewrite rshift1. cbv [rcomp].
+  rewrite rshift1. reflexivity.
+Qed.
+
+Lemma ren_subst so (t : term so) (s : subst) (r : ren) : 
+  t[: r][: s] = t[: fun n => s (r n)].
+Proof.
+revert s r. induction t ; intros s r ; simpl ; try (now auto).
+- now setoid_rewrite IHt. 
+- setoid_rewrite IHt1. now setoid_rewrite IHt2.
+- now setoid_rewrite IHt.
+- f_equal. setoid_rewrite IHt. apply substitute_proper ; [reflexivity|].
+  intros [|n] ; simpl ; [reflexivity|].
+  cbv [up_subst up_ren]. simpl. cbv [scons rcomp].
+  rewrite rshift1. reflexivity.
+Qed.  
+
+Lemma subst_subst so (t : term so) (s1 s2 : subst) : 
+  t[: s1][: s2] = t[: s2 ∘ s1].
+Proof.
+revert s1 s2. induction t ; intros s1 s2 ; cbn ; try (now auto).
+- now setoid_rewrite IHt.
+- setoid_rewrite IHt1. setoid_rewrite IHt2. reflexivity.
+- now setoid_rewrite IHt.
+- f_equal. setoid_rewrite IHt. apply substitute_proper ; [auto | simpl].
+  intros [|n] ; simpl ; [reflexivity|].
+  cbv [scomp]. simpl. 
+  setoid_rewrite subst_ren. setoid_rewrite ren_subst. simpl.
+  apply substitute_proper ; [reflexivity|].
+  intros n'. rewrite rshift1. reflexivity.
+Qed.
+
+Lemma up_subst_sid : (up_subst sid) =₁ sid.
 Proof. intros [|n] ; cbv [up_subst rshift] ; simpl ; auto. Qed. 
 
-Lemma subst_id so (t : term so) : substitute t sid = t.
+Lemma subst_sid so (t : term so) : t[: sid] = t.
 Proof.
 induction t ; try (now auto).
-simpl. now rewrite up_subst_sid, IHt.
+simpl. rewrite up_subst_sid. now setoid_rewrite IHt.
 Qed.
 
-Lemma lift_subst so (t : term so) k : 
-  lift k t = subst t (fun n => if Nat.ltb n k then T_var n else T_var (S n)).
-Proof.
-revert k. induction t ; intros k ; simpl ; try (now auto).
-f_equal. rewrite IHt. apply subst_proper ; auto.
-intros [|n] ; simpl ; auto.
-destruct (PeanoNat.Nat.ltb_spec n k) ; destruct (PeanoNat.Nat.ltb_spec (S n) (S k)) ; 
-simpl ; solve [ ltac1:(lia) | reflexivity ].
-Qed.
+Lemma scomp_id_l s : sid ∘ s =₁ s.
+Proof. intros n. simpl. cbv [scomp]. now setoid_rewrite subst_sid. Qed.
+    
+Lemma scomp_id_r s : s ∘ sid =₁ s.
+Proof. intros n. simpl. cbv [scomp]. simpl. reflexivity. Qed.
 
-Lemma subst_comp so (t : term so) s1 s2 : subst (subst t s1) s2 = subst t (scomp s2 s1).
-Proof.
-revert s1 s2. induction t ; intros s1 s2 ; simpl ; try (now auto).
-f_equal. rewrite IHt. apply subst_proper ; auto.
-intros n. cbv [scomp]. destruct n as [|n] ; simpl ; auto.
-generalize (s1 n) ; intros t'.
-Admitted.
-
+Lemma scomp_assoc (s1 s2 s3 : subst) : (s1 ∘ s2) ∘ s3 =₁ s1 ∘ (s2 ∘ s3).
+Proof. intros n. simpl. cbv [scomp]. now setoid_rewrite subst_subst. Qed.
 
 End WithSig.

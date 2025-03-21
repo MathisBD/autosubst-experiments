@@ -1,4 +1,4 @@
-From Coq Require Export List String Morphisms Relations Lia.
+From Coq Require Export Nat List String Morphisms Relations Lia.
 From Ltac2 Require Import Ltac2.
 Export ListNotations.
 
