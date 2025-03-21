@@ -10,26 +10,6 @@ Hint Extern 5 => f_equal : core.
 Hint Extern 5 => simpl : core.
 Hint Extern 10 => lia : core.
 
-(** Argument types over a set of base types. *)
-Inductive arg_ty {base} :=
-| AT_base : base -> arg_ty
-| AT_term : arg_ty
-| AT_bind : arg_ty -> arg_ty.
-
-(** Signatures for abstract terms. *)
-Module Type Signature.
-  (** The set of base types, 
-      e.g. [Inductive base := Unit | Bool | Nat]. *)
-  Parameter base : Type.
-  (** The actual type that each base type represents,
-      e.g. a mapping Nat => nat ; Bool => bool ; Unit => unit. *)
-  Parameter base_type : base -> Type.
-  
-  (** The set of constructors. *)
-  Parameter ctor : Type.
-  (** The number and type of each constructor argument. *)
-  Parameter ctor_type : ctor -> list (@arg_ty base). 
-End Signature.
 
 (*********************************************************************************)
 (** *** Level One. *)
@@ -39,69 +19,6 @@ Module LevelOne (Sig : Signature).
 Export Sig.
 Definition arg_ty := @arg_ty base.
 
-Inductive sort := 
-| T (* Term. *)
-| A (a : arg_ty) (* Argument. *)
-| AL (args : list arg_ty). (* Argument list. *)
-
-Inductive term : sort -> Type :=
-| (* A term variable. *)
-  T_var : nat -> term T
-| (* A term constructor, applied to a list of arguments. *)
-  T_ctor : forall c, term (AL (ctor_type c)) -> term T
-(** A list of arguments of type [tys]. *)
-| AL_nil : term (AL [])
-| AL_cons {ty tys} : term (A ty) -> term (AL tys) -> term (AL (ty :: tys))
-(** A single argument of type [ty]. *)
-| A_base : forall b, base_type b -> term (A (AT_base b))
-| A_term : term T -> term (A AT_term)
-| A_bind {ty} : term (A ty) -> term (A (AT_bind ty)).
-
-(** [lift n t] adds [1] to the index of every variable in [t] with index 
-    greater or equal to [n]. Typically one uses [lift 0 t]. *)
-Fixpoint lift {so} (n : nat) (t : term so) : term so :=
-  match t with 
-  | T_var k => if Nat.ltb k n then T_var k else T_var (S k)
-  | T_ctor c args => T_ctor c (lift n args)
-  | AL_nil => AL_nil
-  | AL_cons a args => AL_cons (lift n a) (lift n args)
-  | A_base b x => A_base b x
-  | A_term t => A_term (lift n t)
-  | A_bind t => A_bind (lift (S n) t)
-  end.
-
-(** The identity substitution. *)
-Definition sid (n : nat) : term T := T_var n.
-
-(** [sshift k] shifts indices by [k]. *)
-Definition sshift (k : nat) (n : nat) : term T := T_var (n + k).
-
-(** Cons a term with a substitution. *)
-Definition scons (t : term T) (s : nat -> term T) (n : nat) : term T :=
-  match n with 
-  | 0 => t
-  | S n => s n
-  end.
-
-(** Lift a substitution through a binder. *)
-Definition up_subst (s : nat -> term T) : nat -> term T :=
-  scons (T_var 0) (fun n => lift 0 (s n)).
-
-(** Apply a substitution to a term. *)
-Fixpoint subst {so} (t : term so) (s : nat -> term T) :=
-  match t with 
-  | T_var n => s n
-  | T_ctor c args => T_ctor c (subst args s)
-  | AL_nil => AL_nil
-  | AL_cons a args => AL_cons (subst a s) (subst args s)
-  | A_base b x => A_base b x
-  | A_term t => A_term (subst t s)
-  | A_bind a => A_bind (subst a (up_subst s))
-  end.
-
-(** [scomp s2 s1] applies substitution [s1] followed by [s2]. *)
-Definition scomp (s2 s1 : nat -> term T) (n : nat) : term T :=
-  subst (s1 n) s2.
 
 End LevelOne.
 
