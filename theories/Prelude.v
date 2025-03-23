@@ -11,17 +11,30 @@ Ltac inv H := inversion H ; subst.
 #[global] Hint Extern 10 => lia : core.
 
 (** Cons a term with a substitution. *)
-Class Scons (term subst : Type) :=
-{ gen_scons : term -> subst -> subst }.
+Class Scons (t s1 s2 : Type) :=
+{ gen_scons : t -> s1 -> s2 }.
 Notation "t .: s" := (gen_scons t s) (at level 70, right associativity).
 
-(** Right to left composition of substitutions: apply [s2] followed by [s1]. *)
-Class Scomp (subst : Type) :=
-{ gen_scomp : subst -> subst -> subst }.
-Notation "s1 ∘ s2" := (gen_scomp s1 s2) (at level 50, left associativity).
+(** Left to right composition of substitutions. *)
+Class Scomp (s1 s2 s3 : Type) :=
+{ gen_scomp : s1 -> s2 -> s3 }.
+Notation "s1 >> s2" := (gen_scomp s1 s2) (at level 50, left associativity).
 
-(** Substitute with substitution [s] in term [t]. *)
-Class Subst (term subst : Type) := 
-{ gen_subst : term -> subst -> term }.
+(** Apply a substitution to a term. *)
+Class Subst (t1 s t2 : Type) := 
+{ gen_subst : t1 -> s -> t2 }.
 Notation "t '[:' s ']'" := (gen_subst t s) (at level 40, s at level 0, no associativity).
  
+(** [fin n] represents the finite set with [n] elements [0], [1], ..., [n-1]. *)
+Inductive fin : nat -> Type :=
+| (** [0] is in [fin n] whenever [n > 0]. *)
+  fin_zero {n} : fin (S n)
+| (** Injection from [fin n] to [fin (S n)], which maps [i] to [i+1]. *)
+  fin_succ {n} : fin n -> fin (S n).
+
+(** Mapping from [i] to [i + k]. *)
+Fixpoint fin_weaken {n} (k : nat) (i : fin n) : fin (k + n) :=
+  match k return fin (k + n) with 
+  | 0 => i
+  | S k => fin_succ (fin_weaken k i)
+  end.
