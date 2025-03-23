@@ -9,7 +9,7 @@ Inductive arg_ty {base} :=
 | AT_bind : arg_ty -> arg_ty.
 
 (** Signatures for abstract terms. *)
-Record t :=
+Record signature :=
 { (** The set of base types, 
       e.g. [Inductive base := BUnit | BBool | BNat]. *)
   base : Type 

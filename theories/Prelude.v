@@ -1,5 +1,4 @@
-From Coq Require Export Nat List String Morphisms Relations Lia.
-From Ltac2 Require Import Ltac2.
+From Coq Require Export Nat List String Morphisms Relations Program.Equality.
 Export ListNotations.
 
 (** Convenience tactic. *)
@@ -8,7 +7,6 @@ Ltac inv H := inversion H ; subst.
 (** Add some power to [auto]. *)
 #[global] Hint Extern 5 => f_equal : core.
 #[global] Hint Extern 5 => simpl : core.
-#[global] Hint Extern 10 => lia : core.
 
 (** Cons a term with a substitution. *)
 Class Scons (t s1 s2 : Type) :=

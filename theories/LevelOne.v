@@ -1,4 +1,3 @@
-From Coq Require Import Program.Equality.
 From Prototype Require Import Prelude Sig.
 
 (** This file defines terms and substitutions over an abstract signature.
@@ -6,8 +5,8 @@ From Prototype Require Import Prelude Sig.
     and we prove the main properties of substitution. *)
 
 Section WithSig.
-Context {sig : Sig.t}.
-Definition arg_ty := @Sig.arg_ty (Sig.base sig).
+Context {sig : signature}.
+Definition arg_ty := @arg_ty (base sig).
 
 (*********************************************************************************)
 (** *** Terms. *)
@@ -23,22 +22,22 @@ Inductive kind :=
   K_al : list arg_ty -> kind.
 
 (** Terms over an abstract signature. 
-    Terms are indexed by a scope (an integer) and a kind. *)
+    Terms are indexed by a scope (a natural) and a kind. *)
 Inductive term : nat -> kind -> Type :=
 | (** Term variable. *)
   T_var {n} : fin n -> term n K_t
 | (** Non-variable term constructor, applied to a list of arguments. *)
-  T_ctor {n} : forall c, term n (K_al (Sig.ctor_type sig c)) -> term n K_t
+  T_ctor {n} : forall c, term n (K_al (ctor_type sig c)) -> term n K_t
 | (** Empty argument list. *)
-  AL_nil {n} : term n (K_al [])
+  T_al_nil {n} : term n (K_al [])
 | (** Non-empty argument list. *)
-  AL_cons {n ty tys} : term n (K_a ty) -> term n (K_al tys) -> term n (K_al (ty :: tys))
+  T_al_cons {n ty tys} : term n (K_a ty) -> term n (K_al tys) -> term n (K_al (ty :: tys))
 | (** Base argument (e.g. bool or string). *)
-  A_base {n} : forall b, Sig.denote_base sig b -> term n (K_a (AT_base b))
+  T_abase {n} : forall b, denote_base sig b -> term n (K_a (AT_base b))
 | (** Term argument. *)
-  A_term {n} : term n K_t -> term n (K_a AT_term)
+  T_aterm {n} : term n K_t -> term n (K_a AT_term)
 | (** Binder argument. *)
-  A_bind {n ty} : term (S n) (K_a ty) -> term n (K_a (AT_bind ty)).
+  T_abind {n ty} : term (S n) (K_a ty) -> term n (K_a (AT_bind ty)).
 
 (*********************************************************************************)
 (** *** Renamings. *)
@@ -81,11 +80,11 @@ Fixpoint rename {n m} {k} (t : term n k) (r : ren n m) : term m k :=
   match t, r with 
   | T_var i, r => T_var (r i)
   | T_ctor c args, r => T_ctor c (rename args r)
-  | AL_nil, r => AL_nil
-  | AL_cons a args, r => AL_cons (rename a r) (rename args r)
-  | A_base b x, r => A_base b x
-  | A_term t, r => A_term (rename t r)
-  | A_bind a, r => A_bind (rename a (up_ren r))
+  | T_al_nil, r => T_al_nil
+  | T_al_cons a args, r => T_al_cons (rename a r) (rename args r)
+  | T_abase b x, r => T_abase b x
+  | T_aterm t, r => T_aterm (rename t r)
+  | T_abind a, r => T_abind (rename a (up_ren r))
   end.
 #[global] Instance rename_notation n m k : Subst (term n k) (ren n m) (term m k) :=
 { gen_subst := rename }.
@@ -125,11 +124,11 @@ Fixpoint substitute {n m} {k} (t : term n k) (s : subst n m) : term m k :=
   match t, s with 
   | T_var n, s => s n
   | T_ctor c args, s => T_ctor c (substitute args s)
-  | AL_nil, s => AL_nil
-  | AL_cons a args, s => AL_cons (substitute a s) (substitute args s)
-  | A_base b x, s => A_base b x
-  | A_term t, s => A_term (substitute t s)
-  | A_bind a, s => A_bind (substitute a (up_subst s))
+  | T_al_nil, s => T_al_nil
+  | T_al_cons a args, s => T_al_cons (substitute a s) (substitute args s)
+  | T_abase b x, s => T_abase b x
+  | T_aterm t, s => T_aterm (substitute t s)
+  | T_abind a, s => T_abind (substitute a (up_subst s))
   end.
 #[global] Instance substitute_notation n m k : Subst (term n k) (subst n m) (term m k) :=
 { gen_subst := substitute }.
