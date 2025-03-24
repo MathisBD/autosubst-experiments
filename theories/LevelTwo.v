@@ -132,19 +132,21 @@ Inductive axiom_eq : forall {k s}, term k s -> term k s -> Prop :=
 
 (** Substitution laws. *)
 
-(*(*| aeq_shift {n} k : 
-    T_sshift (S k) =σ T_sshift k >> @T_sshift n 1 *)
-| aeq_id_l {n m} (s : term K_s (S2 n m)) : 
+| aeq_sshift_succ {n} k : 
+    @T_sshift n (S k) =σ T_sshift k >> T_sshift 1
+| aeq_sshift_scons {n} :
+  T_var (@fin_zero n) .: T_sshift 1 =σ T_sshift 0  
+| aeq_sid_l {n m} (s : term K_s (S2 n m)) : 
     sid >> s =σ s 
-| aeq_id_r {n m} (s : term K_s (S2 n m)) : 
+| aeq_sid_r {n m} (s : term K_s (S2 n m)) : 
     s >> sid =σ s 
 | aeq_assoc {n m o p} (s1 : term K_s (S2 n m)) (s2 : term K_s (S2 m o)) (s3 : term K_s (S2 o p)) : 
     s1 >> (s2 >> s3) =σ (s1 >> s2) >> s3
 | aeq_distrib {n m o} (t : term K_t (S1 m)) (s1 : term K_s (S2 n m)) (s2 : term K_s (S2 m o)) : 
-    (t .: s1) >> s2 =σ t[: s2 ] .: s1 >> s2*)
+    (t .: s1) >> s2 =σ t[: s2 ] .: s1 >> s2
 
 where "t1 '=σ' t2" := (axiom_eq t1 t2).
-Hint Constructors axiom_eq  : core.
+Hint Constructors axiom_eq : core.
 
 (*********************************************************************************)
 (** *** Setoid rewrite support. *)
@@ -152,6 +154,18 @@ Hint Constructors axiom_eq  : core.
 
 #[global] Instance axiom_eq_equiv k s : Equivalence (@axiom_eq k s).
 Proof. constructor ; eauto. Qed.
+
+#[global] Instance t_ctor_proper n c : Proper (axiom_eq ==> axiom_eq) (@T_ctor n c).
+Proof. intros ???. apply aeq_congr_ctor ; auto. Qed.
+
+#[global] Instance t_al_cons_proper n ty tys : Proper (axiom_eq ==> axiom_eq ==> axiom_eq) (@T_al_cons n ty tys).
+Proof. intros ??????. apply aeq_congr_al_cons ; auto. Qed.
+
+#[global] Instance t_aterm_proper n : Proper (axiom_eq ==> axiom_eq) (@T_aterm n).
+Proof. intros ???. apply aeq_congr_aterm ; auto. Qed.
+
+#[global] Instance t_abind_proper n ty : Proper (axiom_eq ==> axiom_eq) (@T_abind n ty).
+Proof. intros ???. apply aeq_congr_abind ; auto. Qed.
 
 #[global] Instance t_subst_proper n m k : Proper (axiom_eq ==> axiom_eq ==> axiom_eq) (@T_subst n m k).
 Proof. intros ??????. apply aeq_congr_subst ; auto. Qed.
@@ -190,13 +204,31 @@ dependent induction t.
 - exact (T_scomp IHt1 IHt2).
 Defined.  
 
+Lemma up_subst_sid n : up_subst (@sid n) =σ sid.
+Proof. 
+cbv [up_subst sid]. simpl. setoid_rewrite <-(aeq_sshift_succ 0).
+setoid_rewrite aeq_sshift_scons. reflexivity.
+Qed.
+
+Lemma subst_sid k n (t : term k (S1 n)) : t[: sid] =σ t.
+Proof.
+dependent induction t generalizing n ; try (now auto).
+- unfold sid. rewrite (aeq_sshift_var f 0). reflexivity.
+- rewrite aeq_subst_ctor. rewrite IHt ; auto.
+- rewrite aeq_subst_al_cons. rewrite IHt1, IHt2 ; auto.
+- rewrite aeq_subst_aterm. rewrite IHt ; auto.
+- rewrite aeq_subst_abind. rewrite up_subst_sid. rewrite IHt ; auto.
+- setoid_rewrite aeq_subst_subst. rewrite aeq_sid_r. reflexivity.
+Qed. 
+
+(** Main property: [simpl] is sound. *)
 Lemma simpl_sound {k s} (t : term k s) : simpl t =σ t.
 Proof.
 dependent induction t ; try (simpl ; now auto).
 - dependent destruction t2.
   + dependent destruction k0.
     * simpl. cbv [solution_right solution_left eq_rect_r] ; simpl.
-      rewrite IHt1. admit. (* TODO: prove t =σ t[: sid]. *)
+      rewrite IHt1. setoid_rewrite subst_sid. reflexivity.
     * simpl. cbv [solution_right solution_left eq_rect_r] ; simpl.
       rewrite IHt1. reflexivity.
   + simpl. cbv [solution_left solution_right eq_rect_r] ; simpl.
@@ -205,6 +237,12 @@ dependent induction t ; try (simpl ; now auto).
     rewrite IHt1, IHt2. reflexivity.
 - simpl. rewrite IHt1, IHt2. reflexivity.
 - simpl. rewrite IHt1, IHt2. reflexivity. 
-Admitted.
+Qed.
+
+(** This lemma is a simple consequence of the soundness of [simpl]. 
+    We could also prove it directly by induction, e.g. if we need it to prove 
+    the soundness of [simpl]. *)
+#[global] Instance simpl_proper k s : Proper (axiom_eq ==> axiom_eq) (@simpl k s).
+Proof. intros ???. rewrite simpl_sound, simpl_sound. assumption. Qed.
 
 End WithSig.
