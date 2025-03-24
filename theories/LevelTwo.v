@@ -51,7 +51,7 @@ Inductive term : kind -> scope -> Type :=
 | (** Cons substitution. *)
   T_scons {n m} : term K_t (S1 m) -> term K_s (S2 n m) -> term K_s (S2 (S n) m)
 | (** Composition of substitutions. *)
-  T_scomp {n m o} : term K_s (S2 n m) -> term K_s (S2 m o) -> term K_s (S2 n o).
+  T_scomp {n m o} : term K_s (S2 n m) -> term K_s (S2 m o) -> term K_s (S2 n o). 
 
 (** The identity substitution. *)
 Definition sid {n} : term K_s (S2 n n) := T_sshift 0.
@@ -67,6 +67,10 @@ Definition sid {n} : term K_s (S2 n n) := T_sshift 0.
 #[global] Instance scomp_notation (n m o : nat) : 
   Scomp (term K_s (S2 n m)) (term K_s (S2 m o)) (term K_s (S2 n o)) :=
 { gen_scomp := T_scomp }.
+
+(** Lift a substitution through a binder. *)
+Definition up_subst {n m} (s : term K_s (S2 n m)) : term K_s (S2 (S n) (S m)) :=
+  T_var fin_zero .: s >> T_sshift 1.
 
 (*********************************************************************************)
 (** *** Axiomatic equality. *)
@@ -85,43 +89,59 @@ Inductive axiom_eq : forall {k s}, term k s -> term k s -> Prop :=
 
 (** Congruence. *)
 
-| aeq_t_ctor {n} c (args1 args2 : term _ (S1 n)) : 
+| aeq_congr_ctor {n} c (args1 args2 : term _ (S1 n)) : 
     args1 =σ args2 -> T_ctor c args1 =σ T_ctor c args2
-| aeq_t_subst {n m k} (t1 t2 : term k (S1 n)) (s1 s2 : term K_s (S2 n m)) : 
+| aeq_congr_al_cons {n ty tys} (a1 a2 : term (K_a ty) (S1 n)) (args1 args2 : term (K_al tys) (S1 n)) : 
+    a1 =σ a2 -> args1 =σ args2 -> T_al_cons a1 args1 =σ T_al_cons a2 args2
+| aeq_congr_aterm {n} (t1 t2 : term K_t (S1 n)) : 
+    t1 =σ t2 -> T_aterm t1 =σ T_aterm t2
+| aeq_congr_abind {n ty} (a1 a2 : term (K_a ty) (S1 (S n))) : 
+    a1 =σ a2 -> T_abind a1 =σ T_abind a2
+| aeq_congr_subst {n m k} (t1 t2 : term k (S1 n)) (s1 s2 : term K_s (S2 n m)) : 
     t1 =σ t2 -> s1 =σ s2 -> t1[: s1 ] =σ t2[: s2 ] 
-
-(*| aeq_al_cons ty tys (a1 a2 : term (A ty)) (args1 args2 : term (AL tys)) : 
-    a1 =σ a2 -> args1 =σ args2 -> AL_cons a1 args1 =σ AL_cons a2 args2
-| aeq_al_subst tys (args1 args2 : term (AL tys)) s1 s2 :
-    args1 =σ args2 -> s1 =σ s2 -> args1[: s1] =σ args2[: s2]
-
-| aeq_a_term t1 t2 : t1 =σ t2 -> A_term t1 =σ A_term t2
-| aeq_a_bind ty (a1 a2 : term (A ty)) : a1 =σ a2 -> A_bind a1 =σ A_bind a2
-| aeq_a_subst ty (a1 a2 : term (A ty)) s1 s2 :
-    a1 =σ a2 -> s1 =σ s2 -> a1[: s1] =σ a2[: s2]
-
-| seq_s_cons t1 t2 s1 s2 : 
+| aeq_congr_scons {n m} (t1 t2 : term K_t (S1 m)) (s1 s2 : term K_s (S2 n m)) : 
     t1 =σ t2 -> s1 =σ s2 -> t1 .: s1 =σ t2 .: s2
-| seq_s_comp s1 s2 r1 r2 : 
-    s1 =σ s2 -> r1 =σ r2 -> s1 ∘ r1 =σ s2 ∘ r2
+| aeq_congr_scomp {n m o} (s1 s2 : term K_s (S2 n m)) (r1 r2 : term K_s (S2 m o)) : 
+    s1 =σ s2 -> r1 =σ r2 -> s1 >> r1 =σ s2 >> r2
 
-(** Sigma equations. *)
+(** Apply a substitution to a variable. *)
 
-| seq_push_subst_var n s : (T_var n)[: s] =σ apply_subst s n
-| seq_push_subst_ctor c args s : (T_ctor c args)[: s] =σ T_ctor c (args[: s])
-| seq_push_subst_al_nil s : AL_nil[: s] =σ AL_nil
-| seq_push_subst_al_cons ty tys (a : term (A ty)) (args : term (AL tys)) s : 
-    (AL_cons a args)[: s] =σ AL_cons (a[: s]) (args[: s])
-| seq_push_subst_a_base b x s : (A_base b x)[: s] =σ A_base b x
-| seq_push_subst_a_term t s : (A_term t)[: s] =σ A_term (t[: s])
-| seq_push_subst_a_bind ty (a : term (A ty)) s : 
-    (A_bind a)[: s] =σ A_bind (a[: T_var 0 .: S_shift 1 ∘ s])
+| aeq_sshift_var {n} (i : fin n) k : 
+    (T_var i)[: T_sshift k] =σ T_var (fin_weaken k i)
+| aeq_scons_zero {n m} (t : term K_t (S1 m)) (s : term K_s (S2 n m)) :
+    (T_var fin_zero)[: t .: s] =σ t
+| aeq_scons_succ {n m} (i : fin n) (t : term K_t (S1 m)) (s : term K_s (S2 n m)) :
+    (T_var (fin_succ i))[: t .: s] =σ (T_var i)[: s]
 
-| seq_shift k : S_shift (k+1) =σ S_shift 1 ∘ S_shift k 
-| seq_id_left s : S_id ∘ s =σ s 
-| seq_id_right s : s ∘ S_id =σ s 
-| seq_assoc s1 s2 s3 : s1 ∘ (s2 ∘ s3) =σ (s1 ∘ s2) ∘ s3
-| seq_distrib t s1 s2 : s2 ∘ (t .: s1) =σ t[: s2 ] .: s2 ∘ s1*)
+(** Apply a substitution to a term. *)
+
+| aeq_subst_ctor {n m} c (args : term (K_al _) (S1 n)) (s : term K_s (S2 n m)) : 
+    (T_ctor c args)[: s] =σ T_ctor c (args[: s])
+| aeq_subst_al_nil {n m} (s : term K_s (S2 n m)) : 
+    T_al_nil[: s] =σ T_al_nil
+| aeq_subst_al_cons {n m ty tys} (a : term (K_a ty) (S1 n)) (args : term (K_al tys) (S1 n)) (s : term K_s (S2 n m)) : 
+    (T_al_cons a args)[: s] =σ T_al_cons (a[: s]) (args[: s])
+| aeq_subst_abase {n m} b x (s : term K_s (S2 n m)) : 
+    (T_abase b x)[: s] =σ T_abase b x
+| aeq_subst_aterm {n m} (t : term K_t (S1 n)) (s : term K_s (S2 n m)) : 
+    (T_aterm t)[: s] =σ T_aterm (t[: s])
+| aeq_subst_abind {n m ty} (a : term (K_a ty) (S1 (S n))) (s : term K_s (S2 n m)) : 
+    (T_abind a)[: s] =σ T_abind (a[: up_subst s])
+| aeq_subst_subst {n m o k} (t : term k (S1 n)) (s1 : term K_s (S2 n m)) (s2 : term K_s (S2 m o)) :
+    t[: s1][: s2] =σ t[: s1 >> s2] 
+
+(** Substitution laws. *)
+
+(*(*| aeq_shift {n} k : 
+    T_sshift (S k) =σ T_sshift k >> @T_sshift n 1 *)
+| aeq_id_l {n m} (s : term K_s (S2 n m)) : 
+    sid >> s =σ s 
+| aeq_id_r {n m} (s : term K_s (S2 n m)) : 
+    s >> sid =σ s 
+| aeq_assoc {n m o p} (s1 : term K_s (S2 n m)) (s2 : term K_s (S2 m o)) (s3 : term K_s (S2 o p)) : 
+    s1 >> (s2 >> s3) =σ (s1 >> s2) >> s3
+| aeq_distrib {n m o} (t : term K_t (S1 m)) (s1 : term K_s (S2 n m)) (s2 : term K_s (S2 m o)) : 
+    (t .: s1) >> s2 =σ t[: s2 ] .: s1 >> s2*)
 
 where "t1 '=σ' t2" := (axiom_eq t1 t2).
 Hint Constructors axiom_eq  : core.

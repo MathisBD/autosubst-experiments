@@ -22,22 +22,22 @@ Inductive kind :=
   K_al : list arg_ty -> kind.
 
 (** Terms over an abstract signature. 
-    Terms are indexed by a scope (a natural) and a kind. *)
-Inductive term : nat -> kind -> Type :=
+    Terms are indexed by a kind and a scope (a natural). *)
+Inductive term : kind -> nat -> Type :=
 | (** Term variable. *)
-  T_var {n} : fin n -> term n K_t
+  T_var {n} : fin n -> term K_t n
 | (** Non-variable term constructor, applied to a list of arguments. *)
-  T_ctor {n} : forall c, term n (K_al (ctor_type sig c)) -> term n K_t
+  T_ctor {n} : forall c, term (K_al (ctor_type sig c)) n -> term K_t n
 | (** Empty argument list. *)
-  T_al_nil {n} : term n (K_al [])
+  T_al_nil {n} : term (K_al []) n
 | (** Non-empty argument list. *)
-  T_al_cons {n ty tys} : term n (K_a ty) -> term n (K_al tys) -> term n (K_al (ty :: tys))
+  T_al_cons {n ty tys} : term (K_a ty) n -> term (K_al tys) n -> term (K_al (ty :: tys)) n
 | (** Base argument (e.g. bool or string). *)
-  T_abase {n} : forall b, denote_base sig b -> term n (K_a (AT_base b))
+  T_abase {n} : forall b, denote_base sig b -> term (K_a (AT_base b)) n
 | (** Term argument. *)
-  T_aterm {n} : term n K_t -> term n (K_a AT_term)
+  T_aterm {n} : term K_t n -> term (K_a AT_term) n
 | (** Binder argument. *)
-  T_abind {n ty} : term (S n) (K_a ty) -> term n (K_a (AT_bind ty)).
+  T_abind {n ty} : term (K_a ty) (S n) -> term (K_a (AT_bind ty)) n.
 
 (*********************************************************************************)
 (** *** Renamings. *)
@@ -76,7 +76,7 @@ Definition up_ren {n m} (r : ren n m) : ren (S n) (S m) :=
   fin_zero .: r >> rshift 1.
  
 (** Rename a term. *)
-Fixpoint rename {n m} {k} (t : term n k) (r : ren n m) : term m k :=
+Fixpoint rename {n m} {k} (t : term k n) (r : ren n m) : term k m :=
   match t, r with 
   | T_var i, r => T_var (r i)
   | T_ctor c args, r => T_ctor c (rename args r)
@@ -86,16 +86,16 @@ Fixpoint rename {n m} {k} (t : term n k) (r : ren n m) : term m k :=
   | T_aterm t, r => T_aterm (rename t r)
   | T_abind a, r => T_abind (rename a (up_ren r))
   end.
-#[global] Instance rename_notation n m k : Subst (term n k) (ren n m) (term m k) :=
+#[global] Instance rename_notation n m k : Subst (term k n) (ren n m) (term k m) :=
 { gen_subst := rename }.
   
 (*********************************************************************************)
 (** *** Substitutions. *)
 (*********************************************************************************)
 
-(** A substitution on terms is a function [fin n -> term m K_t] which is applied 
+(** A substitution on terms is a function [fin n -> term K_t m] which is applied 
     to all free variables. *)
-Definition subst n m := fin n -> term m K_t.
+Definition subst n m := fin n -> term K_t m.
 
 (** The identity substitution. *)
 Definition sid {n} : subst n n := 
@@ -106,13 +106,13 @@ Definition sshift {n} (k : nat) : subst n (k + n) :=
   fun i => T_var (fin_weaken k i).
 
 (** Cons a term with a substitution. *)
-Definition scons {n m} (t : term m K_t) (s : subst n m) : subst (S n) m :=
+Definition scons {n m} (t : term K_t m) (s : subst n m) : subst (S n) m :=
   fun i => 
-    match i in fin (S n0) return subst n0 m -> term m K_t with 
+    match i in fin (S n0) return subst n0 m -> term K_t m with 
     | fin_zero => fun _ => t
     | fin_succ i => fun s => s i
     end s.
-#[global] Instance scons_notation n m : Scons (term m K_t) (subst n m) (subst (S n) m) :=
+#[global] Instance scons_notation n m : Scons (term K_t m) (subst n m) (subst (S n) m) :=
 { gen_scons := scons }.
 
 (** Lift a substitution through a binder. *)
@@ -120,7 +120,7 @@ Definition up_subst {n m} (s : subst n m) : subst (S n) (S m) :=
   T_var fin_zero .: (fun i => (s i)[: rshift 1]).
 
 (** Apply a substitution to a term. *)
-Fixpoint substitute {n m} {k} (t : term n k) (s : subst n m) : term m k :=
+Fixpoint substitute {n m} {k} (t : term k n) (s : subst n m) : term k m :=
   match t, s with 
   | T_var n, s => s n
   | T_ctor c args, s => T_ctor c (substitute args s)
@@ -130,7 +130,7 @@ Fixpoint substitute {n m} {k} (t : term n k) (s : subst n m) : term m k :=
   | T_aterm t, s => T_aterm (substitute t s)
   | T_abind a, s => T_abind (substitute a (up_subst s))
   end.
-#[global] Instance substitute_notation n m k : Subst (term n k) (subst n m) (term m k) :=
+#[global] Instance substitute_notation n m k : Subst (term k n) (subst n m) (term k m) :=
 { gen_subst := substitute }.
 
 (** Left to right composition of substitutions. *)
@@ -186,14 +186,11 @@ Qed.
 (** *** Properties of substitution. *)
 (*********************************************************************************)
 
-(*Lemma rshift1 n (i : fin n) : rshift 1 i = fin_succ i.
-Proof. cbv [rshift]. simpl. reflexivity. Qed.*)
-
 Lemma up_ren_comp {n m o} (r1 : ren n m) (r2 : ren m o) : 
   up_ren r1 >> up_ren r2 =₁ up_ren (r1 >> r2).
 Proof. intros i. dependent destruction i ; reflexivity. Qed.
 
-Lemma ren_ren {n m o k} (t : term n k) (r1 : ren n m) (r2 : ren m o) : 
+Lemma ren_ren {n m o k} (t : term k n) (r1 : ren n m) (r2 : ren m o) : 
   t[: r1][: r2] = t[: r1 >> r2].
 Proof.
 revert m o r1 r2. induction t ; intros m o r1 r2 ; simpl ; try (now auto).
@@ -203,7 +200,7 @@ revert m o r1 r2. induction t ; intros m o r1 r2 ; simpl ; try (now auto).
 - setoid_rewrite IHt. now rewrite up_ren_comp.
 Qed.
 
-Lemma subst_ren {n m o k} (t : term n k) (s : subst n m) (r : ren m o) : 
+Lemma subst_ren {n m o k} (t : term k n) (s : subst n m) (r : ren m o) : 
   t[: s][: r] = t[: fun n => (s n)[: r]].
 Proof.
 revert m o s r. induction t ; intros m o s r ; simpl ; try (now auto).
@@ -216,7 +213,7 @@ revert m o s r. induction t ; intros m o s r ; simpl ; try (now auto).
   apply rename_proper ; reflexivity.
 Qed.
 
-Lemma ren_subst {n m o k} (t : term n k) (r : ren n m) (s : subst m o) : 
+Lemma ren_subst {n m o k} (t : term k n) (r : ren n m) (s : subst m o) : 
   t[: r][: s] = t[: fun n => s (r n)].
 Proof.
 revert m o s r. induction t ; intros m o s r ; simpl ; try (now auto).
@@ -227,7 +224,7 @@ revert m o s r. induction t ; intros m o s r ; simpl ; try (now auto).
   intros i ; dependent destruction i ; reflexivity.
 Qed.  
 
-Lemma subst_subst {n m o k} (t : term n k) (s1 : subst n m) (s2 : subst m o) : 
+Lemma subst_subst {n m o k} (t : term k n) (s1 : subst n m) (s2 : subst m o) : 
   t[: s1][: s2] = t[: s1 >> s2].
 Proof.
 revert m o s1 s2. induction t ; intros m o s1 s2 ; cbn ; try (now auto).
