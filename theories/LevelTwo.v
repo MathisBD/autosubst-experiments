@@ -146,5 +146,65 @@ Inductive axiom_eq : forall {k s}, term k s -> term k s -> Prop :=
 where "t1 '=σ' t2" := (axiom_eq t1 t2).
 Hint Constructors axiom_eq  : core.
 
+(*********************************************************************************)
+(** *** Setoid rewrite support. *)
+(*********************************************************************************)
+
+#[global] Instance axiom_eq_equiv k s : Equivalence (@axiom_eq k s).
+Proof. constructor ; eauto. Qed.
+
+#[global] Instance t_subst_proper n m k : Proper (axiom_eq ==> axiom_eq ==> axiom_eq) (@T_subst n m k).
+Proof. intros ??????. apply aeq_congr_subst ; auto. Qed.
+
+#[global] Instance t_scons_proper n m : Proper (axiom_eq ==> axiom_eq ==> axiom_eq) (@T_scons n m).
+Proof. intros ??????. apply aeq_congr_scons ; auto. Qed.
+
+#[global] Instance t_scomp_proper n m o : Proper (axiom_eq ==> axiom_eq ==> axiom_eq) (@T_scomp n m o).
+Proof. intros ??????. apply aeq_congr_scomp ; auto. Qed.
+
+(*********************************************************************************)
+(** *** Term/substitution simplification. *)
+(*********************************************************************************)
+
+Definition simpl {k s} (t : term k s) : term k s.
+dependent induction t.
+- exact (T_var f).
+- exact (T_ctor c IHt).
+- exact (T_al_nil).
+- exact (T_al_cons IHt1 IHt2).
+- exact (T_abase b d).
+- exact (T_aterm IHt).
+- exact (T_abind IHt).
+- (* T_subst t s *)
+  dependent destruction t2.
+  + (* s = T_sshift k *)
+    dependent destruction k0.
+    * (* k = fin_zero *) exact IHt1.
+    * (* k = fin_succ *) exact (T_subst IHt1 IHt2).
+  + (* s = T_scons t' s' *) 
+    exact (T_subst IHt1 IHt2).
+  + (* s = T_scomp s1 s2 *)
+    exact (T_subst IHt1 IHt2).  
+- exact (T_sshift k).
+- exact (T_scons IHt1 IHt2).
+- exact (T_scomp IHt1 IHt2).
+Defined.  
+
+Lemma simpl_sound {k s} (t : term k s) : simpl t =σ t.
+Proof.
+dependent induction t ; try (simpl ; now auto).
+- dependent destruction t2.
+  + dependent destruction k0.
+    * simpl. cbv [solution_right solution_left eq_rect_r] ; simpl.
+      rewrite IHt1. admit. (* TODO: prove t =σ t[: sid]. *)
+    * simpl. cbv [solution_right solution_left eq_rect_r] ; simpl.
+      rewrite IHt1. reflexivity.
+  + simpl. cbv [solution_left solution_right eq_rect_r] ; simpl.
+    rewrite IHt1, IHt2. reflexivity.
+  + simpl. cbv [solution_left solution_right eq_rect_r] ; simpl.
+    rewrite IHt1, IHt2. reflexivity.
+- simpl. rewrite IHt1, IHt2. reflexivity.
+- simpl. rewrite IHt1, IHt2. reflexivity. 
+Admitted.
 
 End WithSig.
