@@ -22,3 +22,7 @@ Record signature :=
 ; (** The number and types of the arguments of each constructor. *)
   ctor_type : ctor -> list (@arg_ty base) }.
 
+Module Type Sig.
+  Parameter t : signature.
+End Sig.
+    

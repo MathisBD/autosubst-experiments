@@ -4,9 +4,8 @@ From Prototype Require Import Prelude Sig.
     Substitutions are represented as functions [nat -> term],
     and we prove the main properties of substitution. *)
 
-Section WithSig.
-Context {sig : signature}.
-Definition arg_ty := @arg_ty (base sig).
+Module Make (S : Sig).
+Definition arg_ty := @arg_ty (base S.t).
 
 (*********************************************************************************)
 (** *** Terms. *)
@@ -27,13 +26,13 @@ Inductive term : kind -> nat -> Type :=
 | (** Term variable. *)
   T_var {n} : fin n -> term K_t n
 | (** Non-variable term constructor, applied to a list of arguments. *)
-  T_ctor {n} : forall c, term (K_al (ctor_type sig c)) n -> term K_t n
+  T_ctor {n} : forall c, term (K_al (ctor_type S.t c)) n -> term K_t n
 | (** Empty argument list. *)
   T_al_nil {n} : term (K_al []) n
 | (** Non-empty argument list. *)
   T_al_cons {n ty tys} : term (K_a ty) n -> term (K_al tys) n -> term (K_al (ty :: tys)) n
 | (** Base argument (e.g. bool or string). *)
-  T_abase {n} : forall b, denote_base sig b -> term (K_a (AT_base b)) n
+  T_abase {n} : forall b, denote_base S.t b -> term (K_a (AT_base b)) n
 | (** Term argument. *)
   T_aterm {n} : term K_t n -> term (K_a AT_term) n
 | (** Binder argument. *)
@@ -143,16 +142,18 @@ Definition scomp {n m o} (s1 : subst n m) (s2 : subst m o) : subst n o :=
 (** *** Setoid Rewrite Support. *)
 (*********************************************************************************)
 
-(** Pointwise equality for functions. *)
-Definition point_eq {A B} : relation (A -> B) := pointwise_relation _ eq.
-Notation "f =₁ g" := (point_eq f g) (at level 75).
-
 #[global] Instance up_ren_proper n m : Proper (point_eq ==> point_eq) (@up_ren n m).
 Proof. 
 intros r1 r2 Hr i. dependent destruction i ; cbv [up_ren] ; simpl.
 - reflexivity.
 - cbv [rcomp rshift]. auto.
 Qed. 
+
+#[global] Instance rcons_proper n m : Proper (eq ==> point_eq ==> point_eq) (@rcons n m).
+Proof. intros i1 i2 it s1 s2 Hs i. dependent destruction i ; auto. Qed.
+
+#[global] Instance rcomp_proper n m o : Proper (point_eq ==> point_eq ==> point_eq) (@rcomp n m o).
+Proof. intros s1 s2 Hs r1 r2 Hr i. dependent destruction i ; cbv [rcomp] ; auto. Qed.
 
 #[global] Instance rename_proper n m k :
   Proper (eq ==> point_eq ==> eq) (@rename n m k).
@@ -172,6 +173,9 @@ intros s1 s2 Hs i. dependent destruction i ; cbv [up_subst] ; simpl.
 - now rewrite Hs.
 Qed. 
 
+#[global] Instance scons_proper n m : Proper (eq ==> point_eq ==> point_eq) (@scons n m).
+Proof. intros t1 t2 Ht s1 s2 Hs i. dependent destruction i ; auto. Qed.
+    
 #[global] Instance substitute_proper n m k : 
   Proper (eq ==> point_eq ==> eq) (@substitute n m k).
 Proof. 
@@ -181,6 +185,12 @@ intros t ? <-. revert m. induction t ; intros m s1 s2 Hs ; simpl ; try (now auto
 - specialize (IHt m). auto.
 - f_equal. apply IHt. now rewrite Hs.
 Qed. 
+
+#[global] Instance scomp_proper n m o : Proper (point_eq ==> point_eq ==> point_eq) (@scomp n m o).
+Proof. 
+intros s1 s2 Hs r1 r2 Hr i. 
+dependent destruction i ; cbv [scomp] ; simpl ; setoid_rewrite Hs ; setoid_rewrite Hr ; reflexivity.
+Qed.
 
 (*********************************************************************************)
 (** *** Properties of substitution. *)
@@ -255,4 +265,35 @@ Lemma scomp_assoc {n m o p} (s1 : subst n m) (s2 : subst m o) (s3 : subst o p) :
   (s1 >> s2) >> s3 =₁ s1 >> (s2 >> s3).
 Proof. intros i. simpl. cbv [scomp]. now setoid_rewrite subst_subst. Qed.
 
-End WithSig.
+Lemma ren_is_subst {n m k} (t : term k n) (r : ren n m) : 
+    t[: r] = t[: fun i => T_var (r i)].
+Proof.
+revert m r. dependent induction t ; simpl ; intros m r ; try auto. 
+- setoid_rewrite IHt. reflexivity.
+- setoid_rewrite IHt1. setoid_rewrite IHt2. reflexivity.
+- setoid_rewrite IHt. reflexivity.
+- setoid_rewrite IHt. f_equal. apply substitute_proper ; auto.
+  intros i. dependent destruction i ; reflexivity.
+Qed.
+
+Lemma rshift_sshift {n k} (t : term k n) : t[: rshift 1] = t[: sshift 1].
+Proof. rewrite ren_is_subst. reflexivity. Qed.
+    
+Lemma up_subst_alt {n m} (s : subst n m) :
+  up_subst s =₁ T_var fin_zero .: (s >> sshift 1).
+Proof.
+unfold up_subst. apply scons_proper ; auto.
+intros i. simpl. cbv [scomp]. now setoid_rewrite rshift_sshift.
+Qed.
+
+Lemma sshift_succ_r {n} k : sshift (S k) =₁ @sshift n k >> sshift 1.
+Proof. intros i. dependent destruction i ; reflexivity. Qed.    
+
+Lemma sid_scons {n} : T_var fin_zero .: sshift 1 =₁ @sid (S n).
+Proof. intros i. dependent destruction i ; reflexivity. Qed.
+
+Lemma scomp_scons_distrib {n m o} (t : term K_t m) (s1 : subst n m) (s2 : subst m o) :
+  (t .: s1) >> s2 =₁ t[: s2 ] .: s1 >> s2.
+Proof. intros i. dependent destruction i ; reflexivity. Qed.
+
+End Make.

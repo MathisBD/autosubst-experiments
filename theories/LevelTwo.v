@@ -1,8 +1,7 @@
 From Prototype Require Import Prelude Sig.
 
-Section WithSig.
-Context (sig : signature).
-Definition arg_ty := @arg_ty (base sig).
+Module Make (S : Sig).
+Definition arg_ty := @arg_ty (base S.t).
 
 (*********************************************************************************)
 (** *** Terms and substitutions. *)
@@ -32,13 +31,13 @@ Inductive term : kind -> scope -> Type :=
 | (** Term variable. *)
   T_var {n} : fin n -> term K_t (S1 n)
 | (** Non-variable term constructor, applied to a list of arguments. *)
-  T_ctor {n} : forall c, term (K_al (ctor_type sig c)) (S1 n) -> term K_t (S1 n)
+  T_ctor {n} : forall c, term (K_al (ctor_type S.t c)) (S1 n) -> term K_t (S1 n)
 | (** Empty argument list. *)
   T_al_nil {n} : term (K_al []) (S1 n)
 | (** Non-empty argument list. *)
   T_al_cons {n ty tys} : term (K_a ty) (S1 n) -> term (K_al tys) (S1 n) -> term (K_al (ty :: tys)) (S1 n)
 | (** Base argument (e.g. bool or string). *)
-  T_abase {n} : forall b, denote_base sig b -> term (K_a (AT_base b)) (S1 n)
+  T_abase {n} : forall b, denote_base S.t b -> term (K_a (AT_base b)) (S1 n)
 | (** Term argument. *)
   T_aterm {n} : term K_t (S1 n) -> term (K_a AT_term) (S1 n)
 | (** Binder argument. *)
@@ -52,6 +51,25 @@ Inductive term : kind -> scope -> Type :=
   T_scons {n m} : term K_t (S1 m) -> term K_s (S2 n m) -> term K_s (S2 (S n) m)
 | (** Composition of substitutions. *)
   T_scomp {n m o} : term K_s (S2 n m) -> term K_s (S2 m o) -> term K_s (S2 n o). 
+
+(**
+abstract syntax (explicit substitutions)
+^
+|
+|
+v
+abstract syntax (admissible substitutions)
+^
+|
+|
+v
+concrete syntax 
+
+*)
+
+(** denote : abstract terms -> concrete terms 
+    denote_proper : Proper (sigma_eq ==> eq) denote
+*)
 
 (** The identity substitution. *)
 Definition sid {n} : term K_s (S2 n n) := T_sshift 0.
@@ -76,7 +94,7 @@ Definition up_subst {n m} (s : term K_s (S2 n m)) : term K_s (S2 (S n) (S m)) :=
 (** *** Axiomatic equality. *)
 (*********************************************************************************)
 
-(** [t σ= t'] means that the terms/substitutions [t] and [t'] are equal 
+(** [t =σ t'] means that the terms/substitutions [t] and [t'] are equal 
     modulo the equational theory of sigma calculus. *)
 Reserved Notation "t1 '=σ' t2" (at level 75, no associativity).
 Inductive axiom_eq : forall {k s}, term k s -> term k s -> Prop :=
@@ -245,4 +263,4 @@ Qed.
 #[global] Instance simpl_proper k s : Proper (axiom_eq ==> axiom_eq) (@simpl k s).
 Proof. intros ???. rewrite simpl_sound, simpl_sound. assumption. Qed.
 
-End WithSig.
+End Make.

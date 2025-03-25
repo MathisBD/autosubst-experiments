@@ -8,10 +8,14 @@ Ltac inv H := inversion H ; subst.
 #[global] Hint Extern 5 => f_equal : core.
 #[global] Hint Extern 5 => simpl : core.
 
+(** Pointwise equality for functions. *)
+Definition point_eq {A B} : relation (A -> B) := pointwise_relation _ eq.
+Notation "f =₁ g" := (point_eq f g) (at level 75).
+
 (** Cons a term with a substitution. *)
 Class Scons (t s1 s2 : Type) :=
 { gen_scons : t -> s1 -> s2 }.
-Notation "t .: s" := (gen_scons t s) (at level 70, right associativity).
+Notation "t .: s" := (gen_scons t s) (at level 60, right associativity).
 
 (** Left to right composition of substitutions. *)
 Class Scomp (s1 s2 s3 : Type) :=

@@ -1,0 +1,293 @@
+From Prototype Require Import Prelude Sig.
+
+Module Make (S : Sig).
+Definition arg_ty := @arg_ty (base S.t).
+
+(*********************************************************************************)
+(** *** Terms and substitutions. *)
+(*********************************************************************************)
+
+(** Terms and substitutions are indexed by kinds. *)
+Inductive kind : Type := 
+| (** Term. *)
+  K_t : kind
+| (** Constructor argument. *)
+  K_a : arg_ty -> kind
+| (** List of constructor arguments. *)
+  K_al : list arg_ty -> kind.  
+
+(** Terms, indexed by a kind and a scope (a natural). *)
+Inductive term : kind -> nat -> Type :=
+| (** Term variable. *)
+  T_var {n} : fin n -> term K_t n
+| (** Non-variable term constructor, applied to a list of arguments. *)
+  T_ctor {n} : forall c, term (K_al (ctor_type S.t c)) n -> term K_t n
+| (** Empty argument list. *)
+  T_al_nil {n} : term (K_al []) n
+| (** Non-empty argument list. *)
+  T_al_cons {n ty tys} : term (K_a ty) n -> term (K_al tys) n -> term (K_al (ty :: tys)) n
+| (** Base argument (e.g. bool or string). *)
+  T_abase {n} : forall b, denote_base S.t b -> term (K_a (AT_base b)) n
+| (** Term argument. *)
+  T_aterm {n} : term K_t n -> term (K_a AT_term) n
+| (** Binder argument. *)
+  T_abind {n ty} : term (K_a ty) (S n) -> term (K_a (AT_bind ty)) n
+| (** Substitution applied to a term/argument/argument-list. *)
+  T_subst {n m k} : term k n -> subst n m -> term k m
+(*| T_mvar {n k} : term_mvar k n -> term k n*)
+(** Explicit substitutions, indexed by a scope (two naturals). *)
+with subst : nat -> nat -> Type :=
+| (** Shift substitution. *)
+  S_shift {n} : forall k, subst n (k + n)
+| (** Cons substitution. *)
+  S_cons {n m} : term K_t m -> subst n m -> subst (S n) m
+| (** Composition of substitutions. *)
+  S_comp {n m o} : subst n m -> subst m o -> subst n o. 
+(*| S_mvar {n m} : subst_mvar n m -> subst n m*)
+
+(** The identity substitution. *)
+Definition sid {n} : subst n n := S_shift 0.
+
+#[global] Instance subst_notation (n m : nat) (k : kind) :
+  Subst (term k n) (subst n m) (term k m) :=
+{ gen_subst := T_subst }.
+
+#[global] Instance scons_notation (n m : nat) : 
+  Scons (term K_t m) (subst n m) (subst (S n) m) :=
+{ gen_scons := S_cons }.
+
+#[global] Instance scomp_notation (n m o : nat) : 
+  Scomp (subst n m) (subst m o) (subst n o) :=
+{ gen_scomp := S_comp }.
+
+(** Lift a substitution through a binder. *)
+Definition up_subst {n m} (s : subst n m) : subst (S n) (S m) :=
+  T_var fin_zero .: s >> S_shift 1.
+
+(*********************************************************************************)
+(** *** Axiomatic equality. *)
+(*********************************************************************************)
+
+(** [t1 =σ t2] means that the terms [t] and [t'] are equal 
+    modulo the equational theory of sigma calculus. 
+    [s1 =σ₁ s2] is the same notion for substitutions. *)
+Reserved Notation "t1 '=σ' t2" (at level 75, no associativity).
+Reserved Notation "s1 '=σ₁' s2" (at level 75, no associativity).
+Inductive axiom_eqt : forall {k n}, term k n -> term k n -> Prop :=
+
+(** Equivalence. *)
+
+| eqt_refl {k s} (t : term k s) : t =σ t
+| eqt_sym {k s} (t1 t2 : term k s) : t1 =σ t2 -> t2 =σ t1
+| eqt_trans {k s} (t1 t2 t3 : term k s) : t1 =σ t2 -> t2 =σ t3 -> t1 =σ t3
+
+(** Congruence. *)
+
+| eqt_congr_ctor {n} c (args1 args2 : term _ n) : 
+    args1 =σ args2 -> T_ctor c args1 =σ T_ctor c args2
+| eqt_congr_al_cons {n ty tys} (a1 a2 : term (K_a ty) n) (args1 args2 : term (K_al tys) n) : 
+    a1 =σ a2 -> args1 =σ args2 -> T_al_cons a1 args1 =σ T_al_cons a2 args2
+| eqt_congr_aterm {n} (t1 t2 : term K_t n) : 
+    t1 =σ t2 -> T_aterm t1 =σ T_aterm t2
+| eqt_congr_abind {n ty} (a1 a2 : term (K_a ty) (S n)) : 
+    a1 =σ a2 -> T_abind a1 =σ T_abind a2
+| eqt_congr_subst {n m k} (t1 t2 : term k n) (s1 s2 : subst n m) : 
+    t1 =σ t2 -> s1 =σ₁ s2 -> t1[: s1 ] =σ t2[: s2 ] 
+
+(** Apply a substitution to a variable. *)
+
+| eqt_shift_var {n} (i : fin n) k : 
+    (T_var i)[: S_shift k] =σ T_var (fin_weaken k i)
+| eqt_cons_zero {n m} (t : term K_t m) (s : subst n m) :
+    (T_var fin_zero)[: t .: s] =σ t
+| eqt_cons_succ {n m} (i : fin n) (t : term K_t m) (s : subst n m) :
+    (T_var (fin_succ i))[: t .: s] =σ (T_var i)[: s]
+
+(** Apply a substitution to a term. *)
+
+| eqt_subst_ctor {n m} c (args : term (K_al _) n) (s : subst n m) : 
+    (T_ctor c args)[: s] =σ T_ctor c (args[: s])
+| eqt_subst_al_nil {n m} (s : subst n m) : 
+    T_al_nil[: s] =σ T_al_nil
+| eqt_subst_al_cons {n m ty tys} (a : term (K_a ty) n) (args : term (K_al tys) n) (s : subst n m) : 
+    (T_al_cons a args)[: s] =σ T_al_cons (a[: s]) (args[: s])
+| eqt_subst_abase {n m} b x (s : subst n m) : 
+    (T_abase b x)[: s] =σ T_abase b x
+| eqt_subst_aterm {n m} (t : term K_t n) (s : subst n m) : 
+    (T_aterm t)[: s] =σ T_aterm (t[: s])
+| eqt_subst_abind {n m ty} (a : term (K_a ty) (S n)) (s : subst n m) : 
+    (T_abind a)[: s] =σ T_abind (a[: up_subst s])
+| eqt_subst_subst {n m o k} (t : term k n) (s1 : subst n m) (s2 : subst m o) :
+    t[: s1][: s2] =σ t[: s1 >> s2] 
+
+with axiom_eqs : forall {n m}, subst n m -> subst n m -> Prop := 
+
+(** Equivalence. *)
+
+| eqs_refl {n m} (s : subst n m) : s =σ₁ s
+| eqs_sym {n m} (s1 s2 : subst n m) : s1 =σ₁ s2 -> s2 =σ₁ s1
+| eqs_trans {n m} (s1 s2 s3 : subst n m) : s1 =σ₁ s2 -> s2 =σ₁ s3 -> s1 =σ₁ s3
+
+(** Congruence. *)
+
+| eqs_congr_scons {n m} (t1 t2 : term K_t m) (s1 s2 : subst n m) : 
+    t1 =σ t2 -> s1 =σ₁ s2 -> t1 .: s1 =σ₁ t2 .: s2
+| eqs_congr_scomp {n m o} (s1 s2 : subst n m) (r1 r2 : subst m o) : 
+    s1 =σ₁ s2 -> r1 =σ₁ r2 -> s1 >> r1 =σ₁ s2 >> r2
+
+(** Substitution laws. *)
+
+| eqs_shift_succ {n} k : 
+    @S_shift n (S k) =σ₁ S_shift k >> S_shift 1
+| eqs_shift_cons {n} :
+    T_var (@fin_zero n) .: S_shift 1 =σ₁ S_shift 0  
+| eqs_id_l {n m} (s : subst n m) : 
+    sid >> s =σ₁ s 
+| eqs_id_r {n m} (s : subst n m) : 
+    s >> sid =σ₁ s 
+| eqs_assoc {n m o p} (s1 : subst n m) (s2 : subst m o) (s3 : subst o p) : 
+    s1 >> (s2 >> s3) =σ₁ (s1 >> s2) >> s3
+| eqs_distrib {n m o} (t : term K_t m) (s1 : subst n m) (s2 : subst m o) : 
+    (t .: s1) >> s2 =σ₁ t[: s2 ] .: s1 >> s2
+
+where "t1 '=σ' t2" := (axiom_eqt t1 t2)
+  and "s1 '=σ₁' s2" := (axiom_eqs s1 s2).
+
+Hint Constructors axiom_eqt : core.
+Hint Constructors axiom_eqs : core.
+
+(*********************************************************************************)
+(** *** Setoid rewrite support. *)
+(*********************************************************************************)
+
+#[global] Instance axiom_eqt_equiv k n : Equivalence (@axiom_eqt k n).
+Proof. constructor ; eauto. Qed.
+
+#[global] Instance axiom_eqs_equiv n m : Equivalence (@axiom_eqs n m).
+Proof. constructor ; eauto. Qed.
+
+#[global] Instance t_ctor_proper n c : Proper (axiom_eqt ==> axiom_eqt) (@T_ctor n c).
+Proof. intros ???. apply eqt_congr_ctor ; auto. Qed.
+
+#[global] Instance t_al_cons_proper n ty tys : Proper (axiom_eqt ==> axiom_eqt ==> axiom_eqt) (@T_al_cons n ty tys).
+Proof. intros ??????. apply eqt_congr_al_cons ; auto. Qed.
+
+#[global] Instance t_aterm_proper n : Proper (axiom_eqt ==> axiom_eqt) (@T_aterm n).
+Proof. intros ???. apply eqt_congr_aterm ; auto. Qed.
+
+#[global] Instance t_abind_proper n ty : Proper (axiom_eqt ==> axiom_eqt) (@T_abind n ty).
+Proof. intros ???. apply eqt_congr_abind ; auto. Qed.
+
+#[global] Instance t_subst_proper n m k : Proper (axiom_eqt ==> axiom_eqs ==> axiom_eqt) (@T_subst n m k).
+Proof. intros ??????. apply eqt_congr_subst ; auto. Qed.
+
+#[global] Instance t_scons_proper n m : Proper (axiom_eqt ==> axiom_eqs ==> axiom_eqs) (@S_cons n m).
+Proof. intros ??????. apply eqs_congr_scons ; auto. Qed.
+
+#[global] Instance t_scomp_proper n m o : Proper (axiom_eqs ==> axiom_eqs ==> axiom_eqs) (@S_comp n m o).
+Proof. intros ??????. apply eqs_congr_scomp ; auto. Qed.
+
+(*********************************************************************************)
+(** *** Term/substitution simplification. *)
+(*********************************************************************************)
+
+(** Generate a non-dependent mutual recursion scheme for use in [simpl]. *)
+Scheme term_min := Minimality for term Sort Type
+  with subst_min := Minimality for subst Sort Type.
+Combined Scheme term_subst_min from term_min, subst_min.
+
+(** Generate a mutual induction scheme for use in [simpl_sound]. *)
+Scheme term_ind' := Induction for term Sort Prop
+  with subst_ind' := Induction for subst Sort Prop.
+Combined Scheme term_subst_ind from term_ind', subst_ind'.
+
+(** Recursively simplify a term (and the substitutions it contains).
+    Due to technical limitations of Rocq's guard checker this is not written
+    as a mutual fixpoint, but rather using the (non-dependent) recursor 
+    for terms and substitutions [term_subst_min]. *)
+Definition simpl_aux : 
+  (forall k n, term k n -> term k n) * (forall n m, subst n m -> subst n m).
+apply term_subst_min.
+- intros n i. exact (T_var i).  
+- intros n c _ t. exact (T_ctor c t).
+- intros n. exact (T_al_nil).
+- intros n ty tys _ a _ args. exact (T_al_cons a args).
+- intros n b x. exact (T_abase b x).
+- intros n _ t. exact (T_aterm t).
+- intros n ty _ a. exact (T_abind a).
+- (* T_subst t s *)
+  intros n m k _ t _ s.
+  destruct s as [n shift | n m t0 s0 | n m o s1 s2 ] eqn:Hs.
+  + (* s = S_shift shift *)
+    destruct shift.
+    * (* shift = fin_zero *) exact t.
+    * (* shift = fin_succ *) exact (T_subst t (S_shift (S shift))).
+  + (* s = S_cons _ _ *) 
+    exact (T_subst t s).
+  + (* s = S_comp _ _ *)
+    exact (T_subst t s).  
+- intros n k. exact (S_shift k).
+- intros n m _ t _ s. exact (S_cons t s).
+- intros n m o _ s1 _ s2. exact (S_comp s1 s2).
+Defined.
+
+(** Recursively simplify a term. *)
+Definition simpl_term {k n} (t : term k n) : term k n := fst simpl_aux k n t.
+
+(** Recursively simplify a substitution. *)
+Definition simpl_subst {n m} (s : subst n m) : subst n m := snd simpl_aux n m s.
+
+Lemma up_subst_sid n : up_subst (@sid n) =σ₁ sid.
+Proof. 
+cbv [up_subst sid]. simpl. setoid_rewrite <-(eqs_shift_succ 0).
+setoid_rewrite eqs_shift_cons. reflexivity.
+Qed.
+
+Lemma subst_sid k n (t : term k n) : t[: sid] =σ t.
+Proof.
+revert k n t. apply term_ind.
+- intros n i. unfold sid. rewrite (eqt_shift_var i 0). reflexivity.
+- intros n c t IHt. rewrite eqt_subst_ctor. rewrite IHt ; auto.
+- intros n. auto.
+- intros n ty tys a IHa args IHargs. 
+  rewrite eqt_subst_al_cons. rewrite IHa, IHargs ; auto.
+- intros n b x. auto.
+- intros n t IHt. rewrite eqt_subst_aterm. rewrite IHt ; auto.
+- intros n ty t IHt. rewrite eqt_subst_abind. rewrite up_subst_sid. rewrite IHt ; auto.
+- intros n m k t IHt s. setoid_rewrite eqt_subst_subst. rewrite eqs_id_r. reflexivity.
+Qed. 
+
+Print term_min.
+
+(** Main property: [simpl] is sound. *)
+Lemma simpl_sound : 
+  (forall k n (t : term k n), simpl_term t =σ t) /\ (forall n m (s : subst n m), simpl_subst s =σ₁ s ).
+Proof.
+apply term_subst_ind.
+all: try auto.
+- intros n c t IHt. cbv [simpl_term simpl_aux term_min] ; simpl.
+  dependent destruction t ; auto.
+ unfold term_min.
+
+dependent induction t ; try (simpl ; now auto).
+- dependent destruction t2.
+  + dependent destruction k0.
+    * simpl. cbv [solution_right solution_left eq_rect_r] ; simpl.
+      rewrite IHt1. setoid_rewrite subst_sid. reflexivity.
+    * simpl. cbv [solution_right solution_left eq_rect_r] ; simpl.
+      rewrite IHt1. reflexivity.
+  + simpl. cbv [solution_left solution_right eq_rect_r] ; simpl.
+    rewrite IHt1, IHt2. reflexivity.
+  + simpl. cbv [solution_left solution_right eq_rect_r] ; simpl.
+    rewrite IHt1, IHt2. reflexivity.
+- simpl. rewrite IHt1, IHt2. reflexivity.
+- simpl. rewrite IHt1, IHt2. reflexivity. 
+Qed.
+
+(** This lemma is a simple consequence of the soundness of [simpl]. 
+    We could also prove it directly by induction, e.g. if we need it to prove 
+    the soundness of [simpl]. *)
+#[global] Instance simpl_proper k s : Proper (axiom_eq ==> axiom_eq) (@simpl k s).
+Proof. intros ???. rewrite simpl_sound, simpl_sound. assumption. Qed.
+
+End Make.

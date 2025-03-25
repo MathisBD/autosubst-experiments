@@ -247,9 +247,6 @@ Definition denote_sort (s : Two.sort) : Type :=
   end.
 
 (*Section Denote.
-  Context (env : list (denote_sort Two.S)).
-
-  Fixpoint lookup_env 
 
   (** Mapping from level two terms/substitutions to level one terms/substitutions. *)
   Fixpoint denote {s : Two.sort} (t : Two.term s) : denote_sort s :=
