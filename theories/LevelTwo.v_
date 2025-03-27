@@ -198,6 +198,109 @@ Proof. intros ??????. apply aeq_congr_scomp ; auto. Qed.
 (** *** Term/substitution simplification. *)
 (*********************************************************************************)
 
+Axiom todo : forall {A}, A.
+
+(*
+
+apply_subst : fin n -> subst n m -> term K_t m
+apply_subst i (shift k) := T_var (i + k)
+apply_subst 0 (t .: s) := t
+apply_subst (S i) (t .: s) := apply_subst i s
+apply_subst i (s1 >> s2) := push_subst (apply_subst i s1) s2
+
+push_subst : term k n -> subst n m -> term k m
+push_subst (T_var i) s := apply_subst i s
+push_subst (T_ctor c args) s := T_ctor c (push_subst args s)
+push_subst T_al_nil s := T_al_nil
+push_subst (T_al_cons a args) s := T_al_cons (push_subst a s) (push_subst args s)
+push_subst (T_abase b x) := T_abase b x
+push_subst (T_aterm t) s := T_aterm (push_subst t s)
+push_subst (T_abind a) s := T_abind (push_subst a (up_subst s))
+push_subst (t[s]) s' := t[simpl_comp s s']
+
+simpl_comp : subst n m -> subst m o -> subst n o
+simpl_comp (shift 0) s := s
+simpl_comp (shift (S i)) s := push_shift (simpl_comp (shift i) s)
+simpl_comp (t .: s) s' := t[s'] .: (s >> s')
+simpl_comp (s1 >> s2) s3 := s1 >> simpl_comp s2 s3
+
+push_shift : subst (S n) m -> subst n m
+push_shift (shift i) := shift (S i)
+push_shift (t .: s) := s
+push_shift (s1 >> s2) := simpl_comp (push_shift s1) s2
+
+*)
+
+(** Head of a normal form substitution. *)
+Definition head {n m} (s : term K_s (S2 (S n) m)) : term K_t (S1 m).
+dependent destruction s.
+- apply T_var. apply (fin_weaken k). exact fin_zero.
+- exact s1.
+- admit.
+Admitted.
+
+(** Tail of a normal form substitution. *)
+Definition tail {n m} (s : term K_s (S2 (S n) m)) : term K_s (S2 n m).
+dependent destruction s.
+- rewrite PeanoNat.Nat.add_succ_r. exact (T_sshift (S k)).
+- exact s2.
+- admit.
+Admitted.
+
+(** Drop the first [k] elements of a normal form substitution. *)
+Definition drop {n m} (k : nat) (s : term K_s (S2 (k + n) m)) : term K_s (S2 n m).
+revert n m s. induction k as [|k drop] ; intros n m s.
+- exact s.
+- apply tail. apply (drop (S n) m). rewrite PeanoNat.Nat.add_succ_r. exact s.
+Qed.
+
+(** Apply a normal form substitution to a variable. *)
+Definition apply_subst {n m} (i : fin n) (s : term K_s (S2 n m)) : term K_t (S1 m).
+Admitted.
+
+Fixpoint simpl_subst {k n m} (t : term k (S1 n)) (s : term K_s (S2 n m)) {struct t} : term k (S1 m) :=
+  match t in term k0 (S1 n0) return term K_s (S2 n0 m) -> term k0 (S1 m) with 
+  | T_var i => fun s => apply_subst i s
+  | T_ctor c args => fun s => T_ctor c (simpl_subst args s)
+  | T_al_nil => fun s => T_al_nil
+  | T_al_cons a args => fun s => T_al_cons (simpl_subst a s) (simpl_subst args s)
+  | T_abase b x => fun s => T_abase b x
+  | T_aterm t => fun s => T_aterm (simpl_subst t s)
+  | T_abind a => fun s => T_abind (simpl_subst a (up_subst s))
+  | T_subst t' s' => fun s => T_subst t' (simpl_comp s' s)
+  end s
+with simpl_comp {n m o} (s1 : term K_s (S2 n m)) (s2 : term K_s (S2 m o)) {struct s1} : term K_s (S2 n o) :=
+  match s1 in term K_s (S2 n0 m0) return term K_s (S2 m0 o) -> term K_s (S2 n0 o) with 
+  | T_sshift k => fun s2 => T_scomp (T_sshift k) s2
+  | T_scons t1 s1 => fun s2 => simpl_subst t1 s2 .: simpl_comp s1 s2
+  | T_scomp s1 s1' => fun s2 => T_scomp s1 (simpl_comp s1' s2)
+  | T_subst t1 s2 => todo
+  end s2.
+
+(*Fixpoint simpl_subst {k n m} (t : term k (S1 n)) (s : term K_s (S2 n m)) {struct t} : term k (S1 m)
+    with simpl_comp {n m o} (s1 : term K_s (S2 n m)) (s2 : term K_s (S2 m o)) {struct s1} : term K_s (S2 n o).
+(* simpl_subst. *)
+- dependent destruction t. 
+  + exact (T_subst (T_var f) s).
+  + exact (T_ctor c (simpl_subst _ _ _ t s)).
+  + exact (T_al_nil).
+  + exact (T_al_cons (simpl_subst _ _ _ t1 s) (simpl_subst _ _ _ t2 s)).
+  + exact (T_abase b d).
+  + exact (T_aterm (simpl_subst _ _ _ t s)).
+  + exact (T_abind (simpl_subst _ _ _ t (up_subst s))).
+  + exact (T_subst t1 (simpl_comp _ _ _ t2 s)).
+(* simpl_comp. *)
+- dependent destruction s1.
+  + exact (T_scomp (T_sshift k) s2).
+  + exact (T_scons (simpl_subst _ _ _ s1_1 s2) (simpl_comp _ _ _ s1_2 s2)).
+  + exact (T_scomp s1_1 (simpl_comp _ _ _ s1_2 s2)).
+Qed.  *)   
+
+
+Lemma simpl_subst_sound {k n m} (t : term k (S1 n)) (s : term K_s (S2 n m)) :
+  simpl_subst t s =σ T_subst t s.
+Proof. Admitted.
+
 Definition simpl {k s} (t : term k s) : term k s.
 dependent induction t.
 - exact (T_var f).
@@ -207,16 +310,7 @@ dependent induction t.
 - exact (T_abase b d).
 - exact (T_aterm IHt).
 - exact (T_abind IHt).
-- (* T_subst t s *)
-  dependent destruction t2.
-  + (* s = T_sshift k *)
-    dependent destruction k0.
-    * (* k = fin_zero *) exact IHt1.
-    * (* k = fin_succ *) exact (T_subst IHt1 IHt2).
-  + (* s = T_scons t' s' *) 
-    exact (T_subst IHt1 IHt2).
-  + (* s = T_scomp s1 s2 *)
-    exact (T_subst IHt1 IHt2).  
+- exact (simpl_subst t1 t2).
 - exact (T_sshift k).
 - exact (T_scons IHt1 IHt2).
 - exact (T_scomp IHt1 IHt2).
@@ -242,19 +336,10 @@ Qed.
 (** Main property: [simpl] is sound. *)
 Lemma simpl_sound {k s} (t : term k s) : simpl t =σ t.
 Proof.
-dependent induction t ; try (simpl ; now auto).
-- dependent destruction t2.
-  + dependent destruction k0.
-    * simpl. cbv [solution_right solution_left eq_rect_r] ; simpl.
-      rewrite IHt1. setoid_rewrite subst_sid. reflexivity.
-    * simpl. cbv [solution_right solution_left eq_rect_r] ; simpl.
-      rewrite IHt1. reflexivity.
-  + simpl. cbv [solution_left solution_right eq_rect_r] ; simpl.
-    rewrite IHt1, IHt2. reflexivity.
-  + simpl. cbv [solution_left solution_right eq_rect_r] ; simpl.
-    rewrite IHt1, IHt2. reflexivity.
-- simpl. rewrite IHt1, IHt2. reflexivity.
-- simpl. rewrite IHt1, IHt2. reflexivity. 
+dependent induction t ; simpl ; try auto.
+- now rewrite simpl_subst_sound.
+- rewrite IHt1, IHt2. reflexivity.
+- rewrite IHt1, IHt2. reflexivity. 
 Qed.
 
 (** This lemma is a simple consequence of the soundness of [simpl]. 

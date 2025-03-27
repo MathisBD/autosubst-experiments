@@ -1,4 +1,5 @@
 From Coq Require Export Nat List String Morphisms Relations Program.Equality.
+From Equations Require Export Equations.
 Export ListNotations.
 
 (** Convenience tactic. *)
@@ -12,7 +13,7 @@ Ltac inv H := inversion H ; subst.
 Definition point_eq {A B} : relation (A -> B) := pointwise_relation _ eq.
 Notation "f =₁ g" := (point_eq f g) (at level 75).
 
-(** Cons a term with a substitution. *)
+(*(** Cons a term with a substitution. *)
 Class Scons (t s1 s2 : Type) :=
 { gen_scons : t -> s1 -> s2 }.
 Notation "t .: s" := (gen_scons t s) (at level 60, right associativity).
@@ -25,7 +26,7 @@ Notation "s1 >> s2" := (gen_scomp s1 s2) (at level 50, left associativity).
 (** Apply a substitution to a term. *)
 Class Subst (t1 s t2 : Type) := 
 { gen_subst : t1 -> s -> t2 }.
-Notation "t '[:' s ']'" := (gen_subst t s) (at level 40, s at level 0, no associativity).
+Notation "t '[:' s ']'" := (gen_subst t s) (at level 40, s at level 0, no associativity).*)
  
 (** [fin n] represents the finite set with [n] elements [0], [1], ..., [n-1]. *)
 Inductive fin : nat -> Type :=
@@ -35,8 +36,6 @@ Inductive fin : nat -> Type :=
   fin_succ {n} : fin n -> fin (S n).
 
 (** Mapping from [i] to [i + k]. *)
-Fixpoint fin_weaken {n} (k : nat) (i : fin n) : fin (k + n) :=
-  match k return fin (k + n) with 
-  | 0 => i
-  | S k => fin_succ (fin_weaken k i)
-  end.
+Equations fin_weaken {n} (k : nat) (i : fin n) : fin (k + n) :=
+fin_weaken 0 i := i ;
+fin_weaken (S k) i := fin_succ (fin_weaken k i).
