@@ -135,10 +135,12 @@ Inductive axiom_eq : forall {k s}, term k s -> term k s -> Prop :=
 
 (** Substitution laws. *)
 
-| aeq_sshift_succ {n} k : 
-    @T_sshift n (S k) =σ ↑k >> ↑1
+| aeq_sshift_succ_r {n} k : 
+    ↑k >> ↑1 =σ @T_sshift n (S k)
 | aeq_sshift_scons {n} :
-  T_var (@fin_zero n) .: ↑1 =σ ↑0  
+    T_var (@fin_zero n) .: ↑1 =σ ↑0  
+| aeq_scons_sshift {n m} (t : term K_t (S1 m)) (s : term K_s (S2 n m)) :
+  ↑1 >> (t .: s) =σ s
 | aeq_sid_l {n m} (s : term K_s (S2 n m)) : 
     sid >> s =σ s 
 | aeq_sid_r {n m} (s : term K_s (S2 n m)) : 
@@ -179,5 +181,22 @@ Proof. intros ??????. apply aeq_congr_scons ; auto. Qed.
 #[global] Instance t_scomp_proper n m o : Proper (axiom_eq ==> axiom_eq ==> axiom_eq) (@T_scomp n m o).
 Proof. intros ??????. apply aeq_congr_scomp ; auto. Qed.
 
+(*********************************************************************************)
+(** *** Additional functions and properties. *)
+(*********************************************************************************)
+
+(** Construct an explicit shift by [S k] positions, but with scope [S2 n (k + S n)]
+    instead of [S2 n (S k + n)]. We do this to avoid rewriting with [k + S n = S k + n],
+    which would make proofs harder. *)
+Equations sshift_succ {n} (k : nat) : term K_s (S2 n (k + S n)) :=
+sshift_succ 0 := ↑1 ;
+sshift_succ (S k) := sshift_succ k >> ↑1. 
+
+Lemma aeq_sshift_succ_l {n} k : ↑1 >> ↑k =σ @sshift_succ n k.
+Proof. 
+funelim (sshift_succ k) ; simp sshift_succ.
+- now rewrite aeq_sid_r.
+- rewrite <-H. rewrite <-aeq_assoc. apply t_scomp_proper ; auto.
+Qed. 
 
 End Make.

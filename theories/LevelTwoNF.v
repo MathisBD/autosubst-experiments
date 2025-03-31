@@ -111,38 +111,47 @@ Proof. intros H. inv H. repeat apply Eqdep.EqdepTheory.inj_pair2 in H4. now subs
 (*********************************************************************************)
 
 (** Head of a normal form substitution. *)
-Equations head_nf {n m} (s : term K_s (S2 (S n) m)) : term K_t (S1 m) :=
-head_nf (↑ k) := T_var (fin_weaken k fin_zero) ;
-head_nf (t .: _) := t ;
-head_nf (↑k >> T_mvar xs >> s) := T_var fin_zero [: ↑k >> T_mvar xs ] [: s ] ;
-head_nf s := T_var fin_zero [: s ].
+Equations head {n m} (s : term K_s (S2 (S n) m)) : term K_t (S1 m) :=
+head (↑ k) := T_var (fin_weaken k fin_zero) ;
+head (t .: _) := t ;
+head (↑k >> T_mvar xs >> s) := T_var fin_zero [: ↑k >> T_mvar xs ] [: s ] ;
+head s := T_var fin_zero [: s ].
 
-Lemma head_nf_sound {n m} (s : term K_s (S2 (S n) m)) :
-  head_nf s =σ T_var fin_zero [: s ].
-Proof. funelim (head_nf s) ; simp head_nf in * ; auto. Qed.
+Lemma head_sound {n m} (s : term K_s (S2 (S n) m)) :
+  head s =σ T_var fin_zero [: s ].
+Proof. funelim (head s) ; simp head in * ; auto. Qed.
 
-Lemma head_nf_preserve {n m} (s : term K_s (S2 (S n) m)) :
-  nf s -> nf (head_nf s).
-Proof. intros H. dependent elimination H ; simp head_nf ; auto. Qed.
+Lemma head_nf {n m} (s : term K_s (S2 (S n) m)) :
+  nf s -> nf (head s).
+Proof. intros H. dependent elimination H ; simp head ; auto. Qed.
 
 (** Tail of a normal form substitution. *)
-Equations tail_nf {n m} (s : term K_s (S2 (S n) m)) : term K_s (S2 n m) :=
-tail_nf (↑ k) := _ ;
-tail_nf (_ .: s) := s ;
-tail_nf (↑k >> T_mvar xs >> s) := _ >> T_mvar xs >> s ;
-tail_nf s := ↑1 >> s.
-Next Obligation. rewrite PeanoNat.Nat.add_succ_r. exact (↑ (S k)). Defined.
-Next Obligation. rewrite PeanoNat.Nat.add_succ_r. exact (↑ (S k)). Defined.
+Equations tail {n m} (s : term K_s (S2 (S n) m)) : term K_s (S2 n m) :=
+tail (↑k) := sshift_succ k ;
+tail (_ .: s) := s ;
+tail (↑k >> T_mvar xs >> s) := sshift_succ k >> T_mvar xs >> s ;
+tail s := ↑1 >> s.
 
-Lemma tail_nf_sound {n m} (s : term K_s (S2 (S n) m)) :
-  tail_nf s =σ ↑1 >> s.
+Lemma tail_sound {n m} (s : term K_s (S2 (S n) m)) :
+  tail s =σ ↑1 >> s.
 Proof. 
-funelim (tail_nf s) ; simp tail_nf in * ; auto.
-Admitted.
+funelim (tail s) ; simp tail in * ; auto.
+- now rewrite aeq_sshift_succ_l.
+- repeat rewrite aeq_assoc. now rewrite aeq_sshift_succ_l.
+Qed.
 
-Lemma tail_nf_preserve {n m} (s : term K_s (S2 (S n) m)) :
+Lemma sshift_succ_nf {n} k : nf (@sshift_succ n k).
+Proof.
+funelim (sshift_succ k) ; simp sshift_succ in * ; auto.
+- apply (@nf_sshift n 1).
+-   
+
+Lemma tail_nf {n m} (s : term K_s (S2 (S n) m)) :
   nf s -> nf (tail_nf s).
-Proof. intros H. dependent elimination H ; simp tail_nf ; auto. Admitted.
+Proof. 
+intros H. dependent elimination H ; simp tail_nf ; auto.
+
+ Admitted.
 
 (** Apply a normal form substitution to a variable. *)
 Equations subst_var_nf {n m} (i : fin n) (s : term K_s (S2 n m)) : term K_t (S1 m) :=
