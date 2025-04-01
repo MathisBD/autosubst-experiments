@@ -125,33 +125,54 @@ Lemma head_nf {n m} (s : term K_s (S2 (S n) m)) :
   nf s -> nf (head s).
 Proof. intros H. dependent elimination H ; simp head ; auto. Qed.
 
+Definition cast_subst {n m m'} (e : m = m') (t : term K_s (S2 n m)) : term K_s (S2 n m') :=
+  match e with eq_refl => t end.
+
+Lemma cast_subst_K {n m} (e : m = m) (t : term K_s (S2 n m)) : 
+  cast_subst e t = t.
+Proof. pose proof (Eqdep_dec.UIP_refl_nat _ e) as ->. reflexivity. Qed.
+
+Lemma cast_subst_nf {n m m'} (e : m = m') (s : term K_s (S2 n m)) : 
+  nf s -> nf (cast_subst e s).
+Proof. subst. rewrite cast_subst_K. auto. Qed.
+
 (** Tail of a normal form substitution. *)
 Equations tail {n m} (s : term K_s (S2 (S n) m)) : term K_s (S2 n m) :=
-tail (↑k) := sshift_succ k ;
+tail (↑k) := cast_subst _ (↑(S k)) ;
 tail (_ .: s) := s ;
-tail (↑k >> T_mvar xs >> s) := sshift_succ k >> T_mvar xs >> s ;
-tail s := ↑1 >> s.
+tail (↑k >> T_mvar xs >> s) := cast_subst _ (↑(S k)) >> T_mvar xs >> s ;
+tail s := ↑1 >> s.  
+
+Inductive seq :  -> Type := 
+| 
 
 Lemma tail_sound {n m} (s : term K_s (S2 (S n) m)) :
   tail s =σ ↑1 >> s.
 Proof. 
 funelim (tail s) ; simp tail in * ; auto.
-- now rewrite aeq_sshift_succ_l.
+- clear.
+  set (e := _ n k). clearbody e.
+  Set Printing Implicit.
+  set (t := _ n (S k)).
+  set (x := S k + n) in *.
+  assert (Ht : t =σ @T_sshift n (S k)) by reflexivity.
+  clearbody t.
+  clearbody x.
+
 - repeat rewrite aeq_assoc. now rewrite aeq_sshift_succ_l.
 Qed.
 
-Lemma sshift_succ_nf {n} k : nf (@sshift_succ n k).
-Proof.
-funelim (sshift_succ k) ; simp sshift_succ in * ; auto.
-- apply (@nf_sshift n 1).
--   
-
 Lemma tail_nf {n m} (s : term K_s (S2 (S n) m)) :
-  nf s -> nf (tail_nf s).
+  nf s -> nf (tail s).
 Proof. 
-intros H. dependent elimination H ; simp tail_nf ; auto.
-
- Admitted.
+intros H. dependent elimination H ; simp tail ; auto.
+- set (e := _ n k). clearbody e. 
+  set (x := k + S n) in *. clearbody x.
+  subst. cbn. apply (@nf_sshift n (S k)).
+- set (e := _ n k2). clearbody e.
+  set (x := k2 + S n) in *. clearbody x. 
+  subst. cbn. exact (nf_scomp xs0 s3 n21).
+Qed.
 
 (** Apply a normal form substitution to a variable. *)
 Equations subst_var_nf {n m} (i : fin n) (s : term K_s (S2 n m)) : term K_t (S1 m) :=
