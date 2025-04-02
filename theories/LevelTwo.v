@@ -7,39 +7,39 @@ Definition arg_ty := @arg_ty (base S.t).
 (** *** Expressions (terms and substitutions). *)
 (*********************************************************************************)
 
-(** Expressions are indexed by kinds. *)
-Inductive kind := 
+(** Kind of a term, argument, or argument list. *)
+Inductive mono_kind :=
 | (** Term. *)
-  K_t : kind
+  Kt : mono_kind
 | (** Constructor argument. *)
-  K_a : arg_ty -> kind
+  Ka : arg_ty -> mono_kind
 | (** List of constructor arguments. *)
-  K_al : list arg_ty -> kind
-| (** Substitution. *)
-  K_s : kind.  
-Derive NoConfusion for kind.
+  Kal : list arg_ty -> mono_kind.
+Derive NoConfusion for mono_kind.
 
-(** Expressions are indexed by a scope. *)
-Inductive scope :=
-| (** Scope of a term, argument, or argument list. *)
-  S1 : scope
-| (** Scope of a substitution. *)
-  S2 : scope.
-Derive NoConfusion for scope.
+(** Expressions are indexed by kinds. *)
+Inductive kind : Type := 
+| (** Term, argument, or argument list. *)
+  Km : mono_kind -> kind
+| (** Substitution. *)
+  Ks : kind.  
+Derive NoConfusion for kind.
 
 (** An expression metavariable is encoded as a unique identifier (a natural).
     When denoting a expr, we have access to an environment which maps metavariable identifiers
     to actual (denoted) expressions. *)
-Definition mvar (k : kind) (s : scope) := nat.
+Definition mvar (k : kind) := nat.
 
+(** Notations for expressions with known kinds. *)
 Reserved Notation "'term'" (at level 0).
 Reserved Notation "'arg' ty" (at level 0, ty at level 0).
 Reserved Notation "'args' tys" (at level 0, tys at level 0).
 Reserved Notation "'subst'" (at level 0).
 
-(** Expressions over an abstract signature.
-    Expressions are indexed by a kind and a scope. *)
-Inductive expr : kind -> scope -> Type :=
+(** Expressions over an abstract signature. 
+    Expressions are indexed by a kind: this is to avoid writing a mutual inductives,
+    which would be hard to manipulate. *)
+Inductive expr : kind -> Type :=
 | (** Term variable. *)
   E_var : nat -> term
 | (** Non-variable term constructor, applied to a list of arguments. *)
@@ -55,7 +55,7 @@ Inductive expr : kind -> scope -> Type :=
 | (** Binder argument. *)
   E_abind {ty} : arg ty -> arg (AT_bind ty)
 | (** Substitution applied to a term/argument/argument-list. *)
-  E_subst {k} : expr k S1 -> subst -> expr k S1
+  E_subst {k} : expr (Km k) -> subst -> expr (Km k)
 | (** Shift substitution. *)
   E_sshift : nat -> subst
 | (** Substitution expansion. *)
@@ -63,13 +63,14 @@ Inductive expr : kind -> scope -> Type :=
 | (** Substitution composition. *)
   E_scomp : subst -> subst -> subst
 | (** Metavariable. *)
-  E_mvar {k s} : mvar k s -> expr k s
-where "'term'" := (expr K_t S1)
-  and "'arg' ty" := (expr (K_a ty) S1)
-  and "'args' tys" := (expr (K_al tys) S1)
-  and "'subst'" := (expr K_s S2).
+  E_mvar {k} : mvar k -> expr k
+where "'term'" := (expr (Km Kt))
+  and "'arg' ty" := (expr (Km (Ka ty)))
+  and "'args' tys" := (expr (Km (Kal tys)))
+  and "'subst'" := (expr Ks).
 Derive Signature NoConfusion for expr.
 
+(** Notations for common expressions. *)
 Notation "↑ k" := (E_sshift k) (at level 0, k at level 0).
 Notation "t .: s" := (E_scons t s) (at level 60, right associativity).
 Notation "s1 >> s2" := (E_scomp s1 s2) (at level 50, left associativity).
@@ -89,13 +90,13 @@ up_subst s := E_var 0 .: s >> ↑1.
 (** [e =σ e'] means that the expressions [e] and [e'] are equal 
     modulo the equational theory of sigma calculus. *)
 Reserved Notation "t1 '=σ' t2" (at level 75, no associativity).
-Inductive axiom_eq : forall {k s}, expr k s -> expr k s -> Prop :=
+Inductive axiom_eq : forall {k}, expr k -> expr k -> Prop :=
 
 (** Equivalence. *)
 
-| aeq_refl {k s} (e : expr k s) : e =σ e
-| aeq_sym {k s} (e1 e2 : expr k s) : e1 =σ e2 -> e2 =σ e1
-| aeq_trans {k s} (e1 e2 e3 : expr k s) : e1 =σ e2 -> e2 =σ e3 -> e1 =σ e3
+| aeq_refl {k} (e : expr k) : e =σ e
+| aeq_sym {k} (e1 e2 : expr k) : e1 =σ e2 -> e2 =σ e1
+| aeq_trans {k} (e1 e2 e3 : expr k) : e1 =σ e2 -> e2 =σ e3 -> e1 =σ e3
 
 (** Congruence. *)
 
@@ -107,7 +108,7 @@ Inductive axiom_eq : forall {k s}, expr k s -> expr k s -> Prop :=
     t1 =σ t2 -> E_aterm t1 =σ E_aterm t2
 | aeq_congr_abind {ty} (a1 a2 : arg ty) : 
     a1 =σ a2 -> E_abind a1 =σ E_abind a2
-| aeq_congr_subst {k} (t1 t2 : expr k S1) (s1 s2 : subst) : 
+| aeq_congr_subst {k} (t1 t2 : expr (Km k)) (s1 s2 : subst) : 
     t1 =σ t2 -> s1 =σ s2 -> t1[: s1 ] =σ t2[: s2 ] 
 | aeq_congr_scons (t1 t2 : term) (s1 s2 : subst) : 
     t1 =σ t2 -> s1 =σ s2 -> t1 .: s1 =σ t2 .: s2
@@ -137,9 +138,9 @@ Inductive axiom_eq : forall {k s}, expr k s -> expr k s -> Prop :=
     (E_aterm t)[: s ] =σ E_aterm (t[: s ])
 | aeq_subst_abind {ty} (a : arg ty) (s : subst) : 
     (E_abind a)[: s ] =σ E_abind (a[: up_subst s ])
-| aeq_subst_subst {k} (e : expr k S1) (s1 s2 : subst) :
+| aeq_subst_subst {k} (e : expr (Km k)) (s1 s2 : subst) :
     e[: s1 ][: s2 ] =σ e[: s1 >> s2 ]
-| aeq_subst_mvar {k} (v : mvar k S1) :
+| aeq_subst_mvar {k} (v : mvar (Km k)) :
     (E_mvar v)[: sid ] =σ E_mvar v 
 
 (** Substitution laws. *)
@@ -166,7 +167,7 @@ Hint Constructors axiom_eq : core.
 (** *** Setoid rewrite support. *)
 (*********************************************************************************)
 
-#[global] Instance axiom_eq_equiv k s : Equivalence (@axiom_eq k s).
+#[global] Instance axiom_eq_equiv k : Equivalence (@axiom_eq k).
 Proof. constructor ; eauto. Qed.
 
 #[global] Instance e_ctor_proper c : Proper (axiom_eq ==> axiom_eq) (@E_ctor c).
@@ -220,7 +221,7 @@ rewrite aeq_sshift_plus, aeq_sshift_plus.
 now rewrite PeanoNat.Nat.add_comm. 
 Qed.
     
-Lemma aeq_subst_sid {k} (e : expr k S1) : e[: sid ] =σ e.
+Lemma aeq_subst_sid {k} (e : expr (Km k)) : e[: sid ] =σ e.
 Proof. 
 dependent induction e ; auto.  
 - setoid_rewrite aeq_sshift_var. reflexivity.

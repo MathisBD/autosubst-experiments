@@ -14,7 +14,7 @@ Import T.
 (** A term/substitution is in normal form if and only if:
     - metavariables always appear to the left of a substitution or composition.
     - no other term appears to the left of a substitution or composition. *)
-Inductive nf : forall {k s}, expr k s -> Prop :=
+Inductive nf : forall {k}, expr k -> Prop :=
 | nf_tvar (i : nat) : 
     nf (E_var i)
 | nf_tctor c (al : args _) : 
@@ -33,11 +33,11 @@ Inductive nf : forall {k s}, expr k s -> Prop :=
     nf (↑k)
 | nf_scons (t : term) (s : subst) : 
     nf t -> nf s -> nf (t .: s)
-| nf_subst_t {k} (xt : mvar k S1) (s : subst) : 
+| nf_subst_t {k} (xt : mvar (Km k)) (s : subst) : 
     nf s -> nf (E_mvar xt [: s ])
-| nf_subst_s i (xs : mvar K_s S2) (s : subst) :
+| nf_subst_s i (xs : mvar Ks) (s : subst) :
     nf s -> nf (E_var i [: E_mvar xs >> s])
-| nf_scomp k (xs : mvar K_s S2) (s : subst) :
+| nf_scomp k (xs : mvar Ks) (s : subst) :
     nf s -> nf (↑k >> E_mvar xs >> s).
 Hint Constructors nf : core.
 
@@ -66,7 +66,7 @@ Proof. intros H. inv H. repeat apply Eqdep.EqdepTheory.inj_pair2 in H1. now subs
 
 Lemma inv_nf_al_cons {ty tys} (a : arg ty) (al : args tys) :
   nf (E_al_cons a al) -> nf a /\ nf al.
-Proof. intros H. inv H. repeat apply Eqdep.EqdepTheory.inj_pair2 in H2, H3. now subst. Qed.
+Proof. intros H. inv H. repeat apply Eqdep.EqdepTheory.inj_pair2 in H2, H4. now subst. Qed.
 
 Lemma inv_nf_aterm (t : term) :
   nf (E_aterm t) -> nf t.
@@ -79,16 +79,16 @@ Proof. intros H. inv H. apply Eqdep.EqdepTheory.inj_pair2 in H1. now subst. Qed.
 (** This inversion lemma is a bit complex, because there are two cases
     and the second case is only possible when [t] is _not_ a substitution.
     We can usually use one of the simpler lemmas below. *)
-Lemma inv_nf_subst {k} (t : expr k S1) (s : subst) :
+Lemma inv_nf_subst {k} (t : expr (Km k)) (s : subst) :
   nf (t[: s ]) -> 
     (exists xt, t = E_mvar xt /\ nf s) \/ 
-    (match k as k0 return expr k0 S1 -> Prop with 
-     | K_t => fun t => exists l xs s', t = E_var l /\ s = E_mvar xs >> s' /\ nf s'
+    (match k with 
+     | Kt => fun t => exists l xs s', t = E_var l /\ s = E_mvar xs >> s' /\ nf s'
      | _ => fun _ => False
      end) t.
 Proof.
 intros H. inv H.
-- left. apply Eqdep.EqdepTheory.inj_pair2 in H0. subst. eauto.
+- left. apply Eqdep.EqdepTheory.inj_pair2 in H1. subst. eauto.
 - right. apply Eqdep.EqdepTheory.inj_pair2 in H4. subst. eexists. eauto.
 Qed.
 
@@ -106,7 +106,7 @@ Proof. intros H. inv H. assumption. Qed.
 
 Lemma inv_nf_subst_var i s : 
   nf (E_var i [: s ]) -> 
-    exists (xs : mvar K_s S2) (s' : subst), s = E_mvar xs >> s' /\ nf s'.
+    exists (xs : mvar Ks) (s' : subst), s = E_mvar xs >> s' /\ nf s'.
 Proof. 
 intros H. apply inv_nf_subst in H.
 destruct H as [(xt & H3 & H4) | H2] ; [inv H3 |].
@@ -114,7 +114,7 @@ destruct H2 as (l & xs & s' & H1 & H2 & H3).
 subst. eauto.
 Qed.
 
-Lemma inv_nf_subst_mvar {k} (xt : mvar k S1) s : 
+Lemma inv_nf_subst_mvar {k} (xt : mvar (Km k)) s : 
   nf (E_mvar xt [: s ]) -> nf s.
 Proof. 
 intros H. apply inv_nf_subst in H.
@@ -166,7 +166,7 @@ intros H. apply inv_nf_subst in H.
 destruct H as [(xt & H3 & H4) | H2] ; [inv H3 | auto].
 Qed.
 
-Lemma inv_nf_subst_subst {k} (t : expr k S1) s1 s2 : 
+Lemma inv_nf_subst_subst {k} (t : expr (Km k)) s1 s2 : 
   nf (t [: s1 ] [: s2 ]) -> False.
 Proof. 
 intros H. apply inv_nf_subst in H.
@@ -332,7 +332,7 @@ Lemma up_rexp_rexp r : rexp r -> rexp (up_rexp r).
 Proof. intros H. unfold up_rexp. constructor. now apply rcomp_rexp. Qed. 
 
 (** Apply a renaming expression to a normal form term. *)
-Equations rsubst {k} (t : expr k S1) (r : subst) : expr k S1 :=
+Equations rsubst {k} (t : expr (Km k)) (r : subst) : expr (Km k) :=
 rsubst (E_var i) r := vsubst i r ;
 rsubst (E_ctor c al) r := E_ctor c (rsubst al r) ;
 rsubst E_al_nil r := E_al_nil ;
@@ -399,7 +399,7 @@ destruct rsubst_sr_comp_nf as [_ H1]. auto.
 Qed. 
 
 (** Apply a normal form substitution to a normal form term. *)
-Equations ssubst {k} (t : expr k S1) (r : subst) : expr k S1 :=
+Equations ssubst {k} (t : expr (Km k)) (r : subst) : expr (Km k) :=
 ssubst (E_var i) s := vsubst i s ;
 ssubst (E_ctor c al) s := E_ctor c (ssubst al s) ;
 ssubst E_al_nil _ := E_al_nil ;
@@ -418,7 +418,7 @@ scomp (↑k >> E_mvar xs >> s1) s2 := ↑k >> E_mvar xs >> scomp s1 s2 ;
 scomp s1 s2 := s1 >> s2.
 
 Lemma ssubst_scomp_sound :
-  (forall k (t : expr k S1) (s : subst), ssubst t s =σ t[: s ]) *
+  (forall k (t : expr (Km k)) (s : subst), ssubst t s =σ t[: s ]) *
   (forall (s1 s2 : subst), scomp s1 s2 =σ s1 >> s2).
 Proof. 
 apply ssubst_elim with 
@@ -440,7 +440,7 @@ all: try reflexivity.
 Qed.
 
 Lemma ssubst_scomp_nf :
-  (forall k (t : expr k S1) (s : subst), nf t -> nf s -> nf (ssubst t s)) *
+  (forall k (t : expr (Km k)) (s : subst), nf t -> nf s -> nf (ssubst t s)) *
   (forall (s1 s2 : subst), nf s1 -> nf s2 -> nf (scomp s1 s2)).
 Proof. 
 apply ssubst_elim with 
@@ -453,18 +453,8 @@ all: try (intros ; inv_nf ; solve [ easy | intuition ]).
 - intros k s H1 H2. now apply drop_nf.
 Qed.  
 
-(** Normalize a metavariable. *)
-Equations normalize_mvar {k s} (x : mvar k s) : expr k s :=
-@normalize_mvar K_s S2 xs := ↑0 >> E_mvar xs >> sid ;
-@normalize_mvar _ S1 xt := E_mvar xt [: sid ] ;
-@normalize_mvar _ _ x := E_mvar x. 
-
-Lemma normalize_mvar_sound {k s} (x : mvar k s) : 
-  normalize_mvar x =σ E_mvar x.
-Proof. funelim (normalize_mvar x) ; auto. now rewrite aeq_sid_l, aeq_sid_r. Qed.
-
 (** Reduce an expression to normal form. *)
-Equations normalize {k s} (e : expr k s) : expr k s :=
+Equations normalize {k} (e : expr k) : expr k :=
 normalize (E_var i) := E_var i ;
 normalize (E_ctor c al) := E_ctor c (normalize al) ;
 normalize E_al_nil := E_al_nil ;
@@ -476,22 +466,24 @@ normalize (t [: s ]) := ssubst (normalize t) (normalize s) ;
 normalize (↑k) := ↑k ;
 normalize (t .: s) := normalize t .: normalize s ;
 normalize (s1 >> s2) := scomp (normalize s1) (normalize s2) ;
-normalize (E_mvar x) := normalize_mvar x.
+normalize (@E_mvar Ks xs) := ↑0 >> E_mvar xs >> sid ;
+normalize (@E_mvar (Km _) xt) := E_mvar xt [: sid ].
 
-Lemma normalize_sound {k s} (e : expr k s) : normalize e =σ e.
+Lemma normalize_sound {k} (e : expr k) : normalize e =σ e.
 Proof.
 funelim (normalize e) ; try (now auto).
 - destruct ssubst_scomp_sound as [-> _]. now rewrite H, H0.
 - destruct ssubst_scomp_sound as [_ ->]. now rewrite H, H0.
-- now rewrite normalize_mvar_sound.
+- now rewrite aeq_sid_l, aeq_sid_r.
 Qed.
 
-Lemma normalize_nf {k s} (e : expr k s) : nf (normalize e).
+Lemma normalize_nf {k} (e : expr k) : nf (normalize e).
 Proof.
-funelim (normalize e) ; try (now auto).
+funelim (normalize e) ; try solve [ auto ].
 - destruct ssubst_scomp_nf as [H1 _] ; apply H1 ; auto.
 - destruct ssubst_scomp_nf as [_ H1] ; apply H1 ; auto.
-- admit.
-Admitted.
+- constructor. constructor.
+- constructor. constructor. 
+Qed.
 
 End Make.

@@ -138,6 +138,7 @@ End CombineNotations.
 
 Import CombineNotations.
 
+
 (** Generic lifting operation for renamings *)
 Definition up_ren {m n} (xi : ren m n) : ren (S m) (S n) :=
   var_zero .: xi >> shift.
