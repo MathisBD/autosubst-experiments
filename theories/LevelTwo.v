@@ -21,66 +21,66 @@ Derive NoConfusion for kind.
 
 (** Expressions are indexed by a scope. *)
 Inductive scope :=
-| (** Scope of a expr, argument, or argument list. *)
-  S1 : nat -> scope
+| (** Scope of a term, argument, or argument list. *)
+  S1 : scope
 | (** Scope of a substitution. *)
-  S2 : nat -> nat -> scope.
+  S2 : scope.
 Derive NoConfusion for scope.
 
 (** An expression metavariable is encoded as a unique identifier (a natural).
     When denoting a expr, we have access to an environment which maps metavariable identifiers
-    to actual (denoted) exprs. *)
+    to actual (denoted) expressions. *)
 Definition mvar (k : kind) (s : scope) := nat.
 
-#[local] Reserved Notation "'term' n" (at level 0, n at level 0).
-#[local] Reserved Notation "'arg' ty n" (at level 0, ty at level 0, n at level 0).
-#[local] Reserved Notation "'args' tys n" (at level 0, tys at level 0, n at level 0).
-#[local] Reserved Notation "'subst' n m" (at level 50, n at level 0, m at level 0).
+Reserved Notation "'term'" (at level 0).
+Reserved Notation "'arg' ty" (at level 0, ty at level 0).
+Reserved Notation "'args' tys" (at level 0, tys at level 0).
+Reserved Notation "'subst'" (at level 0).
 
 (** Expressions over an abstract signature.
     Expressions are indexed by a kind and a scope. *)
 Inductive expr : kind -> scope -> Type :=
 | (** Term variable. *)
-  E_var {n} : fin n -> term n
+  E_var : nat -> term
 | (** Non-variable term constructor, applied to a list of arguments. *)
-  E_ctor {n} : forall c, args (ctor_type S.t c) n -> term n
+  E_ctor : forall c, args (ctor_type S.t c) -> term
 | (** Empty argument list. *)
-  E_al_nil {n} : args [] n
+  E_al_nil : args []
 | (** Non-empty argument list. *)
-  E_al_cons {n ty tys} : arg ty n -> args tys n -> args (ty :: tys) n
+  E_al_cons {ty tys} : arg ty -> args tys -> args (ty :: tys)
 | (** Base argument (e.g. bool or string). *)
-  E_abase {n} : forall b, denote_base S.t b -> arg (AT_base b) n
+  E_abase : forall b, denote_base S.t b -> arg (AT_base b)
 | (** Term argument. *)
-  E_aterm {n} : term n -> arg AT_term n
+  E_aterm : term -> arg AT_term
 | (** Binder argument. *)
-  E_abind {n ty} : arg ty (S n) -> arg (AT_bind ty) n
+  E_abind {ty} : arg ty -> arg (AT_bind ty)
 | (** Substitution applied to a term/argument/argument-list. *)
-  E_subst {n m k} : expr k (S1 n) -> subst n m -> expr k (S1 m)
+  E_subst {k} : expr k S1 -> subst -> expr k S1
 | (** Shift substitution. *)
-  E_sshift {n} : forall k, subst n (k + n)
-| (** Cons substitution. *)
-  E_scons {n m} : term m -> subst n m -> subst (S n) m
-| (** Composition of substitutions. *)
-  E_scomp {n m o} : subst n m -> subst m o -> subst n o
+  E_sshift : nat -> subst
+| (** Substitution expansion. *)
+  E_scons : term -> subst -> subst
+| (** Substitution composition. *)
+  E_scomp : subst -> subst -> subst
 | (** Metavariable. *)
   E_mvar {k s} : mvar k s -> expr k s
-where "'term' n" := (expr K_t (S1 n))
-  and "'arg' ty n" := (expr (K_a ty) (S1 n))
-  and "'args' tys n" := (expr (K_al tys) (S1 n))
-  and "'subst' n m" := (expr K_s (S2 n m)).
+where "'term'" := (expr K_t S1)
+  and "'arg' ty" := (expr (K_a ty) S1)
+  and "'args' tys" := (expr (K_al tys) S1)
+  and "'subst'" := (expr K_s S2).
 Derive Signature NoConfusion for expr.
 
-#[local] Notation "↑ k" := (E_sshift k) (at level 0).
-#[local] Notation "t .: s" := (E_scons t s) (at level 60, right associativity).
-#[local] Notation "s1 >> s2" := (E_scomp s1 s2) (at level 50, left associativity).
-#[local] Notation "t '[:' s ']'" := (E_subst t s) (at level 15, s at level 0, no associativity).
+Notation "↑ k" := (E_sshift k) (at level 0, k at level 0).
+Notation "t .: s" := (E_scons t s) (at level 60, right associativity).
+Notation "s1 >> s2" := (E_scomp s1 s2) (at level 50, left associativity).
+Notation "t '[:' s ']'" := (E_subst t s) (at level 15, s at level 0, no associativity).
 
 (** The identity substitution. *)
-Definition sid {n} : subst n n := E_sshift 0.
+Definition sid : subst := E_sshift 0.
 
 (** Lift a substitution through a binder. *)
-Equations up_subst {n m} (s : subst n m) : subst (S n) (S m) :=
-up_subst s := E_var fin_zero .: s >> ↑1.
+Equations up_subst (s : subst) : subst :=
+up_subst s := E_var 0 .: s >> ↑1.
 
 (*********************************************************************************)
 (** *** Axiomatic equality. *)
@@ -99,64 +99,64 @@ Inductive axiom_eq : forall {k s}, expr k s -> expr k s -> Prop :=
 
 (** Congruence. *)
 
-| aeq_congr_ctor {n} c (al1 al2 : args _ n) : 
+| aeq_congr_ctor c (al1 al2 : args _) : 
     al1 =σ al2 -> E_ctor c al1 =σ E_ctor c al2
-| aeq_congr_al_cons {n ty tys} (a1 a2 : arg ty n) (al1 al2 : args tys n) : 
+| aeq_congr_al_cons {ty tys} (a1 a2 : arg ty) (al1 al2 : args tys) : 
     a1 =σ a2 -> al1 =σ al2 -> E_al_cons a1 al1 =σ E_al_cons a2 al2
-| aeq_congr_aterm {n} (t1 t2 : term n) : 
+| aeq_congr_aterm (t1 t2 : term) : 
     t1 =σ t2 -> E_aterm t1 =σ E_aterm t2
-| aeq_congr_abind {n ty} (a1 a2 : arg ty (S n)) : 
+| aeq_congr_abind {ty} (a1 a2 : arg ty) : 
     a1 =σ a2 -> E_abind a1 =σ E_abind a2
-| aeq_congr_subst {n m k} (t1 t2 : expr k (S1 n)) (s1 s2 : subst n m) : 
+| aeq_congr_subst {k} (t1 t2 : expr k S1) (s1 s2 : subst) : 
     t1 =σ t2 -> s1 =σ s2 -> t1[: s1 ] =σ t2[: s2 ] 
-| aeq_congr_scons {n m} (t1 t2 : term m) (s1 s2 : subst n m) : 
+| aeq_congr_scons (t1 t2 : term) (s1 s2 : subst) : 
     t1 =σ t2 -> s1 =σ s2 -> t1 .: s1 =σ t2 .: s2
-| aeq_congr_scomp {n m o} (s1 s2 : subst n m) (r1 r2 : subst m o) : 
-    s1 =σ s2 -> r1 =σ r2 -> s1 >> r1 =σ s2 >> r2
+| aeq_congr_scomp (s1 s2 s1' s2' : subst) : 
+    s1 =σ s2 -> s1' =σ s2' -> s1 >> s1' =σ s2 >> s2'
 
 (** Apply a substitution to a variable. *)
 
-| aeq_sshift_var {n} (i : fin n) k : 
-    (E_var i)[: ↑k ] =σ E_var (fin_weaken k i)
-| aeq_scons_zero {n m} (t : term m) (s : subst n m) :
-    (E_var fin_zero)[: t .: s] =σ t
-| aeq_scons_succ {n m} (i : fin n) (t : term m) (s : subst n m) :
-    (E_var (fin_succ i))[: t .: s] =σ (E_var i)[: s]
+| aeq_sshift_var i k : 
+    (E_var i)[: ↑k ] =σ E_var (k + i)
+| aeq_scons_zero (t : term) (s : subst) :
+    (E_var 0)[: t .: s] =σ t
+| aeq_scons_succ i (t : term) (s : subst) :
+    (E_var (S i))[: t .: s] =σ (E_var i)[: s]
 
-(** Apply a substitution to a expr. *)
+(** Apply a substitution to an expression. *)
 
-| aeq_subst_ctor {n m} c (al : args _ n) (s : subst n m) : 
+| aeq_subst_ctor c (al : args _) (s : subst) : 
     (E_ctor c al)[: s ] =σ E_ctor c (al[: s ])
-| aeq_subst_al_nil {n m} (s : subst n m) : 
+| aeq_subst_al_nil (s : subst) : 
     E_al_nil[: s ] =σ E_al_nil
-| aeq_subst_al_cons {n m ty tys} (a : arg ty n) (al : args tys n) (s : subst n m) : 
+| aeq_subst_al_cons {ty tys} (a : arg ty) (al : args tys) (s : subst) : 
     (E_al_cons a al)[: s ] =σ E_al_cons (a[: s]) (al[: s ])
-| aeq_subst_abase {n m} b x (s : subst n m) : 
+| aeq_subst_abase b x (s : subst) : 
     (E_abase b x)[: s ] =σ E_abase b x
-| aeq_subst_aterm {n m} (t : term n) (s : subst n m) : 
+| aeq_subst_aterm (t : term) (s : subst) : 
     (E_aterm t)[: s ] =σ E_aterm (t[: s ])
-| aeq_subst_abind {n m ty} (a : arg ty (S n)) (s : subst n m) : 
+| aeq_subst_abind {ty} (a : arg ty) (s : subst) : 
     (E_abind a)[: s ] =σ E_abind (a[: up_subst s ])
-| aeq_subst_subst {n m o k} (t : expr k (S1 n)) (s1 : subst n m) (s2 : subst m o) :
-    t[: s1 ][: s2 ] =σ t[: s1 >> s2 ]
-| aeq_subst_t_mvar {n k} (v : mvar k (S1 n)) :
+| aeq_subst_subst {k} (e : expr k S1) (s1 s2 : subst) :
+    e[: s1 ][: s2 ] =σ e[: s1 >> s2 ]
+| aeq_subst_mvar {k} (v : mvar k S1) :
     (E_mvar v)[: sid ] =σ E_mvar v 
 
 (** Substitution laws. *)
 
-| aeq_sshift_succ_r {n} k : 
-    ↑k >> ↑1 =σ @E_sshift n (S k)
-| aeq_sshift_scons {n} :
-    E_var (@fin_zero n) .: ↑1 =σ ↑0  
-| aeq_scons_sshift {n m} (t : term m) (s : subst n m) :
+| aeq_sshift_succ_r k : 
+    ↑k >> ↑1 =σ ↑(S k)
+| aeq_sshift_scons :
+    E_var 0 .: ↑1 =σ ↑0  
+| aeq_scons_sshift (t : term) (s : subst) :
   ↑1 >> (t .: s) =σ s
-| aeq_sid_l {n m} (s : subst n m) : 
+| aeq_sid_l (s : subst) : 
     sid >> s =σ s 
-| aeq_sid_r {n m} (s : subst n m) : 
-    s >> sid =σ s 
-| aeq_assoc {n m o p} (s1 : subst n m) (s2 : subst m o) (s3 : subst o p) : 
+| aeq_sid_r (s : subst) : 
+    s >> sid =σ s
+| aeq_assoc (s1 s2 s3 : subst) : 
     s1 >> (s2 >> s3) =σ (s1 >> s2) >> s3
-| aeq_distrib {n m o} (t : term m) (s1 : subst n m) (s2 : subst m o) : 
+| aeq_distrib (t : term) (s1 s2 : subst) : 
     (t .: s1) >> s2 =σ t[: s2 ] .: s1 >> s2
 
 where "t1 '=σ' t2" := (axiom_eq t1 t2).
@@ -169,29 +169,66 @@ Hint Constructors axiom_eq : core.
 #[global] Instance axiom_eq_equiv k s : Equivalence (@axiom_eq k s).
 Proof. constructor ; eauto. Qed.
 
-#[global] Instance t_ctor_proper n c : Proper (axiom_eq ==> axiom_eq) (@E_ctor n c).
+#[global] Instance e_ctor_proper c : Proper (axiom_eq ==> axiom_eq) (@E_ctor c).
 Proof. intros ???. apply aeq_congr_ctor ; auto. Qed.
 
-#[global] Instance t_al_cons_proper n ty tys : Proper (axiom_eq ==> axiom_eq ==> axiom_eq) (@E_al_cons n ty tys).
+#[global] Instance e_al_cons_proper ty tys : Proper (axiom_eq ==> axiom_eq ==> axiom_eq) (@E_al_cons ty tys).
 Proof. intros ??????. apply aeq_congr_al_cons ; auto. Qed.
 
-#[global] Instance t_aterm_proper n : Proper (axiom_eq ==> axiom_eq) (@E_aterm n).
+#[global] Instance e_aterm_proper : Proper (axiom_eq ==> axiom_eq) E_aterm.
 Proof. intros ???. apply aeq_congr_aterm ; auto. Qed.
 
-#[global] Instance t_abind_proper n ty : Proper (axiom_eq ==> axiom_eq) (@E_abind n ty).
+#[global] Instance e_abind_proper ty : Proper (axiom_eq ==> axiom_eq) (@E_abind ty).
 Proof. intros ???. apply aeq_congr_abind ; auto. Qed.
 
-#[global] Instance t_subst_proper n m k : Proper (axiom_eq ==> axiom_eq ==> axiom_eq) (@E_subst n m k).
+#[global] Instance e_subst_proper k : Proper (axiom_eq ==> axiom_eq ==> axiom_eq) (@E_subst k).
 Proof. intros ??????. apply aeq_congr_subst ; auto. Qed.
 
-#[global] Instance t_scons_proper n m : Proper (axiom_eq ==> axiom_eq ==> axiom_eq) (@E_scons n m).
+#[global] Instance e_scons_proper : Proper (axiom_eq ==> axiom_eq ==> axiom_eq) E_scons.
 Proof. intros ??????. apply aeq_congr_scons ; auto. Qed.
 
-#[global] Instance t_scomp_proper n m o : Proper (axiom_eq ==> axiom_eq ==> axiom_eq) (@E_scomp n m o).
+#[global] Instance e_scomp_proper : Proper (axiom_eq ==> axiom_eq ==> axiom_eq) E_scomp.
 Proof. intros ??????. apply aeq_congr_scomp ; auto. Qed.
 
 (*********************************************************************************)
 (** *** Additional functions and properties. *)
 (*********************************************************************************)
+
+Lemma up_subst_sid : up_subst sid =σ sid.
+Proof. autorewrite with up_subst. rewrite aeq_sid_l. now rewrite aeq_sshift_scons. Qed.
+
+Lemma aeq_sshift_succ_l k : ↑1 >> ↑k =σ ↑(S k).
+Proof. 
+induction k as [|k IHk].
+- rewrite aeq_sid_r. reflexivity.
+- rewrite <-(aeq_sshift_succ_r k). rewrite aeq_assoc.
+  rewrite IHk, aeq_sshift_succ_r. reflexivity.
+Qed.  
+
+Lemma aeq_sshift_plus k l : ↑k >> ↑l =σ ↑(k + l).
+Proof.
+revert l ; induction k as [|k IHk] ; intro l.
+- simpl. rewrite aeq_sid_l. reflexivity.
+- simpl. rewrite <-(aeq_sshift_succ_r (k + l)). rewrite <-IHk.
+  rewrite <-aeq_sshift_succ_r. rewrite <-aeq_assoc, <-aeq_assoc.
+  now rewrite aeq_sshift_succ_l, aeq_sshift_succ_r.
+Qed.
+
+Lemma aeq_sshift_comm k l : ↑k >> ↑l =σ ↑l >> ↑k.
+Proof. 
+rewrite aeq_sshift_plus, aeq_sshift_plus. 
+now rewrite PeanoNat.Nat.add_comm. 
+Qed.
+    
+Lemma aeq_subst_sid {k} (e : expr k S1) : e[: sid ] =σ e.
+Proof. 
+dependent induction e ; auto.  
+- setoid_rewrite aeq_sshift_var. reflexivity.
+- now rewrite aeq_subst_ctor, IHe.
+- now rewrite aeq_subst_al_cons, IHe1, IHe2.
+- now rewrite aeq_subst_aterm, IHe.
+- now rewrite aeq_subst_abind, up_subst_sid, IHe.
+- rewrite aeq_subst_subst. now rewrite aeq_sid_r.
+Qed.
 
 End Make.
