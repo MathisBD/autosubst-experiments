@@ -30,19 +30,19 @@ Reserved Notation "'args' tys" (at level 0, tys at level 0).
     Terms are indexed by a kind. *)
 Inductive expr : kind -> Type :=
 | (** Term variable. *)
-  T_var : nat -> term
+  E_var : nat -> term
 | (** Non-variable expr constructor, applied to a list of arguments. *)
-  T_ctor : forall c, args (ctor_type S.t c) -> term
+  E_ctor : forall c, args (ctor_type S.t c) -> term
 | (** Empty argument list. *)
-  T_al_nil : args []
+  E_al_nil : args []
 | (** Non-empty argument list. *)
-  T_al_cons {ty tys} : arg ty -> args tys -> args (ty :: tys)
+  E_al_cons {ty tys} : arg ty -> args tys -> args (ty :: tys)
 | (** Base argument (e.g. bool or string). *)
-  T_abase : forall b, denote_base S.t b -> arg (AT_base b)
+  E_abase : forall b, denote_base S.t b -> arg (AT_base b)
 | (** Term argument. *)
-  T_aterm : term -> arg AT_term
+  E_aterm : term -> arg AT_term
 | (** Binder argument. *)
-  T_abind {ty} : arg ty -> arg (AT_bind ty)
+  E_abind {ty} : arg ty -> arg (AT_bind ty)
 where "'term'" := (expr Kt)
   and "'arg' ty" := (expr (Ka ty))
   and "'args' tys" := (expr (Kal tys)).
@@ -76,13 +76,13 @@ Definition up_ren (r : ren) : ren :=
  
 (** Rename a term. *)
 Equations rename {k} (t : expr k) (r : ren) : expr k :=
-rename (T_var i) r := T_var (r i) ;
-rename (T_ctor c al) r := T_ctor c (rename al r) ;
-rename T_al_nil r := T_al_nil ;
-rename (T_al_cons a al) r := T_al_cons (rename a r) (rename al r) ;
-rename (T_abase b x) r := T_abase b x ;
-rename (T_aterm t) r := T_aterm (rename t r) ;
-rename (T_abind a) r := T_abind (rename a (up_ren r)).
+rename (E_var i) r := E_var (r i) ;
+rename (E_ctor c al) r := E_ctor c (rename al r) ;
+rename E_al_nil r := E_al_nil ;
+rename (E_al_cons a al) r := E_al_cons (rename a r) (rename al r) ;
+rename (E_abase b x) r := E_abase b x ;
+rename (E_aterm t) r := E_aterm (rename t r) ;
+rename (E_abind a) r := E_abind (rename a (up_ren r)).
 
 (*********************************************************************************)
 (** *** Substitutions. *)
@@ -93,11 +93,11 @@ rename (T_abind a) r := T_abind (rename a (up_ren r)).
 Definition subst := nat -> term.
 
 (** The identity substitution. *)
-Definition sid : subst := fun i => T_var i.
+Definition sid : subst := fun i => E_var i.
 
 (** [sshift k] shifts indices by [k]. *)
 Definition sshift (k : nat) : subst := 
-  fun i => T_var (k + i).
+  fun i => E_var (k + i).
 
 (** Cons a expr with a substitution. *)
 Equations scons (t : term) (s : subst) : subst :=
@@ -106,17 +106,17 @@ scons t s (S i) := s i.
 
 (** Lift a substitution through a binder. *)
 Definition up_subst (s : subst) : subst :=
-  scons (T_var 0) (fun i => rename (s i) (rshift 1)).
+  scons (E_var 0) (fun i => rename (s i) (rshift 1)).
 
 (** Apply a substitution to a expr. *)
 Equations substitute {k} (t : expr k) (s : subst) : expr k :=
-substitute (T_var i) s := s i ;
-substitute (T_ctor c al) s := T_ctor c (substitute al s) ;
-substitute T_al_nil s := T_al_nil ;
-substitute (T_al_cons a al) s := T_al_cons (substitute a s) (substitute al s) ;
-substitute (T_abase b x) s := T_abase b x ;
-substitute (T_aterm t) s := T_aterm (substitute t s) ;
-substitute (T_abind a) s := T_abind (substitute a (up_subst s)).
+substitute (E_var i) s := s i ;
+substitute (E_ctor c al) s := E_ctor c (substitute al s) ;
+substitute E_al_nil s := E_al_nil ;
+substitute (E_al_cons a al) s := E_al_cons (substitute a s) (substitute al s) ;
+substitute (E_abase b x) s := E_abase b x ;
+substitute (E_aterm t) s := E_aterm (substitute t s) ;
+substitute (E_abind a) s := E_abind (substitute a (up_subst s)).
 
 (** Left to right composition of substitutions. *)
 Definition scomp (s1 s2 : subst) : subst :=
@@ -134,48 +134,45 @@ intros r1 r2 Hr i. destruct i ; cbv [rcons up_ren rcomp].
 Qed. 
 
 #[global] Instance rcons_proper : Proper (eq ==> point_eq ==> point_eq) rcons.
-Proof. 
-intros i1 i2 it s1 s2 Hs i. dependent elimination i ; simp rcons.
-now rewrite Hs. 
-Qed.
+Proof. intros i1 i2 it s1 s2 Hs i. destruct i ; simp rcons. now rewrite Hs. Qed.
 
-#[global] Instance rcomp_proper n m o : Proper (point_eq ==> point_eq ==> point_eq) (@rcomp n m o).
+#[global] Instance rcomp_proper : Proper (point_eq ==> point_eq ==> point_eq) rcomp.
 Proof. 
-intros s1 s2 Hs r1 r2 Hr i. dependent elimination i ; simp rcomp.
+intros s1 s2 Hs r1 r2 Hr i. destruct i ; cbv [rcomp].
 - now rewrite Hs, Hr.
 - now rewrite Hs, Hr.
 Qed.
 
-#[global] Instance rename_proper n m k :
-  Proper (eq ==> point_eq ==> eq) (@rename n m k).
+#[global] Instance rename_proper k :
+  Proper (eq ==> point_eq ==> eq) (@rename k).
 Proof.
 intros t _ <- r1 r2 Hr. funelim (rename t _) ; simp rename in * ; auto.
 f_equal. apply H. now rewrite Hr.
 Qed.
 
-#[global] Instance up_subst_proper n m : Proper (point_eq ==> point_eq) (@up_subst n m).
+#[global] Instance up_subst_proper : Proper (point_eq ==> point_eq) up_subst.
 Proof.
-intros s1 s2 Hs i. dependent elimination i ; simp up_subst scons.
+intros s1 s2 Hs i. destruct i ; cbv [up_subst scons].
 - reflexivity.
 - now rewrite Hs.
 Qed. 
 
-#[global] Instance scons_proper n m : Proper (eq ==> point_eq ==> point_eq) (@scons n m).
+#[global] Instance scons_proper : Proper (eq ==> point_eq ==> point_eq) scons.
 Proof. 
 intros t1 t2 Ht s1 s2 Hs i. 
-dependent elimination i ; simp scons. now rewrite Hs. 
+destruct i ; simp scons. now rewrite Hs. 
 Qed.
     
-#[global] Instance substitute_proper n m k : 
-  Proper (eq ==> point_eq ==> eq) (@substitute n m k).
+#[global] Instance substitute_proper k : 
+  Proper (eq ==> point_eq ==> eq) (@substitute k).
 Proof. 
 intros t ? <- s1 s2 Hs. funelim (substitute t _) ; simp substitute in * ; auto.
 f_equal. apply H. now rewrite Hs.
 Qed. 
 
-#[global] Instance scomp_proper n m o : Proper (point_eq ==> point_eq ==> point_eq) (@scomp n m o).
+#[global] Instance scomp_proper : Proper (point_eq ==> point_eq ==> point_eq) scomp.
 Proof. 
-intros s1 s2 Hs r1 r2 Hr i. dependent elimination i ; simp scomp.
+intros s1 s2 Hs r1 r2 Hr i. destruct i ; cbv [scomp].
 - now rewrite Hs, Hr.
 - now rewrite Hs, Hr.
 Qed.
@@ -184,101 +181,96 @@ Qed.
 (** *** Properties of substitution. *)
 (*********************************************************************************)
 
-Lemma up_ren_comp {n m o} (r1 : ren n m) (r2 : ren m o) : 
+Lemma up_ren_comp (r1 r2 : ren) : 
   rcomp (up_ren r1) (up_ren r2) =₁ up_ren (rcomp r1 r2).
-Proof. intros i. dependent elimination i ; reflexivity. Qed.  
+Proof. intros [|i] ; reflexivity. Qed.
 
-Lemma ren_ren {n m o k} (t : expr k n) (r1 : ren n m) (r2 : ren m o) : 
+Lemma ren_ren {k} (t : expr k) (r1 r2 : ren) : 
   rename (rename t r1) r2 = rename t (rcomp r1 r2).
 Proof.
 funelim (rename t _) ; simp rename in * ; auto.
 now rewrite H, up_ren_comp.
 Qed.
 
-Lemma subst_ren {n m o k} (t : expr k n) (s : subst n m) (r : ren m o) : 
+Lemma subst_ren {k} (t : expr k) (s : subst) (r : ren) : 
   rename (substitute t s) r = substitute t (fun i => rename (s i) r).
 Proof.
 funelim (substitute t _) ; simp rename substitute in * ; auto.
 f_equal. rewrite H. apply substitute_proper ; auto.
-intros i. dependent elimination i ; simp up_subst scons rename ; auto.
+intros [|i] ; auto. cbv [up_subst scons].
 rewrite ren_ren, ren_ren. apply rename_proper ; auto.
 reflexivity.
 Qed.
 
-Lemma ren_subst {n m o k} (t : expr k n) (r : ren n m) (s : subst m o) : 
+Lemma ren_subst {k} (t : expr k) (r : ren) (s : subst) : 
   substitute (rename t r) s = substitute t (fun i => s (r i)).
 Proof.
 funelim (rename t r) ; simp rename substitute in * ; auto.
 f_equal. rewrite H. apply substitute_proper ; auto.
-intros i. dependent elimination i ; reflexivity.
+intros [|i] ; reflexivity.
 Qed.
 
-Lemma up_subst_comp {n m o} (s1 : subst n m) (s2 : subst m o) : 
+Lemma up_subst_comp (s1 s2 : subst) : 
   scomp (up_subst s1) (up_subst s2) =₁ up_subst (scomp s1 s2).
 Proof. 
-intros i. dependent elimination i ; simp up_subst scomp scons substitute ; auto.
+intros [|i] ; auto. cbv [up_subst scomp]. simp scons.
 rewrite ren_subst, subst_ren. apply substitute_proper ; auto.
-intros i. simp scons rshift fin_weaken. reflexivity.
+intros i'. reflexivity.
 Qed.
 
-Lemma subst_subst {n m o k} (t : expr k n) (s1 : subst n m) (s2 : subst m o) : 
+Lemma subst_subst {k} (t : expr k) (s1 s2 : subst) : 
   substitute (substitute t s1) s2 = substitute t (scomp s1 s2).
 Proof.
-funelim (substitute t _) ; simp substitute in * ; auto.
-f_equal. rewrite H. now rewrite up_subst_comp.
+funelim (substitute t _) ; simp substitute ; auto.
+rewrite H. now rewrite up_subst_comp.
 Qed.
 
-Lemma up_subst_sid : (up_subst (@sid n)) =₁ sid.
-Proof. intros i ; dependent elimination i ; reflexivity. Qed.
-#[global] Hint Rewrite @up_subst_sid : up_subst.
+Lemma up_subst_sid : up_subst sid =₁ sid.
+Proof. intros [|i] ; reflexivity. Qed.
 
-Lemma subst_sid {n k} (t : expr n k) : substitute t sid = t.
+Lemma subst_sid {k} (t : expr k) : substitute t sid = t.
 Proof.
 induction t ; simp substitute in * ; auto.
 rewrite up_subst_sid. auto.
 Qed.
-#[global] Hint Rewrite @subst_sid : substitute.
 
-Lemma scomp_id_l (s : subst n m) : scomp sid s =₁ s.
+Lemma scomp_id_l (s : subst) : scomp sid s =₁ s.
 Proof. reflexivity. Qed.
-#[global] Hint Rewrite @scomp_id_l : scomp.
 
-Lemma scomp_id_r (s : subst n m) : scomp s sid =₁ s.
-Proof. intros i. simp scomp substitute. reflexivity. Qed.
-#[global] Hint Rewrite @scomp_id_r : scomp.
+Lemma scomp_id_r (s : subst) : scomp s sid =₁ s.
+Proof. intros i. cbv [scomp]. now rewrite subst_sid. Qed.
 
-Lemma scomp_assoc {n m o p} (s1 : subst n m) (s2 : subst m o) (s3 : subst o p) : 
+Lemma scomp_assoc (s1 s2 s3 : subst) : 
   scomp (scomp s1 s2) s3 =₁ scomp s1 (scomp s2 s3).
-Proof. intros i. simp scomp. now rewrite subst_subst. Qed.
+Proof. intros i. cbv [scomp]. now rewrite subst_subst. Qed.
 
-Lemma ren_is_subst {n m k} (t : expr k n) (r : ren n m) : 
-  rename t r = substitute t (fun i => T_var (r i)).
+Lemma ren_is_subst {k} (t : expr k) (r : ren) : 
+  rename t r = substitute t (fun i => E_var (r i)).
 Proof.
-funelim (rename t r) ; simp rename substitute in * ; auto.
+funelim (rename t r) ; simp rename substitute ; auto.
 f_equal. rewrite H. apply substitute_proper ; auto.
-intros i. dependent elimination i ; reflexivity.
+intros [|i] ; reflexivity.
 Qed.
 
-Lemma rshift_sshift {n k} (t : expr k n) : 
+Lemma rshift_sshift {k} (t : expr k) : 
   rename t (rshift 1) = substitute t (sshift 1).
 Proof. rewrite ren_is_subst. reflexivity. Qed.
     
-Lemma up_subst_alt (s : subst n m) :
-  up_subst s =₁ scons (T_var fin_zero) (scomp s (sshift 1)).
+Lemma up_subst_alt (s : subst) :
+  up_subst s =₁ scons (E_var 0) (scomp s (sshift 1)).
 Proof.
 simp up_subst. apply scons_proper ; auto.
-intros i. simp scomp. now rewrite rshift_sshift.
+intros i. cbv [scomp]. now rewrite rshift_sshift.
 Qed.
 
-Lemma sshift_succ_r k : sshift (S k) =₁ scomp (@sshift n k) (sshift 1).
-Proof. intros i. dependent elimination i ; reflexivity. Qed.    
+Lemma sshift_succ_r k : sshift (S k) =₁ scomp (sshift k) (sshift 1).
+Proof. intros [|i] ; reflexivity. Qed.
 
-Lemma sid_scons : scons (T_var fin_zero) (sshift 1) =₁ @sid (S n).
-Proof. intros i. dependent elimination i ; reflexivity. Qed.
-#[global] Hint Rewrite @sid_scons : scons.
+Lemma sid_scons : scons (E_var 0) (sshift 1) =₁ sid.
+Proof. intros [|i] ; reflexivity. Qed.
 
-Lemma scomp_scons_distrib {n m o} (t : term m) (s1 : subst n m) (s2 : subst m o) :
+Lemma scomp_scons_distrib (t : term) (s1 s2 : subst) :
   scomp (scons t s1) s2 =₁ scons (substitute t s2) (scomp s1 s2).
-Proof. intros i. dependent elimination i ; reflexivity. Qed.
+Proof. intros [|i] ; reflexivity. Qed.
 
 End Make.
