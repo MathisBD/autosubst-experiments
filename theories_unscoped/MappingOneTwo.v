@@ -1,4 +1,5 @@
 From Equations Require Import Equations.
+From Ltac2 Require Import Ltac2.
 From Prototype Require Import Prelude Sig.
 From Prototype Require LevelOne LevelTwo.
 
@@ -53,7 +54,7 @@ Definition denote_rel (k : T.kind) : relation (denote_type k) :=
 
 #[global] Instance denote_rel_equiv k : Equivalence (denote_rel k).
 Proof. 
-constructor ; destruct k ; try solve [easy].
+constructor ; destruct k ; try solve [ easy ].
 - intros ?????. etransitivity ; eauto.
 - intros ?????. etransitivity ; eauto.
 Qed.
@@ -82,5 +83,115 @@ Qed.
 (** *** Reification (level one -> level two). *)
 (*********************************************************************************)
 
+(** We use a [map] to store level one term/substitutions that we could not reify. *)
+Ltac2 Type map := (constr * constr * constr) list.
+
+(** Compute the kind [k : T.kind] such that [denote_type k = type of e]. *)
+Ltac2 inv_denote_type (e : constr) : constr :=
+  lazy_match! Constr.type e with
+  | O.expr O.Kt => constr:(T.Km T.Kt)
+  | O.expr (O.Ka ?ty) => constr:(T.Km (O.Ka $ty))
+  | O.expr (O.Kal ?tys) => constr:(T.Km (O.Kal $tys))
+  | O.subst => constr:(T.Ks)
+  | nat -> O.expr O.Kt => constr:(T.Ks)
+  | _ => Control.throw (Invalid_argument (Some (Message.of_string "inv_denote_type")))
+  end.
+
+(** Convert an Ltac2 integer to a Rocq term of type [nat]. *)
+Ltac2 rec nat_of_int (i : int) : constr :=
+  if Int.le i 0 then constr:(0) 
+  else let i' := nat_of_int (Int.sub i 1) in constr:(S $i').
+
+(** Create a new metavariable for term/substitution [t] and add it to the map [m].
+    If [t] is already present in [m], we don't add it twice. *)
+Ltac2 make_mvar (m : map) (t : constr) : map * constr :=
+  match List.find_opt (fun (_, _, t') => Constr.equal t t') m with 
+  (** [t] is already in the environment [m] at position [idx]. *)
+  | Some (idx, k, _) => m, constr:(@T.E_mvar $k $idx)
+  (** [t] is not in the environment: we have to add it to [m]. *)
+  | None => 
+    let idx := nat_of_int (List.length m) in
+    let k := inv_denote_type t in
+    List.append m [ (idx, k, t) ], constr:(@T.E_mvar $k $idx)
+  end.    
+
+Ltac2 rec reify_term (m : map) (t : constr) : map * constr :=
+  lazy_match! t with 
+  | O.E_var ?i => m, constr:(T.E_var $i)
+  | O.E_ctor ?c ?al => 
+    let (m, al) := reify_term m al in
+    m, constr:(T.E_ctor $c $al)
+  | O.E_al_nil => m, constr:(T.E_al_nil)
+  | O.E_al_cons ?a ?al => 
+    let (m, a) := reify_term m a in
+    let (m, al) := reify_term m al in
+    m, constr:(T.E_al_cons $a $al)
+  | O.E_abase ?b ?x => m, constr:(T.E_abase $b $x)
+  | O.E_aterm ?t => 
+    let (m, t) := reify_term m t in
+    m, constr:(T.E_aterm $t)
+  | O.E_abind ?a =>
+    let (m, a) := reify_term m a in
+    m, constr:(T.E_abind $a)
+  | O.substitute ?t ?s =>
+    let (m, t) := reify_term m t in
+    let (m, s) := reify_subst m s in
+    m, constr:(T.E_subst $t $s)
+  | _ => make_mvar m t
+  end
+with reify_subst (m : map) (s : constr) : map * constr :=
+  lazy_match! s with 
+  | O.sid => m, constr:(T.E_sshift 0)
+  | O.sshift ?k => m, constr:(T.E_sshift $k)
+  | _ => make_mvar m s
+  end.
+
+Print sigT.
+
+(** Build an [assignment] from a [map]. *)
+Ltac2 rec build_assignment (m : map) : constr :=
+  match m with 
+  | [] => constr:(@nil (sigT denote_type))
+  | (_idx, k, t) :: m => 
+    let m' := build_assignment m in
+    constr:(existT denote_type $k $t :: $m')
+  end.
+
+(** Reify a level one term in an empty map,
+    returning the resulting assignment and reified term. *)
+Ltac2 reify (t : constr) : constr * constr :=
+  let (m, t) := reify_term [] t in
+  let a := build_assignment m in 
+  a, t.
 
 End Make.
+
+(** Testing. *)
+
+Inductive base := BString.
+Definition denote_base (b : base) : Type := 
+  match b with BString => string end.
+
+Inductive ctor := CApp | CLam.
+Definition ctor_type c : list (@arg_ty base) := 
+  match c with 
+  | CApp => [ AT_term ; AT_term ]
+  | CLam => [ AT_base BString ; AT_bind AT_term ]
+  end.
+
+Module S.
+Definition t := Build_signature base denote_base ctor ctor_type.
+End S.
+
+Module OT := Make (S).
+Import OT.
+
+Axiom t : O.expr O.Kt.
+
+Ltac2 Eval reify constr:(
+  O.E_ctor CApp
+    (O.E_al_cons (O.E_aterm (O.substitute t (fun i => O.E_var i)))
+    (O.E_al_cons (O.E_aterm t)
+     O.E_al_nil))
+).
+  

@@ -1,6 +1,10 @@
 From Coq Require Export Nat List String Morphisms Relations Program.Equality.
+From Ltac2 Require Import Ltac2.
 From Equations Require Export Equations.
 Export ListNotations.
+
+(** Ltac2 is still missing many basic Ltac1 tactics. *)
+#[export] Set Default Proof Mode "Classic".
 
 (** Convenience tactic. *)
 Ltac inv H := inversion H ; subst.
@@ -13,21 +17,6 @@ Ltac inv H := inversion H ; subst.
 Definition point_eq {A B} : relation (A -> B) := pointwise_relation _ eq.
 Notation "f =₁ g" := (point_eq f g) (at level 75).
 
-(*(** Cons a term with a substitution. *)
-Class Scons (t s1 s2 : Type) :=
-{ gen_scons : t -> s1 -> s2 }.
-Notation "t .: s" := (gen_scons t s) (at level 60, right associativity).
-
-(** Left to right composition of substitutions. *)
-Class Scomp (s1 s2 s3 : Type) :=
-{ gen_scomp : s1 -> s2 -> s3 }.
-Notation "s1 >> s2" := (gen_scomp s1 s2) (at level 50, left associativity).
-
-(** Apply a substitution to a term. *)
-Class Subst (t1 s t2 : Type) := 
-{ gen_subst : t1 -> s -> t2 }.
-Notation "t '[:' s ']'" := (gen_subst t s) (at level 40, s at level 0, no associativity).*)
- 
 (** [fin n] represents the finite set with [n] elements [0], [1], ..., [n-1]. *)
 Inductive fin : nat -> Type :=
 | (** [0] is in [fin n] whenever [n > 0]. *)
