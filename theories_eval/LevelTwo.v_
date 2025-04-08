@@ -8,8 +8,10 @@ Definition arg_ty := @arg_ty (base S.t).
 (** *** Expressions (terms and explicit substitutions). *)
 (*********************************************************************************)
 
-(** Kind of a term, argument, or argument list. *)
+(** Kind of a natural, term, argument, or argument list. *)
 Inductive mono_kind :=
+| (** Natural. *)
+  Kn : mono_kind
 | (** Term. *)
   Kt : mono_kind
 | (** Constructor argument. *)
@@ -28,6 +30,8 @@ Derive NoConfusion for bi_kind.
 
 (** Expressions are indexed by kinds. *)
 Inductive kind : Type := 
+| (** Natural number. *)
+  
 | (** Term-like. *)
   Km : mono_kind -> kind
 | (** Substitution-like. *)
@@ -36,13 +40,15 @@ Derive NoConfusion for kind.
 
 Definition denote_type (k : kind) : Type :=
   match k with 
-  | Km k' => 
+  | K1 k' => 
     (* Since [denote_type] is used in types a lot, it is important that it computes
-       as much as possible. We match on [k'] rather late so that [denote_type (Km _)]
+       as much as possible. We match on [k'] rather late so that [denote_type (K1 _)]
        is not stuck and computes to [O.expr _]. *)
-    O.expr (match k' with Kt => O.Kt | Ka ty => O.Ka ty | Kal tys => O.Kal tys end)
-  | Kb Kr => O.ren
-  | Kb Ks => O.subst
+    O.expr 
+      (match k' with 
+        | Kt => O.Kt | Ka ty => O.Ka ty | Kal tys => O.Kal tys end)
+  | K2 Kr => O.ren
+  | K2 Ks => O.subst
   end.
 
 (** Notations for expressions with known kinds. *)
@@ -58,7 +64,7 @@ Reserved Notation "'subst'" (at level 0).
 Inductive expr : kind -> Type :=
 
 | (** Variable term constructor (de Bruijn index). *)
-  E_tvar : nat -> term
+  E_tvar : qnat -> term
 | (** Non-variable term constructor, applied to a list of arguments. *)
   E_tctor : forall c, args (ctor_type S.t c) -> term
 
@@ -75,14 +81,14 @@ Inductive expr : kind -> Type :=
   E_abind {ty} : arg ty -> arg (AT_bind ty)
 
 | (** Shift renaming. *)
-  E_rshift : nat -> ren
+  E_rshift : qnat -> ren
 | (** Renaming expansion. *)
-  E_rcons : nat -> ren -> ren
+  E_rcons : qnat -> ren -> ren
 | (** Renaming composition. *)
   E_rcomp : ren -> ren -> ren
 
 | (** Shift substitution. *)
-  E_sshift : nat -> subst
+  E_sshift : qnat -> subst
 | (** Substitution expansion. *)
   E_scons : term -> subst -> subst
 | (** Substitution composition. *)
@@ -91,17 +97,17 @@ Inductive expr : kind -> Type :=
   E_sren : ren -> subst
 
 | (** Instantiate a term/argument/argument-list with a renaming. *)
-  E_rinst {k} : expr (Km k) -> ren -> expr (Km k)
+  E_rinst {k} : expr (K1 k) -> ren -> expr (K1 k)
 | (** Instantiate a term/argument/argument-list with a substitution. *)
-  E_sinst {k} : expr (Km k) -> subst -> expr (Km k)
+  E_sinst {k} : expr (K1 k) -> subst -> expr (K1 k)
 | (** Metavariable (of any kind). *)
   E_mvar {k} : denote_type k -> expr k
 
-where "'term'" := (expr (Km Kt))
-  and "'arg' ty" := (expr (Km (Ka ty)))
-  and "'args' tys" := (expr (Km (Kal tys)))
-  and "'ren'" := (expr (Kb Kr))
-  and "'subst'" := (expr (Kb Ks)).
+where "'term'" := (expr (K1 Kt))
+  and "'arg' ty" := (expr (K1 (Ka ty)))
+  and "'args' tys" := (expr (K1 (Kal tys)))
+  and "'ren'" := (expr (K2 Kr))
+  and "'subst'" := (expr (K2 Ks)).
 
 Derive Signature NoConfusion for expr.
 
@@ -119,18 +125,18 @@ Notation "t '[ᵣ' s ']'" := (E_rinst t s) (at level 15, s at level 0, no associ
 Notation "t '[ₛ' s ']'" := (E_sinst t s) (at level 15, s at level 0, no associativity).
 
 (** The identity renaming. *)
-Definition rid : ren := E_rshift 0.
+Definition rid : ren := E_rshift q0.
 
 (** The identity substitution. *)
-Definition sid : subst := E_sshift 0.
+Definition sid : subst := E_sshift q0.
 
 (** Lift a renaming through a binder. *)
 Definition up_ren (r : ren) : ren :=
-  0 .ᵣ r >>ᵣ ↑ᵣ1.
+  q0 .ᵣ r >>ᵣ ↑ᵣ q1.
 
 (** Lift a substitution through a binder. *)
 Definition up_subst (s : subst) : subst :=
-  E_tvar 0 .ₛ s >>ₛ ↑ₛ1.
+  E_tvar q0 .ₛ s >>ₛ ↑ₛ q1.
 
 (*********************************************************************************)
 (** *** Denotation. *)
@@ -139,7 +145,7 @@ Definition up_subst (s : subst) : subst :=
 (** Mapping from level two expressions to level one expressions and substitutions. *)
 Equations denote {k} (t : expr k) : denote_type k by struct t :=
 
-denote (E_tvar i) := O.E_var i ;
+denote (E_tvar i) := O.E_var (denote_qnat i) ;
 denote (E_tctor c al) := O.E_ctor c (denote al) ;
 
 denote E_al_nil := O.E_al_nil ;
@@ -149,11 +155,11 @@ denote (E_abase b x) := O.E_abase b x ;
 denote (E_aterm t) := O.E_aterm (denote t) ;
 denote (E_abind a) := O.E_abind (denote a) ;
 
-denote (E_rshift k) := O.rshift k ;
-denote (E_rcons i r) := O.rcons i (denote r) ;
+denote (E_rshift k) := O.rshift (denote_qnat k) ;
+denote (E_rcons i r) := O.rcons (denote_qnat i) (denote r) ;
 denote (E_rcomp r1 r2) := O.rcomp (denote r1) (denote r2) ;
 
-denote (E_sshift k) := O.sshift k ;
+denote (E_sshift k) := O.sshift (denote_qnat k) ;
 denote (E_scons t s) := O.scons (denote t) (denote s) ;
 denote (E_scomp s1 s2) := O.scomp (denote s1) (denote s2) ;
 denote (E_sren r) := fun i => O.E_var (denote r i) ;
@@ -172,7 +178,9 @@ denote (E_mvar x) := x.
 
 Ltac2 rec reify_term (t : constr) : constr :=
   lazy_match! t with 
-  | O.E_var ?i => constr:(E_tvar $i)
+  | O.E_var ?i => 
+    let i := reify_nat i in
+    constr:(E_tvar $i)
   | O.E_ctor ?c ?al => 
     let al := reify_term al in
     constr:(E_tctor $c $al)
@@ -196,12 +204,14 @@ Ltac2 rec reify_term (t : constr) : constr :=
     let t := reify_term t in
     let s := reify_subst s in
     constr:(E_sinst $t $s)
-  | _ => constr:(@E_mvar (Km Kt) $t)
+  | _ => constr:(@E_mvar (K1 Kt) $t)
   end
 with reify_subst (s : constr) : constr :=
   lazy_match! s with 
   | O.sid => constr:(sid)
-  | O.sshift ?k => constr:(E_sshift $k)
+  | O.sshift ?k => 
+    let k := reify_nat k in 
+    constr:(E_sshift $k)
   | O.scons ?t ?s =>
     let t := reify_term t in 
     let s := reify_subst s in 
@@ -214,16 +224,19 @@ with reify_subst (s : constr) : constr :=
     let s := reify_subst s in 
     let r := reify_ren r in
     constr:(E_scomp $s (E_sren $r))
-  | ?s => constr:(@E_mvar (Kb Ks) $s)
+  | ?s => constr:(@E_mvar (K2 Ks) $s)
   end
 with reify_ren (r : constr) : constr := 
   lazy_match! r with 
   | O.rid => constr:(rid)
-  | O.rshift ?k => constr:(E_rshift $k)
+  | O.rshift ?k => 
+    let k := reify_nat k in 
+    constr:(E_rshift $k)
   | O.rcons ?i ?r => 
+    let i := reify_nat i in
     let r := reify_ren r in 
     constr:(E_rcons $i $r)
-  | ?r => constr:(@E_mvar (Kb Kr) $r)
+  | ?r => constr:(@E_mvar (K2 Kr) $r)
   end.
 
 (*********************************************************************************)
@@ -239,7 +252,7 @@ Reserved Notation "'nf_subst'" (at level 0).
 (** Normal form expressions. *)
 Inductive nf_expr : kind -> Type :=
 
-| N_tvar : nat -> nf_term
+| N_tvar : qnat -> nf_term
 | N_tctor : forall c, nf_args (ctor_type S.t c) -> nf_term
 | N_al_nil : nf_args []
 | N_al_cons {ty tys} : nf_arg ty -> nf_args tys -> nf_args (ty :: tys)
@@ -247,39 +260,40 @@ Inductive nf_expr : kind -> Type :=
 | N_aterm : nf_term -> nf_arg AT_term
 | N_abind {ty} : nf_arg ty -> nf_arg (AT_bind ty)
 
-| N_rshift : nat -> nf_ren
-| N_rcons : nat -> nf_ren -> nf_ren
+| N_rshift : qnat -> nf_ren
+| N_rcons : qnat -> nf_ren -> nf_ren
 (** Composition of renamings, where the left hand side is a 
     (possibly lifted) metavariable. *)
-|  N_rcomp : nat -> denote_type (Kb Kr) -> nf_ren -> nf_ren
+| N_rcomp : qnat -> denote_type (K2 Kr) -> nf_ren -> nf_ren
 
-| N_sshift : nat -> nf_subst
+| N_sshift : qnat -> nf_subst
 | N_scons : nf_term -> nf_subst -> nf_subst
 (** Composition of substitutions, where the left hand side is a 
     (possibly lifted) metavariable. *)
-| N_scomp : nat -> denote_type (Kb Ks) -> nf_subst -> nf_subst
+| N_scomp : qnat -> denote_type (K2 Ks) -> nf_subst -> nf_subst
 | N_sren : nf_ren -> nf_subst
 
 (** Instantiation with a renaming/substitution, where the left hand side 
     is a metavariable. *)  
-| N_rinst_l {k} : denote_type (Km k) -> nf_ren -> nf_expr (Km k)
-| N_sinst_l {k} : denote_type (Km k) -> nf_subst -> nf_expr (Km k)
+| N_rinst_l {k} : denote_type (K1 k) -> nf_ren -> nf_expr (K1 k)
+| N_sinst_l {k} : denote_type (K1 k) -> nf_subst -> nf_expr (K1 k)
+
 (** Instantiation with a renaming/substitution, where the right hand side 
     is a metavariable (possibly composed with some other renaming/substitution),
     and the left hand side is a de Bruijn index. *)
-| N_rinst_r : nat -> denote_type (Kb Kr) -> nf_ren -> nf_term
-| N_sinst_r : nat -> denote_type (Kb Ks) -> nf_subst -> nf_term
+| N_rinst_r : qnat -> denote_type (K2 Kr) -> nf_ren -> nf_term
+| N_sinst_r : qnat -> denote_type (K2 Ks) -> nf_subst -> nf_term
 
-where "'nf_term'" := (nf_expr (Km Kt))
-  and "'nf_arg' ty" := (nf_expr (Km (Ka ty)))
-  and "'nf_args' tys" := (nf_expr (Km (Kal tys)))
-  and "'nf_ren'" := (nf_expr (Kb Kr))
-  and "'nf_subst'" := (nf_expr (Kb Ks)).
+where "'nf_term'" := (nf_expr (K1 Kt))
+  and "'nf_arg' ty" := (nf_expr (K1 (Ka ty)))
+  and "'nf_args' tys" := (nf_expr (K1 (Kal tys)))
+  and "'nf_ren'" := (nf_expr (K2 Kr))
+  and "'nf_subst'" := (nf_expr (K2 Ks)).
 
 (** Denote a normal form expression. *)
 Equations denote_nf {k} : nf_expr k -> denote_type k :=
 
-denote_nf (N_tvar i) := O.E_var i ;
+denote_nf (N_tvar i) := O.E_var (denote_qnat i) ;
 denote_nf (N_tctor c al) := O.E_ctor c (denote_nf al) ;
 denote_nf N_al_nil := O.E_al_nil ;
 denote_nf (N_al_cons a al) := O.E_al_cons (denote_nf a) (denote_nf al) ;
@@ -287,13 +301,13 @@ denote_nf (N_abase b x) := O.E_abase b x ;
 denote_nf (N_aterm t) := O.E_aterm (denote_nf t) ;
 denote_nf (N_abind a) := O.E_abind (denote_nf a) ;
 
-denote_nf (N_rshift k) := O.rshift k ;
-denote_nf (N_rcons i r) := O.rcons i (denote_nf r) ;
-denote_nf (N_rcomp k xr r) := O.rcomp (O.rcomp (O.rshift k) xr) (denote_nf r) ;
+denote_nf (N_rshift k) := O.rshift (denote_qnat k) ;
+denote_nf (N_rcons i r) := O.rcons (denote_qnat i) (denote_nf r) ;
+denote_nf (N_rcomp k xr r) := O.rcomp (O.rcomp (O.rshift (denote_qnat k)) xr) (denote_nf r) ;
 
-denote_nf (N_sshift k) := O.sshift k ;
+denote_nf (N_sshift k) := O.sshift (denote_qnat k) ;
 denote_nf (N_scons t s) := O.scons (denote_nf t) (denote_nf s) ;
-denote_nf (N_scomp k xs s) := O.scomp (O.scomp (O.sshift k) xs) (denote_nf s) ;
+denote_nf (N_scomp k xs s) := O.scomp (O.scomp (O.sshift (denote_qnat k)) xs) (denote_nf s) ;
 denote_nf (N_sren r) := fun i => O.E_var (denote_nf r i) ;
 
 denote_nf (@N_rinst_l Kt xt r) := O.rename xt (denote_nf r) ;
@@ -304,8 +318,8 @@ denote_nf (@N_sinst_l Kt xt s) := O.substitute xt (denote_nf s) ;
 denote_nf (@N_sinst_l (Ka _) xt s) := O.substitute xt (denote_nf s) ;
 denote_nf (@N_sinst_l (Kal _) xt s) := O.substitute xt (denote_nf s) ;
 
-denote_nf (N_rinst_r i xr r) := O.rename (O.E_var i) (O.rcomp xr (denote_nf r)) ;
-denote_nf (N_sinst_r i xs s) := O.substitute (O.E_var i) (O.scomp xs (denote_nf s)).
+denote_nf (N_rinst_r i xr r) := O.rename (O.E_var (denote_qnat i)) (O.rcomp xr (denote_nf r)) ;
+denote_nf (N_sinst_r i xs s) := O.substitute (O.E_var (denote_qnat i) (O.scomp xs (denote_nf s)).
 
 (*********************************************************************************)
 (** *** Normalization. *)
@@ -313,39 +327,47 @@ denote_nf (N_sinst_r i xs s) := O.substitute (O.E_var i) (O.scomp xs (denote_nf 
 
 (** Tail of a normal form renaming. *)
 Equations rtail : nf_ren -> nf_ren := 
-rtail (N_rshift k) := N_rshift (S k) ;
+rtail (N_rshift k) := N_rshift (qS k) ;
 rtail (N_rcons _ r) := r ;
-rtail (N_rcomp k xr r) := N_rcomp (S k) xr r.
+rtail (N_rcomp k xr r) := N_rcomp (qS k) xr r.
 
 Lemma rtail_sound r : denote_nf (rtail r) =₁ O.rcomp (O.rshift 1) (denote_nf r).
 Proof. 
-funelim (rtail r) ; simp rtail denote_nf.
+funelim (rtail r) ; simp rtail denote_nf denote_qnat.
 - now rewrite O.rshift_succ_l.
 - now rewrite O.rshift_rcons.
 - repeat rewrite <-O.rcomp_assoc. now rewrite O.rshift_succ_l.
-Qed.     
+Qed. 
+#[global] Hint Rewrite rtail_sound : denote_nf.    
 
 (** Drop the first [k] elements in a normal form renaming. *)
-Equations rdrop : nat -> nf_ren -> nf_ren :=
-rdrop 0 r := r ;
-rdrop (S k) r := rtail (rdrop k r).
+Equations rdrop : qnat -> nf_ren -> nf_ren :=
+rdrop q0 r := r ;
+rdrop (qS k) r := rtail (rdrop k r) ;
+rdrop (qAtom k) r := N_rcomp (qAtom k) O.rid r.
 
-Lemma rdrop_sound k r : denote_nf (rdrop k r) =₁ O.rcomp (O.rshift k) (denote_nf r).
+Lemma rdrop_sound k r : 
+  denote_nf (rdrop k r) =₁ O.rcomp (O.rshift (denote_qnat k)) (denote_nf r).
 Proof.
-funelim (rdrop k r) ; simp denote_nf.
+funelim (rdrop k r) ; simp denote_nf denote_qnat.
 - now rewrite O.rcomp_rid_l.
-- rewrite rtail_sound, H. now rewrite <-O.rcomp_assoc, O.rshift_succ_l.
+- rewrite H. now rewrite <-O.rcomp_assoc, O.rshift_succ_l.
+- now rewrite O.rcomp_rid_r. 
 Qed.  
+#[global] Hint Rewrite rdrop_sound : denote_nf.    
 
 (** Apply a normal form renaming to a de Bruijn index. *)
-Equations rapply : nf_ren -> nat -> nat :=
-rapply (N_rshift k) i := k + i ;
-rapply (N_rcons i _) 0 := i ;
-rapply (N_rcons _ r) (S i) := rapply r i ;
-rapply (N_rcomp k xr r) i := rapply r (xr (k + i)).
+Equations rapply : nf_ren -> qnat -> qnat :=
+rapply (N_rshift k) i := qadd k i ;
+rapply (N_rcons i _) q0 := i ;
+rapply (N_rcons _ r) (qS k) := rapply r k ;
+rapply (N_rcons i r) (qAtom k) := qAtom (denote_nf (N_rcons i r) k) ;
+rapply (N_rcomp k xr r) i := rapply r (qAtom (xr (denote_qnat (qadd k i)))).
 
-Lemma rapply_sound r i : rapply r i = denote_nf r i.
-Proof. funelim (rapply r i) ; simp denote_nf ; solve [ auto ]. Qed.
+Lemma rapply_sound r i : 
+  denote_qnat (rapply r i) = denote_nf r (denote_qnat i).
+Proof. funelim (rapply r i) ; now simp denote_nf denote_qnat in *. Qed.
+#[global] Hint Rewrite rapply_sound : denote_nf.    
     
 (** Compose two normal form renamings. *)
 Equations rcomp : nf_ren -> nf_ren -> nf_ren :=
@@ -356,21 +378,22 @@ rcomp (N_rcomp k xr r1) r2 := N_rcomp k xr (rcomp r1 r2).
 Lemma rcomp_sound r1 r2 : 
   denote_nf (rcomp r1 r2) =₁ O.rcomp (denote_nf r1) (denote_nf r2).
 Proof.
-funelim (rcomp r1 r2) ; simp denote_nf.
-- now rewrite rdrop_sound.
-- now rewrite rapply_sound, O.rcomp_rcons_distrib, H.
+funelim (rcomp r1 r2) ; simp denote_nf denote_qnat in *.
+- reflexivity.
+- now rewrite O.rcomp_rcons_distrib, H.
 - rewrite H. now repeat rewrite O.rcomp_assoc.
 Qed.
+#[global] Hint Rewrite rcomp_sound : denote_nf.    
 
 (** Lift a normal form renaming through a binder. *)
 Equations rup : nf_ren -> nf_ren :=
-rup r := N_rcons 0 (rcomp r (N_rshift 1)).
+rup r := N_rcons q0 (rcomp r (N_rshift q1)).
 
 Lemma rup_sound r : denote_nf (rup r) =₁ O.up_ren (denote_nf r).
-Proof. simp rup denote_nf. unfold O.up_ren. now rewrite rcomp_sound. Qed.
+Proof. simp rup denote_nf. reflexivity. Qed.
 
 (** Instantiate a normal form term with a normal form renaming. *)
-Equations rinst {k} : nf_expr (Km k) -> nf_ren -> nf_expr (Km k) :=
+Equations rinst {k} : nf_expr (K1 k) -> nf_ren -> nf_expr (K1 k) :=
 rinst (N_tvar i) r := N_tvar (rapply r i) ;
 rinst (N_tctor c al) r := N_tctor c (rinst al r) ;
 rinst N_al_nil _ := N_al_nil ;
@@ -391,29 +414,23 @@ srcomp (N_scomp k xs s) r := N_scomp k xs (srcomp s r) ;
 srcomp (N_sren r1) r2 := N_sren (rcomp r1 r2).
 
 Lemma rinst_srcomp_sound_aux : 
-  (forall k (t : nf_expr (Km k)) r, 
+  (forall k (t : nf_expr (K1 k)) r, 
     denote_nf (rinst t r) = O.rename (denote_nf t) (denote_nf r)) *
   (forall s r, 
     denote_nf (srcomp s r) =₁ fun i => O.rename (denote_nf s i) (denote_nf r)).
 Proof.
 apply rinst_elim with 
-  (P := fun k (t : nf_expr (Km k)) (r : nf_ren) (res : nf_expr (Km k))  => 
+  (P := fun k (t : nf_expr (K1 k)) (r : nf_ren) (res : nf_expr (K1 k))  => 
     denote_nf res = O.rename (denote_nf t) (denote_nf r))
   (P0 := fun (s : nf_subst) (r : nf_ren) (res : nf_subst) =>
     denote_nf res =₁ fun i => O.rename (denote_nf s i) (denote_nf r)).
-- intros i r. simp denote_nf rename. now rewrite rapply_sound.
+all: try (intros ; now simp denote_nf).
 - intros c al r H. simp denote_nf. rewrite H. now simp rename.
-- intros r. now simp denote_nf rename.
 - intros ty tys a al r H1 H2. simp denote_nf rename. now rewrite H1, H2.
-- intros b x r. now simp denote_nf rename.
 - intros t r H. simp denote_nf rename. now rewrite H.
 - intros ty a r H. simp denote_nf rename. now rewrite H, rup_sound.
-- intros k xt r1 r2. destruct k ; simp denote_nf.
-  all: now rewrite rcomp_sound, O.ren_ren.
-- intros k xt s r H. destruct k ; simp denote_nf.
-  all: now rewrite H, O.subst_ren.
-- intros i xr r1 r2. simp denote_nf rename. f_equal. cbv [O.rcomp].
-  now rewrite rcomp_sound.
+- intros k xt r1 r2. destruct k ; simp denote_nf ; now rewrite O.ren_ren.
+- intros k xt s r H. destruct k ; simp denote_nf ; now rewrite H, O.subst_ren.
 - intros i xs s r H. simp denote_nf substitute. cbv [O.scomp]. 
   now rewrite H, O.subst_ren.
 - intros k r. simp denote_nf. intros i. rewrite rdrop_sound. reflexivity.
@@ -423,7 +440,7 @@ apply rinst_elim with
 - intros r1 r2. simp denote_nf. intros i. simp rename. now rewrite rcomp_sound.
 Qed.
 
-Lemma rinst_sound k (t : nf_expr (Km k)) r :   
+Lemma rinst_sound k (t : nf_expr (K1 k)) r :   
   denote_nf (rinst t r) = O.rename (denote_nf t) (denote_nf r).
 Proof. now apply rinst_srcomp_sound_aux. Qed.
 
@@ -432,11 +449,12 @@ Lemma srcomp_sound s r :
 Proof. now apply rinst_srcomp_sound_aux. Qed.
 
 (** Apply a normal form substitution to a de Bruijn index. *)
-Equations sapply : nf_subst -> nat -> nf_term :=
-sapply (N_sshift k) i := N_tvar (k + i) ;
-sapply (N_scons t _) 0 := t ;
-sapply (N_scons _ s) (S i) := sapply s i ;
-sapply (N_scomp k xs s) i := N_sinst_r (k + i) xs s ;
+Equations sapply : nf_subst -> qnat -> nf_term :=
+sapply (N_sshift k) i := N_tvar (qadd k i) ;
+sapply (N_scons t _) q0 := t ;
+sapply (N_scons _ s) (qS i) := sapply s i ;
+sapply (N_scons t s) (qAtom i) := @N_sinst_l Kt (denote_nf (N_scons t s) i) (N_sshift q0) ;
+sapply (N_scomp k xs s) i := N_sinst_r (qadd k i) xs s ;
 sapply (N_sren r) i := N_tvar (rapply r i).  
 
 Lemma sapply_sound s i : denote_nf (sapply s i) = denote_nf s i.
@@ -496,33 +514,8 @@ funelim (rscomp r s) ; simp denote_nf.
 - now rewrite H.
 Qed.     
 
-(*(** Size of a normal form expression, not counting [N_sren]. *)
-Equations nf_size {k} : nf_expr k -> nat :=
-nf_size (N_tvar _) := 0 ;
-nf_size (N_tctor _ al) := S (nf_size al) ;
-nf_size N_al_nil := 0 ;
-nf_size (N_al_cons a al) := S (nf_size a + nf_size al) ;
-nf_size (N_abase _ _) := 0 ;
-nf_size (N_aterm t) := S (nf_size t) ;
-nf_size (N_abind a) := S (nf_size a) ;
-
-nf_size (N_rshift _) := 0 ;
-nf_size (N_rcons _ r) := S (nf_size r) ;
-nf_size (N_rcomp _ _ r) := S (nf_size r) ;
-
-nf_size (N_sshift _) := 0 ;
-nf_size (N_scons t s) := S (nf_size t + nf_size s) ;
-nf_size (N_scomp _ _ s) := S (nf_size s) ;
-(** We explicitly don't increase the size when going through [N_sren]. *)
-nf_size (N_sren r) := nf_size r ;
-
-nf_size (N_rinst_l _ r) := S (nf_size r) ;
-nf_size (N_sinst_l _ s) := S (nf_size s) ;
-nf_size (N_rinst_r _ _ r) := S (nf_size r) ;
-nf_size (N_sinst_r _ _ s) := S (nf_size s).*)
-
 (** Instantiate a normal form expression with a normal form substitution. *)
-Equations sinst {k} (t : nf_expr (Km k)) (s : nf_subst) : nf_expr (Km k) by struct t :=
+Equations sinst {k} (t : nf_expr (K1 k)) (s : nf_subst) : nf_expr (K1 k) by struct t :=
 sinst (N_tvar i) s := sapply s i ;
 sinst (N_tctor c al) s := N_tctor c (sinst al s) ;
 sinst N_al_nil _ := N_al_nil ;
@@ -538,18 +531,18 @@ sinst (N_sinst_r i xs s1) s2 := N_sinst_r i xs (scomp s1 s2)
 (** Compose two normal form substitutions. *)
 with scomp (s1 : nf_subst) (s2 : nf_subst) : nf_subst by struct s1 :=
 scomp (N_sshift k) s := sdrop k s ;
-scomp (N_scons t s1) s2 := N_scons (sinst t s1) (scomp s1 s2) ;
+scomp (N_scons t s1) s2 := N_scons (sinst t s2) (scomp s1 s2) ;
 scomp (N_scomp k xs s1) s2 := N_scomp k xs (scomp s1 s2) ; 
 scomp (N_sren r) s := rscomp r s.
 
 Lemma sinst_scomp_sound_aux : 
-  (forall k (t : nf_expr (Km k)) s, 
+  (forall k (t : nf_expr (K1 k)) s, 
     denote_nf (sinst t s) = O.substitute (denote_nf t) (denote_nf s)) *
   (forall s1 s2, 
     denote_nf (scomp s1 s2) =₁ O.scomp (denote_nf s1) (denote_nf s2)).
 Proof.
 apply sinst_elim with 
-  (P := fun k (t : nf_expr (Km k)) (s : nf_subst) (res : nf_expr (Km k))  => 
+  (P := fun k (t : nf_expr (K1 k)) (s : nf_subst) (res : nf_expr (K1 k))  => 
     denote_nf res = O.substitute (denote_nf t) (denote_nf s))
   (P0 := fun (s1 s2 res : nf_subst) =>
     denote_nf res =₁ O.scomp (denote_nf s1) (denote_nf s2)).
@@ -569,7 +562,9 @@ apply sinst_elim with
 - intros i xs s1 s2 H. simp denote_nf substitute. 
   cbv [O.scomp]. now rewrite H, O.subst_subst.
 - intros k s. simp denote_nf. now rewrite sdrop_sound.
-- intros t s1 s2 H1 H2. simp denote_nf substitute.           
-
-
+- intros t s1 s2 H1 H2. simp denote_nf. rewrite H1, H2.
+  now rewrite O.scomp_scons_distrib.
+- intros k xs s1 s2 H. simp denote_nf. rewrite H. now repeat rewrite O.scomp_assoc.
+- intros r s. rewrite rscomp_sound. reflexivity.
+Qed. 
     

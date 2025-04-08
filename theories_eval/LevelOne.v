@@ -104,9 +104,17 @@ Equations scons (t : term) (s : subst) : subst :=
 scons t s 0 := t ;
 scons t s (S i) := s i.
 
+(** Left to right composition of a substitution with a renaming. *)
+Definition srcomp (s : subst) (r : ren) := 
+  fun i => rename (s i) r.
+
+(** Left to right composition of a renaming with a substitution. *)
+Definition rscomp (r : ren) (s : subst) := 
+  fun i => s (r i).
+
 (** Lift a substitution through a binder. *)
 Definition up_subst (s : subst) : subst :=
-  scons (E_var 0) (fun i => rename (s i) (rshift 1)).
+  scons (E_var 0) (srcomp s (rshift 1)).
 
 (** Apply a substitution to a expr. *)
 Equations substitute {k} (t : expr k) (s : subst) : expr k :=
@@ -150,19 +158,21 @@ intros t _ <- r1 r2 Hr. funelim (rename t _) ; simp rename in * ; auto.
 f_equal. apply H. now rewrite Hr.
 Qed.
 
-#[global] Instance up_subst_proper : Proper (point_eq ==> point_eq) up_subst.
-Proof.
-intros s1 s2 Hs i. destruct i ; cbv [up_subst scons].
-- reflexivity.
-- now rewrite Hs.
-Qed. 
+#[global] Instance rscomp_proper : Proper (point_eq ==> point_eq ==> point_eq) rscomp.
+Proof. intros r1 r2 Hr s1 s2 Hs i. cbv [rscomp]. now rewrite Hs, Hr. Qed.
+
+#[global] Instance srcomp_proper : Proper (point_eq ==> point_eq ==> point_eq) srcomp.
+Proof. intros s1 s2 Hs r1 r2 Hr i. cbv [srcomp]. now rewrite Hs, Hr. Qed.
 
 #[global] Instance scons_proper : Proper (eq ==> point_eq ==> point_eq) scons.
 Proof. 
 intros t1 t2 Ht s1 s2 Hs i. 
 destruct i ; simp scons. now rewrite Hs. 
 Qed.
-    
+
+#[global] Instance up_subst_proper : Proper (point_eq ==> point_eq) up_subst.
+Proof. intros s1 s2 Hs. cbv [up_subst]. now rewrite Hs. Qed.
+
 #[global] Instance substitute_proper k : 
   Proper (eq ==> point_eq ==> eq) (@substitute k).
 Proof. 
@@ -171,11 +181,7 @@ f_equal. apply H. now rewrite Hs.
 Qed. 
 
 #[global] Instance scomp_proper : Proper (point_eq ==> point_eq ==> point_eq) scomp.
-Proof. 
-intros s1 s2 Hs r1 r2 Hr i. destruct i ; cbv [scomp].
-- now rewrite Hs, Hr.
-- now rewrite Hs, Hr.
-Qed.
+Proof. intros s1 s2 Hs r1 r2 Hr i. cbv [scomp]. now rewrite Hs, Hr. Qed.
 
 (*********************************************************************************)
 (** *** Properties of renaming and substitution. *)
@@ -244,18 +250,18 @@ funelim (rename t _) ; simp rename in * ; auto.
 now rewrite H, up_ren_comp.
 Qed.
 
-Lemma subst_ren {k} (t : expr k) (s : subst) (r : ren) : 
-  rename (substitute t s) r = substitute t (fun i => rename (s i) r).
+Lemma ren_subst {k} (t : expr k) (s : subst) (r : ren) : 
+  rename (substitute t s) r = substitute t (srcomp s r).
 Proof.
 funelim (substitute t _) ; simp rename substitute in * ; auto.
 f_equal. rewrite H. apply substitute_proper ; auto.
-intros [|i] ; auto. cbv [up_subst scons].
+intros [|i] ; auto. cbv [up_subst scons srcomp].
 rewrite ren_ren, ren_ren. apply rename_proper ; auto.
 reflexivity.
 Qed.
 
-Lemma ren_subst {k} (t : expr k) (r : ren) (s : subst) : 
-  substitute (rename t r) s = substitute t (fun i => s (r i)).
+Lemma subst_ren {k} (t : expr k) (r : ren) (s : subst) : 
+  substitute (rename t r) s = substitute t (rscomp r s).
 Proof.
 funelim (rename t r) ; simp rename substitute in * ; auto.
 f_equal. rewrite H. apply substitute_proper ; auto.
@@ -265,9 +271,8 @@ Qed.
 Lemma up_subst_comp (s1 s2 : subst) : 
   scomp (up_subst s1) (up_subst s2) =₁ up_subst (scomp s1 s2).
 Proof. 
-intros [|i] ; auto. cbv [up_subst scomp]. simp scons.
-rewrite ren_subst, subst_ren. apply substitute_proper ; auto.
-intros i'. reflexivity.
+intros [|i] ; auto. cbv [up_subst scomp]. simp scons. cbv [srcomp].
+rewrite ren_subst, subst_ren. now apply substitute_proper.
 Qed.
 
 Lemma subst_subst {k} (t : expr k) (s1 s2 : subst) : 
@@ -312,7 +317,7 @@ Lemma up_subst_alt (s : subst) :
   up_subst s =₁ scons (E_var 0) (scomp s (sshift 1)).
 Proof.
 simp up_subst. apply scons_proper ; auto.
-intros i. cbv [scomp]. now rewrite rshift_sshift.
+intros i. cbv [scomp srcomp]. now rewrite rshift_sshift.
 Qed.
 
 End Make.
