@@ -33,11 +33,11 @@ Inductive nf : forall {k}, expr k -> Prop :=
     nf (↑k)
 | nf_scons (t : term) (s : subst) : 
     nf t -> nf s -> nf (t .: s)
-| nf_subst_t {k} (xt : mvar (Km k)) (s : subst) : 
+| nf_subst_t {k} (xt : denote_type (Km k)) (s : subst) : 
     nf s -> nf (E_mvar xt [: s ])
-| nf_subst_s i (xs : mvar Ks) (s : subst) :
+| nf_subst_s i (xs : denote_type Ks) (s : subst) :
     nf s -> nf (E_var i [: E_mvar xs >> s])
-| nf_scomp k (xs : mvar Ks) (s : subst) :
+| nf_scomp k (xs : denote_type Ks) (s : subst) :
     nf s -> nf (↑k >> E_mvar xs >> s).
 Hint Constructors nf : core.
 
@@ -106,7 +106,7 @@ Proof. intros H. inv H. assumption. Qed.
 
 Lemma inv_nf_subst_var i s : 
   nf (E_var i [: s ]) -> 
-    exists (xs : mvar Ks) (s' : subst), s = E_mvar xs >> s' /\ nf s'.
+    exists (xs : denote_type Ks) (s' : subst), s = E_mvar xs >> s' /\ nf s'.
 Proof. 
 intros H. apply inv_nf_subst in H.
 destruct H as [(xt & H3 & H4) | H2] ; [inv H3 |].
@@ -114,7 +114,7 @@ destruct H2 as (l & xs & s' & H1 & H2 & H3).
 subst. eauto.
 Qed.
 
-Lemma inv_nf_subst_mvar {k} (xt : mvar (Km k)) s : 
+Lemma inv_nf_subst_mvar {k} (xt : denote_type (Km k)) s : 
   nf (E_mvar xt [: s ]) -> nf s.
 Proof. 
 intros H. apply inv_nf_subst in H.

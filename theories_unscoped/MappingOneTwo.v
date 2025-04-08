@@ -1,44 +1,34 @@
 From Equations Require Import Equations.
 From Ltac2 Require Import Ltac2.
 From Prototype Require Import Prelude Sig.
-From Prototype Require LevelOne LevelTwo.
+From Prototype Require LevelOne LevelTwo LevelTwoNF.
 
 Module Make (S : Sig).
-Module O := LevelOne.Make (S).
-Module T := LevelTwo.Make (S).
+Module NF := LevelTwoNF.Make (S).
+Module T := NF.T.
+Module O := T.O.
+Notation denote_type := T.denote_type.
 
 (*********************************************************************************)
 (** *** Denotation (level two -> level one). *)
 (*********************************************************************************)
 
-Definition denote_type (k : T.kind) : Type :=
-  match k with 
-  | T.Ks => O.subst
-  | T.Km T.Kt => O.expr O.Kt
-  | T.Km (T.Kal tys) => O.expr (O.Kal tys)
-  | T.Km (T.Ka ty) => O.expr (O.Ka ty)
-  end.
-      
-(** Denotation doesn't know how to handle metavariables: it thus works up to an
-    assignment, which determines how to denote metavariables. *)
-Definition assignment := forall k : T.kind, T.mvar k -> denote_type k.
-
 (** Mapping from level two expressions to level one expressions and substitutions. *)
-Equations denote {k} (m : assignment) (t : T.expr k) : denote_type k by struct t :=
-denote m (T.E_var i) := O.E_var i ;
-denote m (T.E_ctor c al) := O.E_ctor c (denote m al) ;
-denote m T.E_al_nil := O.E_al_nil ;
-denote m (T.E_al_cons a al) := O.E_al_cons (denote m a) (denote m al) ;
-denote m (T.E_abase b x) := O.E_abase b x ;
-denote m (T.E_aterm t) := O.E_aterm (denote m t) ;
-denote m (T.E_abind a) := O.E_abind (denote m a) ;
-denote m (@T.E_subst T.Kt t s) := O.substitute (denote m t) (denote m s) ;
-denote m (@T.E_subst (T.Ka _) t s) := O.substitute (denote m t) (denote m s) ;
-denote m (@T.E_subst (T.Kal _) t s) := O.substitute (denote m t) (denote m s) ;
-denote m (T.E_sshift k) := O.sshift k ;
-denote m (T.E_scons t s) := O.scons (denote m t) (denote m s) ;
-denote m (T.E_scomp s1 s2) := O.scomp (denote m s1) (denote m s2) ;
-denote m (T.E_mvar x) := m _ x.
+Equations denote {k} (t : T.expr k) : denote_type k by struct t :=
+denote (T.E_var i) := O.E_var i ;
+denote (T.E_ctor c al) := O.E_ctor c (denote al) ;
+denote T.E_al_nil := O.E_al_nil ;
+denote (T.E_al_cons a al) := O.E_al_cons (denote a) (denote al) ;
+denote (T.E_abase b x) := O.E_abase b x ;
+denote (T.E_aterm t) := O.E_aterm (denote t) ;
+denote (T.E_abind a) := O.E_abind (denote a) ;
+denote (@T.E_subst T.Kt t s) := O.substitute (denote t) (denote s) ;
+denote (@T.E_subst (T.Ka _) t s) := O.substitute (denote t) (denote s) ;
+denote (@T.E_subst (T.Kal _) t s) := O.substitute (denote t) (denote s) ;
+denote (T.E_sshift k) := O.sshift k ;
+denote (T.E_scons t s) := O.scons (denote t) (denote s) ;
+denote (T.E_scomp s1 s2) := O.scomp (denote s1) (denote s2) ;
+denote (T.E_mvar x) := x.
 
 (*********************************************************************************)
 (** *** Correctness of denotation. *)
@@ -61,7 +51,7 @@ Qed.
 
 (** Main correctness result for [denote]: it transports level-two _sigma-equal_ terms 
     to level-one _equal_ terms. *)
-#[global] Instance denote_proper {k} m : Proper (T.axiom_eq ==> denote_rel k) (@denote k m).
+#[global] Instance denote_proper {k} : Proper (T.axiom_eq ==> denote_rel k) (@denote k).
 Proof.
 intros t1 t2 Ht. induction Ht ; simpl in * ; simp denote.
 all: try solve [ auto | easy ].
@@ -83,11 +73,8 @@ Qed.
 (** *** Reification (level one -> level two). *)
 (*********************************************************************************)
 
-(** We use a [map] to store level one term/substitutions that we could not reify. *)
-Ltac2 Type map := (constr * constr * constr) list.
-
 (** Compute the kind [k : T.kind] such that [denote_type k = type of e]. *)
-Ltac2 inv_denote_type (e : constr) : constr :=
+(*Ltac2 inv_denote_type (e : constr) : constr :=
   lazy_match! Constr.type e with
   | O.expr O.Kt => constr:(T.Km T.Kt)
   | O.expr (O.Ka ?ty) => constr:(T.Km (O.Ka $ty))
@@ -95,75 +82,66 @@ Ltac2 inv_denote_type (e : constr) : constr :=
   | O.subst => constr:(T.Ks)
   | nat -> O.expr O.Kt => constr:(T.Ks)
   | _ => Control.throw (Invalid_argument (Some (Message.of_string "inv_denote_type")))
-  end.
+  end.*)
 
 (** Convert an Ltac2 integer to a Rocq term of type [nat]. *)
-Ltac2 rec nat_of_int (i : int) : constr :=
+(*Ltac2 rec nat_of_int (i : int) : constr :=
   if Int.le i 0 then constr:(0) 
-  else let i' := nat_of_int (Int.sub i 1) in constr:(S $i').
+  else let i' := nat_of_int (Int.sub i 1) in constr:(S $i').*)
 
 (** Create a new metavariable for term/substitution [t] and add it to the map [m].
     If [t] is already present in [m], we don't add it twice. *)
-Ltac2 make_mvar (m : map) (t : constr) : map * constr :=
+(*Ltac2 make_mvar (m : map) (t : constr) : map * constr :=
   match List.find_opt (fun (_, _, t') => Constr.equal t t') m with 
   (** [t] is already in the environment [m] at position [idx]. *)
-  | Some (idx, k, _) => m, constr:(@T.E_mvar $k $idx)
+  | Some (idx, k, _) => constr:(@T.E_mvar $k $idx)
   (** [t] is not in the environment: we have to add it to [m]. *)
   | None => 
     let idx := nat_of_int (List.length m) in
     let k := inv_denote_type t in
     List.append m [ (idx, k, t) ], constr:(@T.E_mvar $k $idx)
-  end.    
+  end.*)
 
-Ltac2 rec reify_term (m : map) (t : constr) : map * constr :=
+Ltac2 rec reify_term (t : constr) : constr :=
   lazy_match! t with 
-  | O.E_var ?i => m, constr:(T.E_var $i)
+  | O.E_var ?i => constr:(T.E_var $i)
   | O.E_ctor ?c ?al => 
-    let (m, al) := reify_term m al in
-    m, constr:(T.E_ctor $c $al)
-  | O.E_al_nil => m, constr:(T.E_al_nil)
+    let al := reify_term al in
+    constr:(T.E_ctor $c $al)
+  | O.E_al_nil => constr:(T.E_al_nil)
   | O.E_al_cons ?a ?al => 
-    let (m, a) := reify_term m a in
-    let (m, al) := reify_term m al in
-    m, constr:(T.E_al_cons $a $al)
-  | O.E_abase ?b ?x => m, constr:(T.E_abase $b $x)
+    let a := reify_term a in
+    let al := reify_term al in
+    constr:(T.E_al_cons $a $al)
+  | O.E_abase ?b ?x => constr:(T.E_abase $b $x)
   | O.E_aterm ?t => 
-    let (m, t) := reify_term m t in
-    m, constr:(T.E_aterm $t)
+    let t := reify_term t in
+    constr:(T.E_aterm $t)
   | O.E_abind ?a =>
-    let (m, a) := reify_term m a in
-    m, constr:(T.E_abind $a)
+    let a := reify_term a in
+    constr:(T.E_abind $a)
   | O.substitute ?t ?s =>
-    let (m, t) := reify_term m t in
-    let (m, s) := reify_subst m s in
-    m, constr:(T.E_subst $t $s)
-  | _ => make_mvar m t
+    let t := reify_term t in
+    let s := reify_subst s in
+    constr:(T.E_subst $t $s)
+  | _ => constr:(@T.E_mvar (T.Km T.Kt) $t)
   end
-with reify_subst (m : map) (s : constr) : map * constr :=
+with reify_subst (s : constr) : constr :=
   lazy_match! s with 
-  | O.sid => m, constr:(T.E_sshift 0)
-  | O.sshift ?k => m, constr:(T.E_sshift $k)
-  | _ => make_mvar m s
+  | O.sid => constr:(T.E_sshift 0)
+  | O.sshift ?k => constr:(T.E_sshift $k)
+  | O.scons ?t ?s =>
+    let t := reify_term t in 
+    let s := reify_subst s in 
+    constr:(T.E_scons $t $s)
+  | O.up_subst ?s =>
+    let s := reify_subst s in 
+    constr:(T.up_subst $s)
+  | ?s => constr:(@T.E_mvar T.Ks $s)
   end.
 
-Print sigT.
-
-(** Build an [assignment] from a [map]. *)
-Ltac2 rec build_assignment (m : map) : constr :=
-  match m with 
-  | [] => constr:(@nil (sigT denote_type))
-  | (_idx, k, t) :: m => 
-    let m' := build_assignment m in
-    constr:(existT denote_type $k $t :: $m')
-  end.
-
-(** Reify a level one term in an empty map,
-    returning the resulting assignment and reified term. *)
-Ltac2 reify (t : constr) : constr * constr :=
-  let (m, t) := reify_term [] t in
-  let a := build_assignment m in 
-  a, t.
-
+  Print T.up_subst.
+  Print O.up_subst.
 End Make.
 
 (** Testing. *)
@@ -186,12 +164,63 @@ End S.
 Module OT := Make (S).
 Import OT.
 
-Axiom t : O.expr O.Kt.
+Axiom t1 : O.expr O.Kt.
+Axiom t2 : O.expr O.Kt.
+Axiom tau : O.subst.
 
-Ltac2 Eval reify constr:(
+Definition left := 
+  O.substitute 
+    (O.substitute t1 (O.scons (O.E_var 0) (O.scomp tau (O.sshift 1)))) 
+    (O.scons (O.substitute t2 tau) O.sid).
+
+Definition right := 
+  O.substitute 
+    (O.substitute t1 (O.scons t2 O.sid))
+    tau.
+
+From Ltac2 Require Import Printf.
+
+Ltac2 test_tac () : unit :=
+  lazy_match! Control.goal () with 
+  | @eq (O.expr O.Kt) ?l1 ?r1 => 
+    let l2 := reify_term l1 in 
+    let r2 := reify_term r1 in 
+    printf "%t" l2 ;
+    printf "%t" r2 ;
+    change (denote $l2 = denote $r2) ;
+    rewrite <-(NF.normalize_sound $l2) ;
+    rewrite <-(NF.normalize_sound $r2)
+  | _ => Control.throw_invalid_argument "not an equality on level one terms"
+  end.
+
+Lemma test : left = right.
+Proof.
+unfold left, right.
+ltac2:(test_tac ()).
+apply (@denote_proper (T.Km T.Kt)).
+simp normalize ssubst. reflexivity. simp ssubst.
+
+apply T.aeq_congr_subst.
+
+reflexivity. 
+
+Definition t2 : T.expr (T.Km T.Kt). 
+ltac2:(refine (reify_term constr:(
   O.E_ctor CApp
     (O.E_al_cons (O.E_aterm (O.substitute t (fun i => O.E_var i)))
     (O.E_al_cons (O.E_aterm t)
-     O.E_al_nil))
-).
-  
+     O.E_al_nil))))).
+Defined.
+
+Print t2.
+
+Lemma test : denote t2 = 
+  O.E_ctor CApp
+    (O.E_al_cons (O.E_aterm (O.substitute t (fun i => O.E_var i)))
+    (O.E_al_cons (O.E_aterm t)
+     O.E_al_nil)).
+Proof. reflexivity. Qed.
+
+Eval cbv [denote] simpl. in denote t'.
+
+Let t
