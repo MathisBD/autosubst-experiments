@@ -5,21 +5,10 @@ From Prototype Require Import Prelude Sig.
     and we prove the main properties of substitution. *)
 
 Module Make (S : Sig).
-Definition arg_ty := @arg_ty (base S.t).
 
 (*********************************************************************************)
 (** *** Terms. *)
 (*********************************************************************************)
-
-(** Terms are indexed by (meta-level) kinds. *)
-Inductive kind := 
-| (** Term. *)
-  Kt : kind
-| (** Constructor argument. *)
-  Ka : arg_ty -> kind
-| (** List of constructor arguments. *)
-  Kal : list arg_ty -> kind.
-Derive NoConfusion for kind.
 
 (** Notations for expressions with known kinds. *)
 Reserved Notation "'term'" (at level 0).

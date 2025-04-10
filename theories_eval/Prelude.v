@@ -6,8 +6,14 @@ Export ListNotations.
 (** Ltac2 is still missing many basic Ltac1 tactics. *)
 #[export] Set Default Proof Mode "Classic".
 
-(** Convenience tactic. *)
+(** Convenience tactics. *)
 Ltac inv H := inversion H ; subst.
+Ltac split3 := split ; [|split].
+Ltac split4 := split ; [|split3].
+Ltac split5 := split ; [|split4].
+Ltac split6 := split ; [|split5].
+Ltac split7 := split ; [|split6].
+Ltac split8 := split ; [|split7].
 
 (** Add some power to [auto]. *)
 #[global] Hint Extern 5 => f_equal : core.

@@ -8,6 +8,16 @@ Inductive arg_ty {base} :=
 | AT_term : arg_ty
 | AT_bind : arg_ty -> arg_ty.
 
+(** Kind of an expression (this is used in both level one and level two). *)
+Inductive kind {base} := 
+| (** Term. *)
+  Kt : kind
+| (** Constructor argument. *)
+  Ka : @arg_ty base -> kind
+| (** List of constructor arguments. *)
+  Kal : list (@arg_ty base) -> kind.
+Derive NoConfusion for kind.
+
 (** Signatures for abstract terms. *)
 Record signature :=
 { (** The set of base types, 
