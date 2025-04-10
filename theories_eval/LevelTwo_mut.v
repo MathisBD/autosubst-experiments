@@ -315,6 +315,7 @@ Inductive qred : qnat -> Prop :=
 | QR_plus_succ_l x y : qred (Q_plus (Q_succ x) y)
 | QR_plus_succ_r x y : qred (Q_plus x (Q_succ y))
 | QR_ren_ren r1 r2 i : qred (Q_ren r1 (Q_ren r2 i))
+| QR_ren_shift k i : qred (Q_ren (R_shift k) i)
 | QR_rcons_zero i r : qred (Q_ren (R_cons i r) Q_zero)
 | QR_rcons_succ i r k : qred (Q_ren (R_cons i r) (Q_succ k))
 
@@ -348,6 +349,7 @@ Definition rnorm r := ~ rred r.
 
 Definition is_qsucc x := exists x', x = Q_succ x'.
 Definition is_qplus x := exists y z, x = Q_plus y z.
+Definition is_qren x := exists r y, x = Q_ren r y.
 
 Definition is_rshift r := exists k, r = R_shift k.
 Definition is_rcons r := exists i r', r = R_cons i r'.
@@ -512,6 +514,7 @@ funelim (qplus x y) ; simp eval_qnat ; try lia.
 + rewrite H. lia.
 + rewrite H0, H. lia.
 Qed.  
+#[global] Hint Rewrite qplus_sound : eval_qnat.
 
 Lemma qplus_nf x y : 
   qnorm x -> qnorm y -> qnorm (qplus x y).
@@ -531,6 +534,11 @@ Qed.
 Equations do_shift : qnat -> ren -> ren :=
 do_shift Q_zero r := r ;
 do_shift k r := R_comp (R_shift k) r.
+
+Lemma do_shift_sound e k r : 
+  eval_ren e (do_shift k r) =₁ O.rcomp (O.rshift (eval_qnat e k)) (eval_ren e r).
+Proof. funelim (do_shift k r) ; triv. Qed.
+#[global] Hint Rewrite do_shift_sound : eval_ren.
 
 Lemma do_shift_nf_aux k r :
   k <> Q_zero -> ~is_rshift r -> ~is_rshift_l r -> ~is_rcons r -> 
@@ -571,37 +579,189 @@ apply PeanoNat.Nat.le_lt_trans with (m := S (qsize k + qsize k') + rsize r).
 - lia.
 Qed.
 
+Lemma rdrop_sound e k r : 
+  eval_ren e (rdrop k r) =₁ O.rcomp (O.rshift (eval_qnat e k)) (eval_ren e r).
+Proof.
+funelim (rdrop k r) ; simp eval_ren eval_qnat ; triv.
+- now rewrite O.rshift_plus.
+- rewrite H. simp eval_qnat. now rewrite <-O.rcomp_assoc, O.rshift_plus.
+Qed.
+#[global] Hint Rewrite rdrop_sound : eval_ren.
+
+Lemma is_rshift_comp r1 r2 : ~is_rshift (R_comp r1 r2).
+Proof. intros (k & H) ; inv H. Qed.
+#[global] Hint Immediate is_rshift_comp : core.
+
+Lemma is_rshift_cons r1 r2 : ~is_rshift (R_cons r1 r2).
+Proof. intros (k & H) ; inv H. Qed.
+#[global] Hint Immediate is_rshift_cons : core.
+
+Lemma is_rshift_mvar m : ~is_rshift (R_mvar m).
+Proof. intros (? & H) ; inv H. Qed.
+#[global] Hint Immediate is_rshift_mvar : core.
+
+Lemma is_rshift_l_mvar m r : ~is_rshift_l (R_comp (R_mvar m) r).
+Proof. intros (? & ? & H) ; inv H. Qed.
+#[global] Hint Immediate is_rshift_l_mvar : core.
+
+Lemma is_rcons_comp r1 r2 : ~is_rcons (R_comp r1 r2).
+Proof. intros (? & ? & H) ; inv H. Qed.
+#[global] Hint Immediate is_rcons_comp : core.
+
 Lemma rdrop_nf k r : 
   qnorm k -> rnorm r -> rnorm (rdrop k r).
-Proof.
-intros H1 H2. funelim (rdrop k r) ; try easy.
+Proof with triv.
+intros H1 H2. funelim (rdrop k r)...
 - rewrite rnorm_shift in *. now apply qplus_nf.
 - apply H.
   + rewrite rnorm_shift_l in H2. now apply qplus_nf.
-  + rewrite rnorm_shift_l in H2. easy.
-- exfalso. apply H2. now constructor.
-- exfalso. apply H2. now constructor.
-- rewrite rnorm_mvar_l in H2. destruct H2 as [H2 H3]. apply do_shift_nf1.
-   + intros (k' & H') ; inv H'.
-   + intros (k' & r' & H') ; inv H'.
-   + intros (k' & r' & H') ; inv H'.
-   + assumption.
-   + now rewrite rnorm_mvar_l.
-- apply do_shift_nf1 ; try easy.
-  + intros (k' & H') ; inv H'.
+  + now rewrite rnorm_shift_l in H2.
+- exfalso... 
+- exfalso...
+- rewrite rnorm_mvar_l in H2. destruct H2 as [H2 H3]. 
+  apply do_shift_nf1... now rewrite rnorm_mvar_l.
+- apply do_shift_nf1...
   + intros (k' & r' & H') ; inv H'.
   + intros (k' & r' & H') ; inv H'.
 - rewrite qnorm_succ in H1. rewrite rnorm_cons in H2. now apply H.
-- apply do_shift_nf2 ; try easy.
+- apply do_shift_nf2...
   + intros (k' & H') ; inv H'.
   + eexists ; eauto.
-- apply do_shift_nf2 ; try easy.
+- apply do_shift_nf2...
   + intros (k' & H') ; inv H'.
   + eexists. eauto.
-- apply do_shift_nf2 ; try easy.
+- apply do_shift_nf2...
   + intros (k' & H') ; inv H'.
   + eexists. eauto.
 Qed.
+
+(** We define by mutual well founded induction:
+    - composition of normal form renamings. 
+    - application of a normal form renaming to a normal form quoted nat. 
+
+    Since [Equations] does not support mutual well founded recursion, 
+    we encode it using non-mutual well founded recursion.
+*)
+
+
+Ltac unfold_all :=
+  repeat match goal with 
+  | [ x := _ |- _ ] => unfold x in * ; clear x
+  end.
+
+(** Helper function for [rcomp]. *)
+Equations rcomp_aux : ren -> ren -> ren :=
+rcomp_aux r rid := r ;
+rcomp_aux r1 r2 := R_comp r1 r2. 
+
+Lemma rcomp_aux_nf r1 r2 :
+  rnorm r1 -> rnorm r2 -> (r2 <> rid -> rnorm (R_comp r1 r2)) -> rnorm (rcomp_aux r1 r2).
+Proof. 
+intros H1 H2 H3. funelim (rcomp_aux r1 r2) ; triv.
+all: apply H3 ; intros H ; inv H.
+Qed.  
+
+Inductive proto : Type -> Type -> Type -> Set := 
+| proto_rapply : proto ren qnat qnat 
+| proto_rcomp : proto ren ren ren.
+
+Equations psize {A B C} : proto A B C -> A -> B -> nat :=
+psize proto_rapply r i := rsize r + qsize i ;
+psize proto_rcomp r1 r2 := rsize r1 + rsize r2.
+
+Equations? rapply_rcomp {A B C} (p : proto A B C) (x : A) (y : B) : C by wf (psize p x y) lt := 
+rapply_rcomp proto_rapply (R_shift k) i := qplus k i ;
+rapply_rcomp proto_rapply (R_cons i1 r) i with i => {
+  | Q_zero => i1
+  | Q_succ i' => rapply_rcomp proto_rapply r i'
+  | Q_ren r' i' => Q_ren (rapply_rcomp proto_rcomp r' (R_cons i1 r)) i'
+  | i' => Q_ren (R_cons i1 r) i' } ;
+rapply_rcomp proto_rapply (R_comp (R_shift k) r) i :=
+  rapply_rcomp proto_rapply r (qplus k i) ;
+rapply_rcomp proto_rapply r i with i => {
+  | Q_ren r' i' => Q_ren (rapply_rcomp proto_rcomp r' r) i'
+  | i' => Q_ren r i' } ;
+  
+rapply_rcomp proto_rcomp (R_shift k) r := rdrop k r ;
+rapply_rcomp proto_rcomp (R_cons i r1) r2 := 
+  R_cons (rapply_rcomp proto_rapply r2 i) (rapply_rcomp proto_rcomp r1 r2) ;
+rapply_rcomp proto_rcomp (R_comp (R_mvar m) r1) r2 := 
+  rcomp_aux (R_mvar m) (rapply_rcomp proto_rcomp r1 r2) ;
+rapply_rcomp proto_rcomp (R_comp (R_shift k) r1) r2 := 
+  rdrop k (rapply_rcomp proto_rcomp r1 r2) ;
+rapply_rcomp proto_rcomp r1 r2 := rcomp_aux r1 r2.
+
+Proof.
+all: unfold_all ; simp qsize psize ; try lia.
+generalize (qsize_qplus k i). lia.
+Qed.
+
+Lemma qnorm_ren_mvar m i : 
+  qnorm (Q_ren (R_mvar m) i) <-> qnorm i /\ ~is_qren i.
+Proof.
+split.
+- intros H. split ; intros H' ; apply H ; clear H.
+  + apply QR_ren ; triv.
+  + destruct H' as (? & ? & ->). now constructor.
+- intros (H1 & H2) H3. inv H3.
+  + destruct H0 ; triv.
+  + apply H2. eexists ; eauto.
+Qed.     
+
+Lemma qnorm_ren r i : 
+  qnorm (Q_ren r i) <-> 
+    rnorm r /\ qnorm i /\ ~is_rshift r /\ ~is_qren i /\
+    (is_rcons r -> i <> Q_zero /\ ~is_qsucc i).
+Proof.
+split.
+- intros H. split5.
+  + intros H' ; apply H ; clear H. apply QR_ren. now left.
+  + intros H' ; apply H ; clear H. apply QR_ren. now right.
+  + intros H' ; apply H ; clear H. destruct H' as (k & ->). now constructor.
+  + intros H' ; apply H ; clear H. destruct H' as (? & ? & ->). now constructor.
+  + intros (? & ? & ->). split ; intros H'' ; apply H ; clear H.
+    * subst. now constructor.
+    * destruct H'' as (? & H''). subst. now constructor.      
+- intros (H1 & H2 & H3 & H4 & H5) H. inv H.
+  + destruct H6 ; triv.
+  + apply H4. eexists ; eauto.
+  + apply H3. eexists ; eauto.
+  + enough (Q_zero <> Q_zero) by auto. apply H5. eexists ; eauto.
+  + enough (~is_qsucc (Q_succ k)).
+    { apply H0. eexists ; eauto. }
+    apply H5. eexists ; eauto.
+Qed.
+
+Lemma rapply_rcomp_nf : forall A B C (p : proto A B C) (x : A) (y : B),
+  (fun A B C (p : proto A B C) =>
+    match p in proto A0 B0 C0 return A0 -> B0 -> C0 -> Prop with 
+    | proto_rapply => fun r i res => rnorm r -> qnorm i -> qnorm res
+    | proto_rcomp => fun r1 r2 res => rnorm r1 -> rnorm r2 -> rnorm res
+    end) A B C p x y (rapply_rcomp p x 
+    y).
+Proof.
+apply rapply_rcomp_elim.
+- intros k i H1 H2. rewrite rnorm_shift in H1. now apply qplus_nf.
+- intros k r i H1 H2 H3. rewrite rnorm_shift_l in H2. apply H1 ; triv.
+  now apply qplus_nf.
+- intros k r H1 H2. rewrite rnorm_shift in H1. now apply rdrop_nf.
+- intros i r1 r2 H1 H2 H3 H4. rewrite rnorm_cons in *. split.
+  + now apply H1. 
+  + now apply H2. 
+- intros k r1 r2 H1 H2 H3. rewrite rnorm_shift_l in H2. 
+  apply rdrop_nf ; triv. now apply H1.
+- intros i r1 r2 r3 H1 H2. exfalso. apply H1. now constructor.
+- intros r0 r1 r2 r3 H1 H2. exfalso. apply H1. now constructor.       
+- intros m r1 r2 H1 H2 H3. rewrite rnorm_mvar_l in H2. apply rcomp_aux_nf ; triv.
+  + now apply H1.
+  + intros H. rewrite rnorm_mvar_l. split ; triv. now apply H1.
+- intros m r H1 H2. apply rcomp_aux_nf ; triv. now rewrite rnorm_mvar_l.
+- intros i r i' -> H _. now rewrite rnorm_cons in H.
+- intros i1 r i2 i3 H1 -> H2 H3. rewrite rnorm_cons in H2.
+  rewrite qnorm_succ in H3. now apply H1.
+- intros i1 r ? i2 i3 -> H1 H2. intros H. inv H. now destruct H3.
+- intros i1 r ? r' i' H1 -> H2 H3. rewrite qnorm_ren in *.
+   
 
 End Make.
 

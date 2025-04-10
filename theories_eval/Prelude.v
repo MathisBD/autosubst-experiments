@@ -14,6 +14,7 @@ Ltac split5 := split ; [|split4].
 Ltac split6 := split ; [|split5].
 Ltac split7 := split ; [|split6].
 Ltac split8 := split ; [|split7].
+Ltac triv := try solve [ eauto | easy ].
 
 (** Add some power to [auto]. *)
 #[global] Hint Extern 5 => f_equal : core.
