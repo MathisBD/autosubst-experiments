@@ -300,7 +300,58 @@ with reify_subst (e : env) (s : constr) : env * constr :=
   end.
 
 (*********************************************************************************)
-(** *** Normal forms. *)
+(** *** Discriminators. *)
+(*********************************************************************************)
+
+(** Normal forms and normalization functions need to distinguish terms based
+    on their head constructor(s). We provide discriminator functions which 
+    handle this, as well as a tactic [inv_discriminator]. *)
+
+Definition is_qsucc x := exists x', x = Q_succ x'.
+Definition is_qplus x := exists y z, x = Q_plus y z.
+Definition is_qren x := exists r y, x = Q_ren r y.
+Definition is_qmvar x := exists m, x = Q_mvar m.
+
+Definition is_rshift r := exists k, r = R_shift k.
+Definition is_rcons r := exists i r', r = R_cons i r'.
+Definition is_rcomp r := exists r1 r2 , r = R_comp r1 r2.
+Definition is_rshift_l r := exists k r', r = R_comp (R_shift k) r'.
+Definition is_rmvar r := exists m, r = R_mvar m.
+
+Definition is_sshift s := exists k, s = S_shift k.
+Definition is_scons s := exists t s', s = S_cons t s'.
+Definition is_scomp s := exists s1 s2 , s = S_comp s1 s2.
+Definition is_sshift_l s := exists k s', s = S_comp (S_shift k) s'.
+Definition is_smvar s := exists m, s = S_mvar m.
+
+(** This tactic tries to solve the goal by inverting a hypothesis of
+    the form [is_qsucc _], [is_rmvar _], ... which is inconsistent.
+
+    It either closes the goal or does nothing. *)
+Ltac inv_discriminators :=
+  solve [
+    let H' := fresh "H" in
+    repeat match goal with 
+    | [ H : is_qsucc _ |- _ ] => destruct H as (? & H') ; inv H'
+    | [ H : is_qren _ |- _ ] => destruct H as (? & ? & H') ; inv H'
+    | [ H : is_qmvar _ |- _ ] => destruct H as (? & H') ; inv H'
+
+    | [ H : is_rshift _ |- _ ] => destruct H as (? & H') ; inv H'
+    | [ H : is_rcons _ |- _ ] => destruct H as (? & ? & H') ; inv H'
+    | [ H : is_rshift_l _ |- _ ] => destruct H as (? & ? & H') ; inv H'
+    | [ H : is_rcomp _ |- _ ] => destruct H as (? & ? & H') ; inv H'
+    | [ H : is_rmvar _ |- _ ] => destruct H as (? & H') ; inv H'
+
+    | [ H : is_sshift _ |- _ ] => destruct H as (? & H') ; inv H'
+    | [ H : is_scons _ |- _ ] => destruct H as (? & ? & H') ; inv H'
+    | [ H : is_sshift_l _ |- _ ] => destruct H as (? & ? & H') ; inv H'
+    | [ H : is_scomp _ |- _ ] => destruct H as (? & ? & H') ; inv H'
+    | [ H : is_smvar _ |- _ ] => destruct H as (? & H') ; inv H'
+    end ].
+#[global] Hint Extern 2 => inv_discriminators : core.
+
+(*********************************************************************************)
+(** *** Renaming & naturals normal forms. *)
 (*********************************************************************************)
 
 (** Reducible quoted natural. *)
@@ -352,34 +403,8 @@ Definition qnorm x := ~ qred x.
 Definition rnorm r := ~ rred r.
 
 (*********************************************************************************)
-(** *** Normal form properties. *)
+(** *** Renaming & natural normal form properties. *)
 (*********************************************************************************)
-
-Definition is_qsucc x := exists x', x = Q_succ x'.
-Definition is_qplus x := exists y z, x = Q_plus y z.
-Definition is_qren x := exists r y, x = Q_ren r y.
-
-Definition is_rshift r := exists k, r = R_shift k.
-Definition is_rcons r := exists i r', r = R_cons i r'.
-Definition is_rcomp r := exists r1 r2 , r = R_comp r1 r2.
-Definition is_rshift_l r := exists k r', r = R_comp (R_shift k) r'.
-
-(** This tactic tries to solve the goal by inverting a hypothesis of
-    the form [is_qsucc _], [is_qplus _], ... which is inconsistent.
-
-    It either closes the goal or does nothing. *)
-Ltac inv_is_ren_qnat :=
-  solve [
-    let H' := fresh "H" in
-    match goal with 
-    | [ H : is_qsucc _ |- _ ] => destruct H as (? & H') ; inv H'
-    | [ H : is_qren _ |- _ ] => destruct H as (? & ? & H') ; inv H'
-    | [ H : is_rshift _ |- _ ] => destruct H as (? & H') ; inv H'
-    | [ H : is_rcons _ |- _ ] => destruct H as (? & ? & H') ; inv H'
-    | [ H : is_rshift_l _ |- _ ] => destruct H as (? & ? & H') ; inv H'
-    | [ H : is_rcomp _ |- _ ] => destruct H as (? & ? & H') ; inv H'
-    end ].
-#[global] Hint Extern 2 => inv_is_ren_qnat : core.
 
 Lemma qnorm_succ x :
   qnorm (Q_succ x) <-> qnorm x.
@@ -433,31 +458,6 @@ split.
   + destruct H6 ; triv. inv H0. destruct H7 ; triv.
   + apply H5. eexists ; eauto.
 Qed.
-
-(*Lemma qnorm_ren r i :
-  qnorm (Q_ren r i) <-> 
-    rnorm r /\ qnorm i /\ ~is_rshift r /\ ~is_rcomp r /\
-    (is_rcons r -> i <> Q_zero /\ ~is_qsucc i).
-Proof.
-split.
-- intros H. split5.
-  + intros H' ; apply H ; clear H. apply QR_ren. now left.
-  + intros H' ; apply H ; clear H. apply QR_ren. now right.
-  + intros H' ; apply H ; clear H. destruct H' as (k & ->). now constructor.
-  + intros H' ; apply H ; clear H. destruct H' as (? & ? & ->). now constructor.
-  + intros (? & ? & ->). split ; intros H'' ; apply H ; clear H.
-    * subst. now constructor.
-    * destruct H'' as (? & H''). subst. now constructor.      
-- intros (H1 & H2 & H3 & H4 & H5) H. inv H.
-  + destruct H6 ; triv.
-  + apply H4. eexists ; eauto.
-  + apply H3. eexists ; eauto.
-  + enough (Q_zero <> Q_zero) by auto. apply H5. eexists ; eauto.
-  + enough (~is_qsucc (Q_succ k)).
-    { apply H0. eexists ; eauto. }
-    apply H5. eexists ; eauto.
-Qed.
-Admitted.*)
 
 Lemma rnorm_shift k : 
   rnorm (R_shift k) <-> qnorm k.
@@ -514,26 +514,8 @@ split.
 Qed. 
 
 (*********************************************************************************)
-(** *** Normalization. *)
+(** *** Renaming & natural normalization. *)
 (*********************************************************************************)
-
-(*(** We define the size of expressions, which is used to prove 
-    termination of some simplification functions by well founded induction. *)
-
-(** Size of a quoted natural. *)
-Equations qsize : qnat -> nat :=
-qsize Q_zero := 0 ;
-qsize (Q_succ x) := S (qsize x) ;
-qsize (Q_plus x y) := S (qsize x + qsize y) ;
-qsize (Q_ren r x) := S (rsize r + qsize x) ;
-qsize (Q_mvar _) := 0
-
-(** Size of a renaming. *)
-with rsize : ren -> nat :=
-rsize (R_shift k) := S (qsize k) ;
-rsize (R_cons i r) := S (qsize i + rsize r) ;
-rsize (R_comp r1 r2) := S (rsize r1 + rsize r2) ;
-rsize (R_mvar _) := 0.*)
 
 (** Add two normal form quoted naturals, where the left hand side
     is neutral (i.e. is not Q_zero, Q_succ or Q_plus). *)
@@ -541,11 +523,6 @@ Equations qplus_neutral : qnat -> qnat -> qnat :=
 qplus_neutral n Q_zero := n ;
 qplus_neutral n (Q_succ x) := Q_succ (qplus_neutral n x) ;
 qplus_neutral n x := Q_plus n x.
-
-(*Lemma qsize_qplus_neutral x y : 
-  qsize (qplus_neutral x y) <= S (qsize x + qsize y).
-Proof. funelim (qplus_neutral x y) ; simp qsize ; lia. Qed.
-#[global] Hint Rewrite qsize_qplus_neutral : qsize.*)
 
 Lemma qplus_neutral_sound e x y : 
   qeval e (qplus_neutral x y) = qeval e x + qeval e y.
@@ -574,11 +551,6 @@ qplus (Q_succ x) y := Q_succ (qplus x y) ;
 qplus (Q_plus x y) z := qplus x (qplus y z) ;
 qplus x y := qplus_neutral x y.
 
-(*Lemma qsize_qplus x y : 
-  qsize (qplus x y) <= S (qsize x + qsize y).
-Proof. funelim (qplus x y) ; simp qsize ; lia. Qed.
-#[global] Hint Rewrite qsize_qplus : qsize.*)
-
 Lemma qplus_sound e x y :
   qeval e (qplus x y) = qeval e x + qeval e y.
 Proof.
@@ -604,28 +576,28 @@ Qed.
 
 (** Helper function for [rdrop] which takes care of 
     removing left composition by the identity. *)
-Equations do_shift : qnat -> ren -> ren :=
-do_shift Q_zero r := r ;
-do_shift k r := R_comp (R_shift k) r.
+Equations do_rshift : qnat -> ren -> ren :=
+do_rshift Q_zero r := r ;
+do_rshift k r := R_comp (R_shift k) r.
 
-Lemma do_shift_sound e k r : 
-  reval e (do_shift k r) =₁ O.rcomp (O.rshift (qeval e k)) (reval e r).
-Proof. funelim (do_shift k r) ; triv. Qed.
-#[global] Hint Rewrite do_shift_sound : reval.
+Lemma do_rshift_sound e k r : 
+  reval e (do_rshift k r) =₁ O.rcomp (O.rshift (qeval e k)) (reval e r).
+Proof. funelim (do_rshift k r) ; triv. Qed.
+#[global] Hint Rewrite do_rshift_sound : reval.
 
-Lemma do_shift_nf k r :
-  qnorm k -> rnorm r -> (k <> Q_zero -> rnorm (R_comp (R_shift k) r)) -> rnorm (do_shift k r).
-Proof. intros H1 H2 H3. funelim (do_shift k r) ; triv ; now apply H3. Qed.
+Lemma do_rshift_nf k r :
+  qnorm k -> rnorm r -> (k <> Q_zero -> rnorm (R_comp (R_shift k) r)) -> rnorm (do_rshift k r).
+Proof. intros H1 H2 H3. funelim (do_rshift k r) ; triv ; now apply H3. Qed.
 
 (** Drop the [k] first elements in a normal form renaming [r]. *)
 Equations rdrop (k : qnat) (r : ren) : ren by struct r :=
 rdrop k (R_shift k') := R_shift (qplus k k') ;
-rdrop k (R_mvar m) := do_shift k (R_mvar m) ;
+rdrop k (R_mvar m) := do_rshift k (R_mvar m) ;
 rdrop k (R_cons i r) with k => {
   | Q_succ k' => rdrop k' r ;
-  | _ => do_shift k (R_cons i r) } ;
+  | _ => do_rshift k (R_cons i r) } ;
 rdrop k (R_comp (R_shift k') r) := rdrop (qplus k k') r ;
-rdrop k r := do_shift k r.
+rdrop k r := do_rshift k r.
 
 Lemma rdrop_sound e k r : 
   reval e (rdrop k r) =₁ O.rcomp (O.rshift (qeval e k)) (reval e r).
@@ -645,19 +617,19 @@ intros H1 H2. funelim (rdrop k r) ; triv.
   + rewrite rnorm_shift_l in H2. now apply qplus_nf.
   + now rewrite rnorm_shift_l in H2.
 - rewrite rnorm_mvar_l in H2. destruct H2 as [H2 H3]. 
-  apply do_shift_nf ; triv.
+  apply do_rshift_nf ; triv.
   + now rewrite rnorm_mvar_l.
   + intros H. rewrite rnorm_shift_l. split6 ; triv.
     * rewrite rnorm_mvar_l ; triv.
     * intros [H4 (? & ? & H5)]. inv H5.
-- apply do_shift_nf ; triv. intros H3. rewrite rnorm_shift_l. split6 ; triv. 
+- apply do_rshift_nf ; triv. intros H3. rewrite rnorm_shift_l. split6 ; triv. 
   intros [_ (k' & r' & H')] ; inv H'.
 - rewrite qnorm_succ in H1. rewrite rnorm_cons in H2. now apply H.
-- apply do_shift_nf ; triv. intros _. rewrite rnorm_shift_l. split6 ; triv.
+- apply do_rshift_nf ; triv. intros _. rewrite rnorm_shift_l. split6 ; triv.
   intros [? _] ; triv.
-- apply do_shift_nf ; triv. intros _. rewrite rnorm_shift_l. split6 ; triv.
+- apply do_rshift_nf ; triv. intros _. rewrite rnorm_shift_l. split6 ; triv.
   intros [? _] ; triv.
-- apply do_shift_nf ; triv. intros _. rewrite rnorm_shift_l. split6 ; triv.
+- apply do_rshift_nf ; triv. intros _. rewrite rnorm_shift_l. split6 ; triv.
   intros [? _] ; triv.
 Qed.
 
@@ -805,6 +777,208 @@ Proof. now apply qrnormalize_nf_aux. Qed.
 
 Lemma rnormalize_nf r : rnorm (rnormalize r).
 Proof. now apply qrnormalize_nf_aux. Qed.
+  
+(*********************************************************************************)
+(** *** Substitutions & expressions normal forms. *)
+(*********************************************************************************)
+
+(** Expressions in which we can push renamings/substitutions. *)
+Definition is_epush {k} (e : expr k) : Prop :=
+  match e with 
+  | E_mvar _ | E_tvar _ => False  
+  | _ => True 
+  end.
+
+(** Reducible expression. *)
+Inductive ered : forall {k}, expr k -> Prop :=
+
+(** Congruence. *)
+| ER_tvar i : qred i -> ered (E_tvar i)
+| ER_tctor c al : ered al -> ered (E_tctor c al)
+| ER_al_cons {ty} {tys} (a : arg ty) (al : args tys) : 
+    ered a \/ ered al -> ered (E_al_cons a al)
+| ER_aterm t : ered t -> ered (E_aterm t)
+| ER_abind {ty} (a : arg ty) : ered a -> ered (E_abind a) 
+| ER_ren {k} r (e : expr k) : rred r \/ ered e -> ered (E_ren e r)
+| ER_subst {k} s (e : expr k) : sred s \/ ered e -> ered (E_subst e s)
+
+(** Push renamings/substitutions inside expressions. *)
+| ER_push_ren {k} r (e : expr k) : is_epush e -> ered (E_ren e r)
+| ER_push_subst {k} s (e : expr k) : is_epush e -> ered (E_subst e s)
+| ER_ren_var r i : ered (E_ren (E_tvar i) r)
+
+(** Apply a substitution to a variable.
+    We only unfold composition when it allows further reduction. *)
+| ER_sshift_var k i : ered (E_subst (E_tvar i) (S_shift k))
+| ER_scons_zero t s : ered (E_subst (E_tvar Q_zero) (S_cons t s))
+| ER_scons_succ t s k : ered (E_subst (E_tvar (Q_succ k)) (S_cons t s))
+| ER_scomp_var s1 s2 i : 
+    ered (E_subst (E_tvar i) s1) -> ered (E_subst (E_tvar i) (S_comp s1 s2))
+
+(** Miscellaneous simplifications. *)
+| ER_ren_rid {k} (e : expr k) : ered (E_ren e rid)
+| ER_subst_sid {k} (e : expr k) : ered (E_subst e sid)
+| ER_sren {k} (e : expr k) r : ered (E_subst e (S_ren r))
+
+(** Reducible substitutions. *)
+with sred : subst -> Prop :=
+
+(** Congruence. *)
+| SR_shift k : qred k -> sred (S_shift k) 
+| SR_cons t s : ered t \/ sred s -> sred (S_cons t s)
+| SR_comp s1 s2 : sred s1 \/ sred s2 -> sred (S_comp s1 s2)
+| SR_ren r : rred r -> sred (S_ren r)
+
+(** Composition should be right associated. *)
+| SR_sid_l s : sred (S_comp sid s)
+| SR_sid_r s : sred (S_comp s sid)
+| SR_comp_l s1 s2 s3: sred (S_comp (S_comp s1 s2) s3)
+
+(** Composition left-distributes over [S_ren] and [S_cons]. 
+    In particular, in [S_ren r >> s], we enforce that [r] is a meta-variable. *)
+| SR_ren_l r s : ~is_rmvar r -> sred (S_comp (S_ren r) s)
+| SR_cons_l t s1 s2 : sred (S_comp (S_cons t s1) s2)
+
+(** Merge successive shifts. *)
+| SR_shift_1 k1 k2 : sred (S_comp (S_shift k1) (S_shift k2))
+| SR_shift_2 k1 k2 s : sred (S_comp (S_shift k1) (S_comp (S_shift k2) s))
+| SR_shift_cons k t s : sred (S_comp (S_shift (Q_succ k)) (S_cons t s)).
+
+Hint Constructors ered : core.
+Hint Constructors sred : core.
+
+(** Normal form expression. *)
+Definition enorm {k} (e : expr k) := ~ered e.
+
+(** Normal form substitution. *)
+Definition snorm s := ~sred s.
+
+(*********************************************************************************)
+(** *** Substitution & expression normal form properties. *)
+(*********************************************************************************)
+
+Lemma snorm_shift k : snorm (S_shift k) <-> qnorm k.
+Proof.
+split ; intros H H' ; apply H ; clear H.
+- now constructor.
+- now inv H'.
+Qed.
+
+Lemma snorm_cons t s : 
+  snorm (S_cons t s) <-> enorm t /\ snorm s.
+Proof.
+split ; intros H.
+- split ; intros H' ; apply H ; clear H.
+  + constructor ; now left.
+  + constructor ; now right.
+- intros H'. inv H'. destruct H1 ; triv.
+Qed.   
+
+Lemma snorm_shift_l k s : 
+  snorm (S_comp (S_shift k) s) <->
+    qnorm k /\ 
+    snorm s /\ 
+    k <> Q_zero /\
+    ~is_sshift s /\ 
+    ~is_sshift_l s /\
+    ~(is_qsucc k /\ is_scons s).
+Proof.
+split.
+- intros H. split6 ; intros H' ; apply H ; clear H.
+  + constructor. left. now constructor.
+  + constructor. now right.
+  + subst. now constructor.
+  + destruct H' as [k' ->]. now constructor.
+  + destruct H' as (k' & r' & ->). now constructor. 
+  + destruct H' as [(k' & ->) (i & r' & ->)]. now constructor.   
+- intros (H1 & H2 & H3) H. inv H ; try easy.
+  + destruct H4 ; auto. now inv H0.
+  + destruct H3 as (_ & H3 & _) ; apply H3. eexists ; eauto.
+  + destruct H3 as (_ & H3 & _) ; apply H3. eexists ; eauto.
+  + destruct H3 as (_ & _ & H3 & _) ; apply H3. eexists ; eauto. 
+  + destruct H3 as (_ & _ & H3) ; apply H3. split ; eexists ; eauto.
+Qed. 
+
+Lemma snorm_ren_l r s : 
+  snorm (S_comp (S_ren r) s) <-> is_rmvar r /\ snorm s /\ s <> sid.
+Proof.
+split ; intros H.
+- split3.
+  + apply Decidable.not_not.
+    * unfold Decidable.decidable. destruct r ; triv. left. eexists ; eauto.
+    * intros H'. apply H ; clear H. now apply SR_ren_l.
+  + intros H' ; apply H ; clear H. constructor. now right.
+  + intros H'. apply H ; clear H. subst. now constructor.
+- intros H'. inv H' ; triv. destruct H1 ; triv. inv H0.
+  destruct H as ((m & ->) & _ & _). inv H2.
+Qed.
+
+Lemma snorm_mvar_l m s : 
+  snorm (S_comp (S_mvar m) s) <-> snorm s /\ s <> sid.
+Proof.
+split.
+- intros H. split.
+  + intros H'. apply H ; clear H. apply SR_comp. now right.
+  + intros H' ; subst. apply H. now constructor. 
+- intros (H & H') H''. inv H'' ; triv. now destruct H1.
+Qed. 
+
+Lemma snorm_ren r : snorm (S_ren r) <-> rnorm r.
+Proof.
+split ; intros H H' ; apply H ; clear H.
+- now constructor.
+- now inv H'.
+Qed.  
+
+(*********************************************************************************)
+(** *** Substitution & expressions normalization. *)
+(*********************************************************************************)
+
+(** Helper function for [sdrop] which takes care of 
+    removing left composition by the identity. *)
+Equations do_sshift : qnat -> subst -> subst :=
+do_sshift Q_zero s := s ;
+do_sshift k s := S_comp (S_shift k) s.
+
+Lemma do_sshift_sound e k s : 
+  seval e (do_sshift k s) =₁ O.scomp (O.sshift (qeval e k)) (seval e s).
+Proof. funelim (do_sshift k s) ; triv. Qed.
+#[global] Hint Rewrite do_sshift_sound : seval.
+
+Lemma do_sshift_nf k s :
+  qnorm k -> snorm s -> (k <> Q_zero -> snorm (S_comp (S_shift k) s)) -> snorm (do_sshift k s).
+Proof. intros H1 H2 H3. funelim (do_sshift k s) ; triv ; now apply H3. Qed.
+
+(** Drop the [k] first elements in a normal form substitution [s]. *)
+Equations sdrop (k : qnat) (s : subst) : subst by struct s :=
+sdrop k (S_shift k') := S_shift (qplus k k') ;
+sdrop k (S_cons t s) with k := {
+  | Q_succ k' => sdrop k' s ;
+  | _ => do_sshift k (S_cons t s) } ;
+sdrop k (S_comp (S_shift k') s) := sdrop (qplus k k') s ;
+sdrop k (S_ren r) := S_ren (rdrop k r) ;
+sdrop k s := do_sshift k s.
+
+Lemma sdrop_sound e k s : 
+  seval e (sdrop k s) =₁ O.scomp (O.sshift (qeval e k)) (seval e s).
+Proof.
+funelim (sdrop k s) ; simp seval eeval qeval ; triv.
+- now rewrite O.sshift_plus.
+- rewrite H. simp qeval. now rewrite <-O.scomp_assoc, O.sshift_plus.
+Qed.
+#[global] Hint Rewrite sdrop_sound : seval eeval.   
+
+Lemma sdrop_nf k s :
+  qnorm k -> snorm s -> snorm (sdrop k s).
+Proof.
+intros H1 H2. funelim (sdrop k s) ; triv.
+all: try solve [ apply do_sshift_nf ; triv ; [] ; intros H3 ; rewrite snorm_shift_l ;
+  split6 ; triv ; [] ; intros (? & ?) ; triv ].
+- rewrite snorm_shift in *. now apply qplus_nf.
+- rewrite snorm_shift_l in H2. apply H ; triv. now apply qplus_nf.
+- rewrite snorm_ren in *. now apply rdrop_nf.
+- rewrite qnorm_succ in H1. rewrite snorm_cons in H2. now apply H.
+Qed.
 
 End Make.
 
@@ -882,6 +1056,4 @@ cbv [qnormalize qnormalize_functional rnormalize_functional qplus qplus_neutral 
      rapply_clause_3 rapply_clause_4].
 cbv [qeval reval qeval_functional reval_functional 
      assign_ren assign_qnat nth].
-
 Admitted.
-  
