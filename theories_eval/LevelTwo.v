@@ -315,14 +315,24 @@ Definition is_qmvar x := exists m, x = Q_mvar m.
 Definition is_rshift r := exists k, r = R_shift k.
 Definition is_rcons r := exists i r', r = R_cons i r'.
 Definition is_rcomp r := exists r1 r2 , r = R_comp r1 r2.
-Definition is_rshift_l r := exists k r', r = R_comp (R_shift k) r'.
 Definition is_rmvar r := exists m, r = R_mvar m.
+
+Definition is_rshift_l r := exists k r2, r = R_comp (R_shift k) r2.
+Definition is_rcons_l r := exists i r' r2, r = R_comp (R_cons i r') r2.
+Definition is_rcomp_l r := exists r1 r2 r3, r = R_comp (R_comp r1 r2) r3.
+Definition is_rmvar_l r := exists m r2, r = R_comp (R_mvar m) r2.
 
 Definition is_sshift s := exists k, s = S_shift k.
 Definition is_scons s := exists t s', s = S_cons t s'.
 Definition is_scomp s := exists s1 s2 , s = S_comp s1 s2.
-Definition is_sshift_l s := exists k s', s = S_comp (S_shift k) s'.
 Definition is_smvar s := exists m, s = S_mvar m.
+Definition is_sren s := exists r, s = S_ren r.
+
+Definition is_sshift_l s := exists k s2, s = S_comp (S_shift k) s2.
+Definition is_scons_l s := exists t s' s2, s = S_comp (S_cons t s') s2.
+Definition is_scomp_l s := exists s1 s2 s3, s = S_comp (S_comp s1 s2) s3.
+Definition is_smvar_l s := exists m s2, s = S_comp (S_mvar m) s2.
+Definition is_sren_l s := exists r s', s = S_comp (S_ren r) s'.
 
 (** This tactic tries to solve the goal by inverting a hypothesis of
     the form [is_qsucc _], [is_rmvar _], ... which is inconsistent.
@@ -338,17 +348,65 @@ Ltac inv_discriminators :=
 
     | [ H : is_rshift _ |- _ ] => destruct H as (? & H') ; inv H'
     | [ H : is_rcons _ |- _ ] => destruct H as (? & ? & H') ; inv H'
-    | [ H : is_rshift_l _ |- _ ] => destruct H as (? & ? & H') ; inv H'
     | [ H : is_rcomp _ |- _ ] => destruct H as (? & ? & H') ; inv H'
     | [ H : is_rmvar _ |- _ ] => destruct H as (? & H') ; inv H'
+    
+    | [ H : is_rshift_l _ |- _ ] => destruct H as (? & ? & H') ; inv H'
+    | [ H : is_rcons_l _ |- _ ] => destruct H as (? & ? & ? & H') ; inv H'
+    | [ H : is_rcomp_l _ |- _ ] => destruct H as (? & ? & ? & H') ; inv H'
+    | [ H : is_rmvar_l _ |- _ ] => destruct H as (? & ? & H') ; inv H'
 
     | [ H : is_sshift _ |- _ ] => destruct H as (? & H') ; inv H'
     | [ H : is_scons _ |- _ ] => destruct H as (? & ? & H') ; inv H'
-    | [ H : is_sshift_l _ |- _ ] => destruct H as (? & ? & H') ; inv H'
     | [ H : is_scomp _ |- _ ] => destruct H as (? & ? & H') ; inv H'
     | [ H : is_smvar _ |- _ ] => destruct H as (? & H') ; inv H'
-    end ].
-#[global] Hint Extern 2 => inv_discriminators : core.
+    | [ H : is_sren _ |- _ ] => destruct H as (? & H') ; inv H'
+
+    | [ H : is_sshift_l _ |- _ ] => destruct H as (? & ? & H') ; inv H'
+    | [ H : is_scons_l _ |- _ ] => destruct H as (? & ? & ? & H') ; inv H'
+    | [ H : is_scomp_l _ |- _ ] => destruct H as (? & ? & ? & H') ; inv H'
+    | [ H : is_smvar_l _ |- _ ] => destruct H as (? & ? & H') ; inv H'
+    | [ H : is_sren_l _ |- _ ] => destruct H as (? & ? & H') ; inv H'
+    end 
+  ].
+#[global] Hint Extern 3 => inv_discriminators : core.
+
+(** This tactic tries to solve trivial goals of the form 
+    [is_qsucc (Q_succ _)], [is_rmvar (R_mvar _)], ...
+
+    It either closes the goal or does nothing. *)
+Ltac solve_discriminators :=
+  solve [
+    match goal with 
+    | |- is_qsucc (Q_succ _) => repeat eexists
+    | |- is_qplus (Q_plus _ _) => repeat eexists
+    | |- is_qren (Q_ren _ _) => repeat eexists
+    | |- is_qmvar (Q_mvar _) => repeat eexists
+
+    | |- is_rshift (R_shift _) => repeat eexists
+    | |- is_rcons (R_cons _ _)  => repeat eexists
+    | |- is_rcomp (R_comp _ _)  => repeat eexists
+    | |- is_rmvar (R_mvar _)  => repeat eexists
+
+    | |- is_rshift_l (R_comp (R_shift _) _) => repeat eexists
+    | |- is_rcons_l (R_comp (R_cons _ _) _) => repeat eexists
+    | |- is_rcomp_l (R_comp (R_comp _ _) _) => repeat eexists
+    | |- is_rmvar_l (R_comp (R_mvar _) _) => repeat eexists
+
+    | |- is_sshift (S_shift _) => repeat eexists
+    | |- is_scons (S_cons _ _) => repeat eexists
+    | |- is_scomp (S_comp _ _) => repeat eexists
+    | |- is_smvar (S_mvar _) => repeat eexists
+    | |- is_sren (S_ren _) => repeat eexists
+
+    | |- is_sshift_l (S_comp (S_shift _) _) => repeat eexists
+    | |- is_scons_l (S_comp (S_cons _ _) _)  => repeat eexists
+    | |- is_scomp_l (S_comp (S_comp _ _) _)  => repeat eexists
+    | |- is_smvar_l (S_comp (S_mvar _) _)  => repeat eexists
+    | |- is_sren_l (S_comp (S_ren) _) => repeat eexists
+    end 
+  ].
+#[global] Hint Extern 3 => solve_discriminators : core.
 
 (*********************************************************************************)
 (** *** Renaming & naturals normal forms. *)
@@ -369,7 +427,7 @@ Inductive qred : qnat -> Prop :=
 | QR_plus_succ_l x y : qred (Q_plus (Q_succ x) y)
 | QR_plus_succ_r x y : qred (Q_plus x (Q_succ y))
 
-(* Renaming should be fully applied to their argument.  *)
+(* Renamings should be fully applied to their argument.  *)
 | QR_ren_comp r1 r2 i : qred (Q_ren (R_comp r1 r2) i)
 | QR_ren_shift k i : qred (Q_ren (R_shift k) i)
 | QR_rcons_zero i r : qred (Q_ren (R_cons i r) Q_zero)
@@ -389,9 +447,10 @@ with rred : ren -> Prop :=
 
 (** Renaming simplification. *)
 | RR_cons_l i r1 r2 : rred (R_comp (R_cons i r1) r2)
-| RR_shift_1 k1 k2 : rred (R_comp (R_shift k1) (R_shift k2))
-| RR_shift_2 k1 k2 r : rred (R_comp (R_shift k1) (R_comp (R_shift k2) r))
-| RR_shift_cons k i r : rred (R_comp (R_shift (Q_succ k)) (R_cons i r)).
+| RR_shift_l k r : 
+  is_rshift r \/ is_rshift_l r -> rred (R_comp (R_shift k) r)
+| RR_shift_cons k r : 
+  is_rcons r -> rred (R_comp (R_shift (Q_succ k)) r).
 
 Hint Constructors qred : core.
 Hint Constructors rred : core.
@@ -428,11 +487,7 @@ split.
   + destruct H' as (x' & ->). now constructor.
   + destruct H' as (y' & ->). now constructor.
   + destruct H' as (x1 & x2 & ->). now constructor.
-- intros (H1 & H2 & H3 & H4 & H5 & H6 & H7) H. inv H ; triv.
-  + destruct H8 ; auto.
-  + apply H7. eexists ; eauto.
-  + apply H5. eexists ; eauto.
-  + apply H6. eexists ; eauto.
+- intros (H1 & H2 & H3 & H4 & H5 & H6 & H7) H. inv H ; triv. now destruct H8.
 Qed.
 
 Lemma qnorm_ren_mvar m i : 
@@ -455,8 +510,7 @@ split.
   + subst. now constructor.
   + destruct H' as [k' ->]. now constructor.
 - intros (H1 & H2 & H3 & H4 & H5) H. inv H ; triv.
-  + destruct H6 ; triv. inv H0. destruct H7 ; triv.
-  + apply H5. eexists ; eauto.
+  destruct H6 ; triv. inv H0. destruct H7 ; triv.
 Qed.
 
 Lemma rnorm_shift k : 
@@ -483,9 +537,7 @@ split.
 - intros H. split.
   + intros H'. apply H ; clear H. apply RR_comp. now right.
   + intros H' ; subst. apply H. now constructor. 
-- intros (H & H') H''. inv H''.
-  + destruct H1 ; easy.
-  + easy.
+- intros (H & H') H''. inv H'' ; triv. now destruct H1.
 Qed.      
 
 Lemma rnorm_shift_l k r : 
@@ -495,23 +547,21 @@ Lemma rnorm_shift_l k r :
     k <> Q_zero /\ 
     ~is_rshift r /\ 
     ~is_rshift_l r /\
-    ~(is_qsucc k /\ is_rcons r).
+    (is_qsucc k -> ~is_rcons r).
 Proof.
 split.
-- intros H. split6 ; intros H' ; apply H ; clear H.
-  + constructor. left. now constructor.
-  + constructor. now right.
-  + subst. now constructor.
-  + destruct H' as [k' ->]. now constructor.
-  + destruct H' as (k' & r' & ->). now constructor. 
-  + destruct H' as [(k' & ->) (i & r' & ->)]. now constructor.   
-- intros (H1 & H2 & H3) H. inv H ; try easy.
+- intros H. split6 ; triv.
+  + intros H' ; apply H ; triv.
+  + intros H' ; apply H ; triv.
+  + intros H' ; apply H. subst ; triv.
+  + intros (k' & ->). intros H' ; triv.
+- intros (H1 & H2 & H3) H. inv H ; triv.
   + destruct H4 ; auto. now inv H0.
-  + destruct H3 as (_ & H3 & _) ; apply H3. eexists ; eauto.
-  + destruct H3 as (_ & H3 & _) ; apply H3. eexists ; eauto.
-  + destruct H3 as (_ & _ & H3 & _) ; apply H3. eexists ; eauto. 
-  + destruct H3 as (_ & _ & H3) ; apply H3. split ; eexists ; eauto.
-Qed. 
+  + destruct H3 as (_ & ? & _) ; triv.
+  + destruct H3 as (_ & H3 & H3' & _). destruct H4 ; triv.
+  + destruct H4 as (? & ? & ->). destruct H3 as (_ & _ & _ & H3).
+    apply H3 ; triv.
+Qed.
 
 (*********************************************************************************)
 (** *** Renaming & natural normalization. *)
@@ -620,17 +670,12 @@ intros H1 H2. funelim (rdrop k r) ; triv.
   apply do_rshift_nf ; triv.
   + now rewrite rnorm_mvar_l.
   + intros H. rewrite rnorm_shift_l. split6 ; triv.
-    * rewrite rnorm_mvar_l ; triv.
-    * intros [H4 (? & ? & H5)]. inv H5.
-- apply do_rshift_nf ; triv. intros H3. rewrite rnorm_shift_l. split6 ; triv. 
-  intros [_ (k' & r' & H')] ; inv H'.
+    rewrite rnorm_mvar_l ; triv.
+- apply do_rshift_nf ; triv. intros H3. rewrite rnorm_shift_l. split6 ; triv.
 - rewrite qnorm_succ in H1. rewrite rnorm_cons in H2. now apply H.
 - apply do_rshift_nf ; triv. intros _. rewrite rnorm_shift_l. split6 ; triv.
-  intros [? _] ; triv.
 - apply do_rshift_nf ; triv. intros _. rewrite rnorm_shift_l. split6 ; triv.
-  intros [? _] ; triv.
 - apply do_rshift_nf ; triv. intros _. rewrite rnorm_shift_l. split6 ; triv.
-  intros [? _] ; triv.
 Qed.
 
 (** Apply a normal form renaming to a normal form quoted natural. *)
@@ -807,18 +852,19 @@ Inductive ered : forall {k}, expr k -> Prop :=
 | ER_push_subst {k} s (e : expr k) : is_epush e -> ered (E_subst e s)
 | ER_ren_var r i : ered (E_ren (E_tvar i) r)
 
-(** Apply a substitution to a variable.
-    We only unfold composition when it allows further reduction. *)
-| ER_sshift_var k i : ered (E_subst (E_tvar i) (S_shift k))
-| ER_scons_zero t s : ered (E_subst (E_tvar Q_zero) (S_cons t s))
-| ER_scons_succ t s k : ered (E_subst (E_tvar (Q_succ k)) (S_cons t s))
-| ER_scomp_var s1 s2 i : 
-    ered (E_subst (E_tvar i) s1) -> ered (E_subst (E_tvar i) (S_comp s1 s2))
+(** Apply a substitution to a variable. *)
+| ER_sshift_var i s : 
+    is_sshift s \/ is_sshift_l s -> ered (E_subst (E_tvar i) s)
+| ER_scons_zero s : 
+    is_scons s \/ is_scons_l s -> ered (E_subst (E_tvar Q_zero) s)
+| ER_scons_succ s i : 
+   is_scons s \/ is_scons_l s -> ered (E_subst (E_tvar (Q_succ i)) s)
 
 (** Miscellaneous simplifications. *)
 | ER_ren_rid {k} (e : expr k) : ered (E_ren e rid)
 | ER_subst_sid {k} (e : expr k) : ered (E_subst e sid)
-| ER_sren {k} (e : expr k) r : ered (E_subst e (S_ren r))
+| ER_sren {k} (e : expr k) s : 
+  is_sren s \/ is_sren_l s -> ered (E_subst e s)
 
 (** Reducible substitutions. *)
 with sred : subst -> Prop :=
@@ -839,10 +885,11 @@ with sred : subst -> Prop :=
 | SR_ren_l r s : ~is_rmvar r -> sred (S_comp (S_ren r) s)
 | SR_cons_l t s1 s2 : sred (S_comp (S_cons t s1) s2)
 
-(** Merge successive shifts. *)
-| SR_shift_1 k1 k2 : sred (S_comp (S_shift k1) (S_shift k2))
-| SR_shift_2 k1 k2 s : sred (S_comp (S_shift k1) (S_comp (S_shift k2) s))
-| SR_shift_cons k t s : sred (S_comp (S_shift (Q_succ k)) (S_cons t s)).
+(** Miscellaneous substitution simplifications. *)
+| SR_shift_l k s : 
+  is_sshift s \/ is_sshift_l s -> sred (S_comp (S_shift k) s)
+| SR_shift_cons k t s : 
+  sred (S_comp (S_shift (Q_succ k)) (S_cons t s)).
 
 Hint Constructors ered : core.
 Hint Constructors sred : core.
@@ -888,15 +935,14 @@ split.
   + constructor. left. now constructor.
   + constructor. now right.
   + subst. now constructor.
-  + destruct H' as [k' ->]. now constructor.
-  + destruct H' as (k' & r' & ->). now constructor. 
+  + destruct H' as [k' ->]. apply SR_shift_l. triv.
+  + destruct H' as (k' & r' & ->). apply SR_shift_l ; triv. 
   + destruct H' as [(k' & ->) (i & r' & ->)]. now constructor.   
 - intros (H1 & H2 & H3) H. inv H ; try easy.
   + destruct H4 ; auto. now inv H0.
-  + destruct H3 as (_ & H3 & _) ; apply H3. eexists ; eauto.
-  + destruct H3 as (_ & H3 & _) ; apply H3. eexists ; eauto.
-  + destruct H3 as (_ & _ & H3 & _) ; apply H3. eexists ; eauto. 
-  + destruct H3 as (_ & _ & H3) ; apply H3. split ; eexists ; eauto.
+  + destruct H3 as (_ & H3 & _) ; apply H3. triv.
+  + destruct H3 as (_ & H3 & H3' & _) ; apply H3. now destruct H4.
+  + destruct H3 as (_ & _ & _ & H3) ; apply H3. triv.
 Qed. 
 
 Lemma snorm_ren_l r s : 
@@ -905,7 +951,7 @@ Proof.
 split ; intros H.
 - split3.
   + apply Decidable.not_not.
-    * unfold Decidable.decidable. destruct r ; triv. left. eexists ; eauto.
+    * unfold Decidable.decidable. destruct r ; triv.
     * intros H'. apply H ; clear H. now apply SR_ren_l.
   + intros H' ; apply H ; clear H. constructor. now right.
   + intros H'. apply H ; clear H. subst. now constructor.
