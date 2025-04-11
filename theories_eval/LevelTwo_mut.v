@@ -122,37 +122,37 @@ Record env :=
 Section Evaluation.
   Context (e : env).
 
-  Equations eval_qnat : qnat -> nat :=
-  eval_qnat Q_zero := 0 ;
-  eval_qnat (Q_succ i) := S (eval_qnat i) ;
-  eval_qnat (Q_plus x y) := eval_qnat x + eval_qnat y ;
-  eval_qnat (Q_ren r i) := eval_ren r (eval_qnat i) ;
-  eval_qnat (Q_mvar x) := e.(assign_qnat) x
+  Equations qeval : qnat -> nat :=
+  qeval Q_zero := 0 ;
+  qeval (Q_succ i) := S (qeval i) ;
+  qeval (Q_plus x y) := qeval x + qeval y ;
+  qeval (Q_ren r i) := reval r (qeval i) ;
+  qeval (Q_mvar x) := e.(assign_qnat) x
   
-  with eval_ren : ren -> O.ren :=
-  eval_ren (R_shift i) := O.rshift (eval_qnat i) ;
-  eval_ren (R_cons i r) := O.rcons (eval_qnat i) (eval_ren r) ;
-  eval_ren (R_comp r1 r2) := O.rcomp (eval_ren r1) (eval_ren r2) ;
-  eval_ren (R_mvar x) := e.(assign_ren) x.
+  with reval : ren -> O.ren :=
+  reval (R_shift i) := O.rshift (qeval i) ;
+  reval (R_cons i r) := O.rcons (qeval i) (reval r) ;
+  reval (R_comp r1 r2) := O.rcomp (reval r1) (reval r2) ;
+  reval (R_mvar x) := e.(assign_ren) x.
 
-  Equations eval_expr {k} : expr k -> O.expr k :=
-  eval_expr (E_tvar i) := O.E_var (eval_qnat i) ;
-  eval_expr (E_tctor c al) := O.E_ctor c (eval_expr al) ;
-  eval_expr E_al_nil := O.E_al_nil ;
-  eval_expr (E_al_cons a al) := O.E_al_cons (eval_expr a) (eval_expr al) ;
-  eval_expr (E_abase b x) := O.E_abase b x ;
-  eval_expr (E_aterm t) := O.E_aterm (eval_expr t) ;
-  eval_expr (E_abind a) := O.E_abind (eval_expr a) ;
-  eval_expr (E_ren e r) := O.rename (eval_expr e) (eval_ren r) ;
-  eval_expr (E_subst e s) := O.substitute (eval_expr e) (eval_subst s) ;
-  eval_expr (E_mvar x) := e.(assign_term) x
+  Equations eeval {k} : expr k -> O.expr k :=
+  eeval (E_tvar i) := O.E_var (qeval i) ;
+  eeval (E_tctor c al) := O.E_ctor c (eeval al) ;
+  eeval E_al_nil := O.E_al_nil ;
+  eeval (E_al_cons a al) := O.E_al_cons (eeval a) (eeval al) ;
+  eeval (E_abase b x) := O.E_abase b x ;
+  eeval (E_aterm t) := O.E_aterm (eeval t) ;
+  eeval (E_abind a) := O.E_abind (eeval a) ;
+  eeval (E_ren e r) := O.rename (eeval e) (reval r) ;
+  eeval (E_subst e s) := O.substitute (eeval e) (seval s) ;
+  eeval (E_mvar x) := e.(assign_term) x
   
-  with eval_subst : subst -> O.subst :=
-  eval_subst (S_shift k) := O.sshift (eval_qnat k) ;
-  eval_subst (S_cons t s) := O.scons (eval_expr t) (eval_subst s) ;
-  eval_subst (S_comp s1 s2) := O.scomp (eval_subst s1) (eval_subst s2) ;
-  eval_subst (S_ren r) := O.rscomp (eval_ren r) O.E_var ;
-  eval_subst (S_mvar x) := e.(assign_subst) x.
+  with seval : subst -> O.subst :=
+  seval (S_shift k) := O.sshift (qeval k) ;
+  seval (S_cons t s) := O.scons (eeval t) (seval s) ;
+  seval (S_comp s1 s2) := O.scomp (seval s1) (seval s2) ;
+  seval (S_ren r) := O.rscomp (reval r) O.E_var ;
+  seval (S_mvar x) := e.(assign_subst) x.
 
 End Evaluation.
  
@@ -305,30 +305,38 @@ with reify_subst (e : env) (s : constr) : env * constr :=
 
 (** Reducible quoted natural. *)
 Inductive qred : qnat -> Prop :=
+(** Congruence. *)
 | QR_succ x : qred x -> qred (Q_succ x)
 | QR_plus x y : qred x \/ qred y -> qred (Q_plus x y)
 | QR_ren r x : rred r \/ qred x -> qred (Q_ren r x)
 
+(** Addition should pull out [Q_succ] from both arguments,
+    and by right associated. *)
 | QR_plus_zero_l x : qred (Q_plus x Q_zero)
 | QR_plus_zero_r x : qred (Q_plus Q_zero x)
 | QR_plus_plus_l x y z : qred (Q_plus (Q_plus x y) z)
 | QR_plus_succ_l x y : qred (Q_plus (Q_succ x) y)
 | QR_plus_succ_r x y : qred (Q_plus x (Q_succ y))
-| QR_ren_ren r1 r2 i : qred (Q_ren r1 (Q_ren r2 i))
+
+(* Renaming should be fully applied to their argument.  *)
+| QR_ren_comp r1 r2 i : qred (Q_ren (R_comp r1 r2) i)
 | QR_ren_shift k i : qred (Q_ren (R_shift k) i)
 | QR_rcons_zero i r : qred (Q_ren (R_cons i r) Q_zero)
 | QR_rcons_succ i r k : qred (Q_ren (R_cons i r) (Q_succ k))
 
 (** Reducible renaming. *)
 with rred : ren -> Prop :=
+(** Congruence. *)
 | RR_shift k : qred k -> rred (R_shift k)
 | RR_cons i r : qred i \/ rred r -> rred (R_cons i r)
 | RR_comp r1 r2 : rred r1 \/ rred r2 -> rred (R_comp r1 r2)
 
+(** Composition should be right associated. *)
 | RR_rid_l r : rred (R_comp rid r)
 | RR_rid_r r : rred (R_comp r rid)
 | RR_comp_l r1 r2 r3 : rred (R_comp (R_comp r1 r2) r3)
 
+(** Renaming simplification. *)
 | RR_cons_l i r1 r2 : rred (R_comp (R_cons i r1) r2)
 | RR_shift_1 k1 k2 : rred (R_comp (R_shift k1) (R_shift k2))
 | RR_shift_2 k1 k2 r : rred (R_comp (R_shift k1) (R_comp (R_shift k2) r))
@@ -356,6 +364,23 @@ Definition is_rcons r := exists i r', r = R_cons i r'.
 Definition is_rcomp r := exists r1 r2 , r = R_comp r1 r2.
 Definition is_rshift_l r := exists k r', r = R_comp (R_shift k) r'.
 
+(** This tactic tries to solve the goal by inverting a hypothesis of
+    the form [is_qsucc _], [is_qplus _], ... which is inconsistent.
+
+    It either closes the goal or does nothing. *)
+Ltac inv_is_ren_qnat :=
+  solve [
+    let H' := fresh "H" in
+    match goal with 
+    | [ H : is_qsucc _ |- _ ] => destruct H as (? & H') ; inv H'
+    | [ H : is_qren _ |- _ ] => destruct H as (? & ? & H') ; inv H'
+    | [ H : is_rshift _ |- _ ] => destruct H as (? & H') ; inv H'
+    | [ H : is_rcons _ |- _ ] => destruct H as (? & ? & H') ; inv H'
+    | [ H : is_rshift_l _ |- _ ] => destruct H as (? & ? & H') ; inv H'
+    | [ H : is_rcomp _ |- _ ] => destruct H as (? & ? & H') ; inv H'
+    end ].
+#[global] Hint Extern 2 => inv_is_ren_qnat : core.
+
 Lemma qnorm_succ x :
   qnorm (Q_succ x) <-> qnorm x.
 Proof.
@@ -372,20 +397,67 @@ Lemma qnorm_plus x y :
     ~is_qplus x.
 Proof.
 split.
-- intros H. split7 ; intros H' ; apply H ; clear H.
-  + constructor ; auto.
-  + constructor ; auto.
+- intros H. split7 ; intros H' ; apply H ; clear H ; triv.
   + subst. now constructor.
   + subst. now constructor.
   + destruct H' as (x' & ->). now constructor.
   + destruct H' as (y' & ->). now constructor.
   + destruct H' as (x1 & x2 & ->). now constructor.
-- intros (H1 & H2 & H3 & H4 & H5 & H6 & H7) H. inv H ; try easy.
+- intros (H1 & H2 & H3 & H4 & H5 & H6 & H7) H. inv H ; triv.
   + destruct H8 ; auto.
   + apply H7. eexists ; eauto.
   + apply H5. eexists ; eauto.
   + apply H6. eexists ; eauto.
 Qed.
+
+Lemma qnorm_ren_mvar m i : 
+  qnorm (Q_ren (R_mvar m) i) <-> qnorm i.
+Proof.
+split.
+- intros H H'. apply H ; clear H. constructor. now right.
+- intros H H'. inv H'. destruct H1 ; triv.
+Qed.     
+
+Lemma qnorm_ren_cons i r k :
+  qnorm (Q_ren (R_cons i r) k) <->
+    qnorm i /\ rnorm r /\ qnorm k /\ k <> Q_zero /\ ~is_qsucc k.
+Proof.
+split.
+- intros H. split5 ; intros H' ; apply H ; clear H.
+  + constructor ; left. constructor ; now left.  
+  + constructor ; left. constructor ; now right. 
+  + constructor ; now right.
+  + subst. now constructor.
+  + destruct H' as [k' ->]. now constructor.
+- intros (H1 & H2 & H3 & H4 & H5) H. inv H ; triv.
+  + destruct H6 ; triv. inv H0. destruct H7 ; triv.
+  + apply H5. eexists ; eauto.
+Qed.
+
+(*Lemma qnorm_ren r i :
+  qnorm (Q_ren r i) <-> 
+    rnorm r /\ qnorm i /\ ~is_rshift r /\ ~is_rcomp r /\
+    (is_rcons r -> i <> Q_zero /\ ~is_qsucc i).
+Proof.
+split.
+- intros H. split5.
+  + intros H' ; apply H ; clear H. apply QR_ren. now left.
+  + intros H' ; apply H ; clear H. apply QR_ren. now right.
+  + intros H' ; apply H ; clear H. destruct H' as (k & ->). now constructor.
+  + intros H' ; apply H ; clear H. destruct H' as (? & ? & ->). now constructor.
+  + intros (? & ? & ->). split ; intros H'' ; apply H ; clear H.
+    * subst. now constructor.
+    * destruct H'' as (? & H''). subst. now constructor.      
+- intros (H1 & H2 & H3 & H4 & H5) H. inv H.
+  + destruct H6 ; triv.
+  + apply H4. eexists ; eauto.
+  + apply H3. eexists ; eauto.
+  + enough (Q_zero <> Q_zero) by auto. apply H5. eexists ; eauto.
+  + enough (~is_qsucc (Q_succ k)).
+    { apply H0. eexists ; eauto. }
+    apply H5. eexists ; eauto.
+Qed.
+Admitted.*)
 
 Lemma rnorm_shift k : 
   rnorm (R_shift k) <-> qnorm k.
@@ -476,12 +548,12 @@ Proof. funelim (qplus_neutral x y) ; simp qsize ; lia. Qed.
 #[global] Hint Rewrite qsize_qplus_neutral : qsize.
 
 Lemma qplus_neutral_sound e x y : 
-  eval_qnat e (qplus_neutral x y) = eval_qnat e x + eval_qnat e y.
+  qeval e (qplus_neutral x y) = qeval e x + qeval e y.
 Proof.
-funelim (qplus_neutral x y) ; simp eval_qnat ; try lia.
+funelim (qplus_neutral x y) ; simp qeval ; try lia.
 rewrite H. lia.
 Qed.
-#[global] Hint Rewrite qplus_neutral_sound : eval_qnat.
+#[global] Hint Rewrite qplus_neutral_sound : qeval.
 
 Lemma qplus_neutral_nf n x :
   n <> Q_zero -> ~is_qsucc n -> ~is_qplus n -> qnorm n -> qnorm x -> qnorm (qplus_neutral n x).
@@ -508,13 +580,13 @@ Proof. funelim (qplus x y) ; simp qsize ; lia. Qed.
 #[global] Hint Rewrite qsize_qplus : qsize.
 
 Lemma qplus_sound e x y :
-  eval_qnat e (qplus x y) = eval_qnat e x + eval_qnat e y.
+  qeval e (qplus x y) = qeval e x + qeval e y.
 Proof.
-funelim (qplus x y) ; simp eval_qnat ; try lia.
+funelim (qplus x y) ; simp qeval ; try lia.
 + rewrite H. lia.
 + rewrite H0, H. lia.
 Qed.  
-#[global] Hint Rewrite qplus_sound : eval_qnat.
+#[global] Hint Rewrite qplus_sound : qeval.
 
 Lemma qplus_nf x y : 
   qnorm x -> qnorm y -> qnorm (qplus x y).
@@ -536,34 +608,16 @@ do_shift Q_zero r := r ;
 do_shift k r := R_comp (R_shift k) r.
 
 Lemma do_shift_sound e k r : 
-  eval_ren e (do_shift k r) =₁ O.rcomp (O.rshift (eval_qnat e k)) (eval_ren e r).
+  reval e (do_shift k r) =₁ O.rcomp (O.rshift (qeval e k)) (reval e r).
 Proof. funelim (do_shift k r) ; triv. Qed.
-#[global] Hint Rewrite do_shift_sound : eval_ren.
+#[global] Hint Rewrite do_shift_sound : reval.
 
-Lemma do_shift_nf_aux k r :
-  k <> Q_zero -> ~is_rshift r -> ~is_rshift_l r -> ~is_rcons r -> 
-  qnorm k -> rnorm r -> rnorm (R_comp (R_shift k) r).
-Proof. intros H1 H2 H3 H4 H5 H6. rewrite rnorm_shift_l ; split6 ; easy. Qed.
-    
-Lemma do_shift_nf1 k r :
-  ~is_rshift r -> ~is_rshift_l r -> ~is_rcons r -> 
-  qnorm k -> rnorm r -> rnorm (do_shift k r).
-Proof. 
-intros. funelim (do_shift k r) ; 
-solve [ easy | now apply do_shift_nf_aux ]. 
-Qed. 
-
-Lemma do_shift_nf2 k r :
-  ~is_qsucc k -> is_rcons r -> 
-  qnorm k -> rnorm r -> rnorm (do_shift k r).
-Proof.
-intros H1 (i & r' & ->) H2 H3. funelim (do_shift k _) ; try easy.  
-all: rewrite rnorm_shift_l ; split6 ; try easy.
-all: solve [ intros (? & H') ; inv H' | intros (? & ? & H') ; inv H'].
-Qed.
+Lemma do_shift_nf k r :
+  qnorm k -> rnorm r -> (k <> Q_zero -> rnorm (R_comp (R_shift k) r)) -> rnorm (do_shift k r).
+Proof. intros H1 H2 H3. funelim (do_shift k r) ; triv ; now apply H3. Qed.
 
 (** Drop the [k] first elements in a normal form renaming [r]. *)
-Equations rdrop (k : qnat) (r : ren) : ren by wf (qsize k + rsize r) lt :=
+Equations? rdrop (k : qnat) (r : ren) : ren by wf (qsize k + rsize r) lt :=
 rdrop k (R_shift k') := R_shift (qplus k k') ;
 rdrop k (R_mvar m) := do_shift k (R_mvar m) ;
 rdrop k (R_cons i r) with k => {
@@ -572,87 +626,91 @@ rdrop k (R_cons i r) with k => {
 rdrop k (R_comp (R_shift k') r) := rdrop (qplus k k') r ;
 rdrop k r := do_shift k r.
 
-Next Obligation. simp qsize. lia. Qed.
-Next Obligation. 
-apply PeanoNat.Nat.le_lt_trans with (m := S (qsize k + qsize k') + rsize r).
-- apply Arith_base.add_le_mono_r_proj_l2r. simp qsize. reflexivity.
-- lia.
+Proof.
+all: simp qsize ; try lia.
+generalize (qsize_qplus k k'). lia.
 Qed.
 
 Lemma rdrop_sound e k r : 
-  eval_ren e (rdrop k r) =₁ O.rcomp (O.rshift (eval_qnat e k)) (eval_ren e r).
+  reval e (rdrop k r) =₁ O.rcomp (O.rshift (qeval e k)) (reval e r).
 Proof.
-funelim (rdrop k r) ; simp eval_ren eval_qnat ; triv.
+funelim (rdrop k r) ; simp reval qeval ; triv.
 - now rewrite O.rshift_plus.
-- rewrite H. simp eval_qnat. now rewrite <-O.rcomp_assoc, O.rshift_plus.
+- rewrite H. simp qeval. now rewrite <-O.rcomp_assoc, O.rshift_plus.
 Qed.
-#[global] Hint Rewrite rdrop_sound : eval_ren.
-
-Lemma is_rshift_comp r1 r2 : ~is_rshift (R_comp r1 r2).
-Proof. intros (k & H) ; inv H. Qed.
-#[global] Hint Immediate is_rshift_comp : core.
-
-Lemma is_rshift_cons r1 r2 : ~is_rshift (R_cons r1 r2).
-Proof. intros (k & H) ; inv H. Qed.
-#[global] Hint Immediate is_rshift_cons : core.
-
-Lemma is_rshift_mvar m : ~is_rshift (R_mvar m).
-Proof. intros (? & H) ; inv H. Qed.
-#[global] Hint Immediate is_rshift_mvar : core.
-
-Lemma is_rshift_l_mvar m r : ~is_rshift_l (R_comp (R_mvar m) r).
-Proof. intros (? & ? & H) ; inv H. Qed.
-#[global] Hint Immediate is_rshift_l_mvar : core.
-
-Lemma is_rcons_comp r1 r2 : ~is_rcons (R_comp r1 r2).
-Proof. intros (? & ? & H) ; inv H. Qed.
-#[global] Hint Immediate is_rcons_comp : core.
+#[global] Hint Rewrite rdrop_sound : reval qeval.
 
 Lemma rdrop_nf k r : 
   qnorm k -> rnorm r -> rnorm (rdrop k r).
-Proof with triv.
-intros H1 H2. funelim (rdrop k r)...
+Proof.
+intros H1 H2. funelim (rdrop k r) ; triv.
 - rewrite rnorm_shift in *. now apply qplus_nf.
 - apply H.
   + rewrite rnorm_shift_l in H2. now apply qplus_nf.
   + now rewrite rnorm_shift_l in H2.
-- exfalso... 
-- exfalso...
 - rewrite rnorm_mvar_l in H2. destruct H2 as [H2 H3]. 
-  apply do_shift_nf1... now rewrite rnorm_mvar_l.
-- apply do_shift_nf1...
-  + intros (k' & r' & H') ; inv H'.
-  + intros (k' & r' & H') ; inv H'.
+  apply do_shift_nf ; triv.
+  + now rewrite rnorm_mvar_l.
+  + intros H. rewrite rnorm_shift_l. split6 ; triv.
+    * rewrite rnorm_mvar_l ; triv.
+    * intros [H4 (? & ? & H5)]. inv H5.
+- apply do_shift_nf ; triv. intros H3. rewrite rnorm_shift_l. split6 ; triv. 
+  intros [_ (k' & r' & H')] ; inv H'.
 - rewrite qnorm_succ in H1. rewrite rnorm_cons in H2. now apply H.
-- apply do_shift_nf2...
-  + intros (k' & H') ; inv H'.
-  + eexists ; eauto.
-- apply do_shift_nf2...
-  + intros (k' & H') ; inv H'.
-  + eexists. eauto.
-- apply do_shift_nf2...
-  + intros (k' & H') ; inv H'.
-  + eexists. eauto.
+- apply do_shift_nf ; triv. intros _. rewrite rnorm_shift_l. split6 ; triv.
+  intros [? _] ; triv.
+- apply do_shift_nf ; triv. intros _. rewrite rnorm_shift_l. split6 ; triv.
+  intros [? _] ; triv.
+- apply do_shift_nf ; triv. intros _. rewrite rnorm_shift_l. split6 ; triv.
+  intros [? _] ; triv.
 Qed.
 
-(** We define by mutual well founded induction:
-    - composition of normal form renamings. 
-    - application of a normal form renaming to a normal form quoted nat. 
+(** Apply a normal form renaming to a normal form quoted natural. *)
+Equations rapply (r : ren) (i : qnat) : qnat by struct r := 
+rapply (R_shift k) i := qplus k i ;
+rapply (R_mvar m) r := Q_ren (R_mvar m) r ;
+rapply (R_cons i1 r) i with i => {
+  | Q_zero := i1
+  | Q_succ i' := rapply r i'
+  | _ := Q_ren (R_cons i1 r) i } ;
+rapply (R_comp r1 r2) i with r1 => {
+  | R_shift k := rapply r2 (qplus k i) ;
+  | R_mvar m := rapply r2 (Q_ren (R_mvar m) i)
+  | _ => (* This should not happen. *) Q_ren (R_comp r1 r2) i }.
 
-    Since [Equations] does not support mutual well founded recursion, 
-    we encode it using non-mutual well founded recursion.
-*)
+Lemma rapply_sound e r i : 
+  qeval e (rapply r i) = reval e r (qeval e i).
+Proof.
+funelim (rapply r i) ; simp qeval ; triv.
+rewrite H. simp qeval. reflexivity.
+Qed.
+#[global] Hint Rewrite rapply_sound : qeval.
 
+Lemma rapply_nf r i : 
+  rnorm r -> qnorm i -> qnorm (rapply r i).
+Proof. 
+intros H1 H2. funelim (rapply r i) ; triv.
+- rewrite rnorm_shift in H1. now apply qplus_nf.
+- now rewrite qnorm_ren_mvar.
+- now rewrite rnorm_cons in H1.
+- rewrite rnorm_cons in H1. rewrite qnorm_succ in H2. now apply H.
+- rewrite qnorm_ren_cons. rewrite rnorm_cons in H1. split5 ; triv.
+- rewrite qnorm_ren_cons. rewrite rnorm_cons in H1. split5 ; triv.
+- rewrite qnorm_ren_cons. rewrite rnorm_cons in H1. split5 ; triv.
+- rewrite rnorm_shift_l in H1. apply H ; triv. now apply qplus_nf.
+- rewrite rnorm_mvar_l in H1. apply H ; triv. now rewrite qnorm_ren_mvar.
+Qed.   
 
-Ltac unfold_all :=
-  repeat match goal with 
-  | [ x := _ |- _ ] => unfold x in * ; clear x
-  end.
-
-(** Helper function for [rcomp]. *)
+(** Helper function for [rcomp] which takes care of 
+    removing [rid] in the right hand side.*)
 Equations rcomp_aux : ren -> ren -> ren :=
 rcomp_aux r rid := r ;
 rcomp_aux r1 r2 := R_comp r1 r2. 
+
+Lemma rcomp_aux_sound e r1 r2 : 
+  reval e (rcomp_aux r1 r2) =₁ O.rcomp (reval e r1) (reval e r2).
+Proof. funelim (rcomp_aux r1 r2) ; simp qeval ; triv. Qed.
+#[global] Hint Rewrite rcomp_aux_sound : qeval reval. 
 
 Lemma rcomp_aux_nf r1 r2 :
   rnorm r1 -> rnorm r2 -> (r2 <> rid -> rnorm (R_comp r1 r2)) -> rnorm (rcomp_aux r1 r2).
@@ -661,107 +719,96 @@ intros H1 H2 H3. funelim (rcomp_aux r1 r2) ; triv.
 all: apply H3 ; intros H ; inv H.
 Qed.  
 
-Inductive proto : Type -> Type -> Type -> Set := 
-| proto_rapply : proto ren qnat qnat 
-| proto_rcomp : proto ren ren ren.
+(** Compose two normal form renamings. *)
+Equations rcomp (r1 r2 : ren) : ren by struct r1 :=
+rcomp (R_shift k) r := rdrop k r ;
+rcomp (R_cons i r1) r2 := R_cons (rapply r2 i) (rcomp r1 r2) ;
+rcomp (R_comp r1 r2) r3 with r1 => {
+  | R_mvar m => rcomp_aux (R_mvar m) (rcomp r2 r3) ;
+  | R_shift k => rdrop k (rcomp r2 r3) 
+  | _ => (* This should not happen. *) R_comp (R_comp r1 r2) r3 } ;
+rcomp (R_mvar m) r := rcomp_aux (R_mvar m) r.
 
-Equations psize {A B C} : proto A B C -> A -> B -> nat :=
-psize proto_rapply r i := rsize r + qsize i ;
-psize proto_rcomp r1 r2 := rsize r1 + rsize r2.
-
-Equations? rapply_rcomp {A B C} (p : proto A B C) (x : A) (y : B) : C by wf (psize p x y) lt := 
-rapply_rcomp proto_rapply (R_shift k) i := qplus k i ;
-rapply_rcomp proto_rapply (R_cons i1 r) i with i => {
-  | Q_zero => i1
-  | Q_succ i' => rapply_rcomp proto_rapply r i'
-  | Q_ren r' i' => Q_ren (rapply_rcomp proto_rcomp r' (R_cons i1 r)) i'
-  | i' => Q_ren (R_cons i1 r) i' } ;
-rapply_rcomp proto_rapply (R_comp (R_shift k) r) i :=
-  rapply_rcomp proto_rapply r (qplus k i) ;
-rapply_rcomp proto_rapply r i with i => {
-  | Q_ren r' i' => Q_ren (rapply_rcomp proto_rcomp r' r) i'
-  | i' => Q_ren r i' } ;
-  
-rapply_rcomp proto_rcomp (R_shift k) r := rdrop k r ;
-rapply_rcomp proto_rcomp (R_cons i r1) r2 := 
-  R_cons (rapply_rcomp proto_rapply r2 i) (rapply_rcomp proto_rcomp r1 r2) ;
-rapply_rcomp proto_rcomp (R_comp (R_mvar m) r1) r2 := 
-  rcomp_aux (R_mvar m) (rapply_rcomp proto_rcomp r1 r2) ;
-rapply_rcomp proto_rcomp (R_comp (R_shift k) r1) r2 := 
-  rdrop k (rapply_rcomp proto_rcomp r1 r2) ;
-rapply_rcomp proto_rcomp r1 r2 := rcomp_aux r1 r2.
-
+Lemma rcomp_sound e r1 r2 : 
+  reval e (rcomp r1 r2) =₁ O.rcomp (reval e r1) (reval e r2).
 Proof.
-all: unfold_all ; simp qsize psize ; try lia.
-generalize (qsize_qplus k i). lia.
+funelim (rcomp r1 r2) ; simp reval qeval ; triv.
+- rewrite H. now rewrite O.rcomp_rcons_distrib.
+- rewrite H. now rewrite O.rcomp_assoc.
+- rewrite H. now rewrite O.rcomp_assoc.
+Qed.  
+#[global] Hint Rewrite rcomp_sound : reval qeval.
+
+Lemma rcomp_nf r1 r2 : 
+  rnorm r1 -> rnorm r2 -> rnorm (rcomp r1 r2).
+Proof.
+intros H1 H2. funelim (rcomp r1 r2) ; triv.
+- rewrite rnorm_shift in H1. now apply rdrop_nf.
+- rewrite rnorm_cons in * ; split.
+  + now apply rapply_nf.
+  + now apply H.
+- apply rcomp_aux_nf ; triv. intros H. now rewrite rnorm_mvar_l.
+- rewrite rnorm_shift_l in H1. apply rdrop_nf ; triv. now apply H.
+- rewrite rnorm_mvar_l in H1. apply rcomp_aux_nf ; triv.  
+  + now apply H.
+  + intros H3. rewrite rnorm_mvar_l. split ; triv. apply H ; triv.
 Qed.
 
-Lemma qnorm_ren_mvar m i : 
-  qnorm (Q_ren (R_mvar m) i) <-> qnorm i /\ ~is_qren i.
-Proof.
-split.
-- intros H. split ; intros H' ; apply H ; clear H.
-  + apply QR_ren ; triv.
-  + destruct H' as (? & ? & ->). now constructor.
-- intros (H1 & H2) H3. inv H3.
-  + destruct H0 ; triv.
-  + apply H2. eexists ; eauto.
-Qed.     
+(** Normalize a quoted natural. *)
+Equations qnormalize : qnat -> qnat :=
+qnormalize Q_zero := Q_zero ;
+qnormalize (Q_succ i) := Q_succ (qnormalize i) ;
+qnormalize (Q_plus x y) := qplus (qnormalize x) (qnormalize y) ;
+qnormalize (Q_ren r i) := rapply (rnormalize r) (qnormalize i) ;
+qnormalize (Q_mvar m) := Q_mvar m 
 
-Lemma qnorm_ren r i : 
-  qnorm (Q_ren r i) <-> 
-    rnorm r /\ qnorm i /\ ~is_rshift r /\ ~is_qren i /\
-    (is_rcons r -> i <> Q_zero /\ ~is_qsucc i).
+(** Normalize a renaming. *)
+with rnormalize : ren -> ren :=
+rnormalize (R_shift k) := R_shift (qnormalize k) ;
+rnormalize (R_cons i r) := R_cons (qnormalize i) (rnormalize r) ;
+rnormalize (R_comp r1 r2) := rcomp (rnormalize r1) (rnormalize r2) ;
+rnormalize (R_mvar m) := R_mvar m.
+
+Lemma qrnormalize_sound_aux e :
+  (forall i, qeval e (qnormalize i) = qeval e i) *
+  (forall r, reval e (rnormalize r) =₁ reval e r).
+Proof. 
+apply qnormalize_elim with 
+  (P := fun i res => qeval e res = qeval e i)
+  (P0 := fun r res => reval e res =₁ reval e r).
+all: intros ; simp qeval reval ; triv.
+- now rewrite H, H0.
+- now rewrite H.
+- now rewrite H, H0.
+- now rewrite H, H0.
+Qed.    
+
+Lemma qnormalize_sound e i : qeval e (qnormalize i) = qeval e i.
+Proof. now apply qrnormalize_sound_aux. Qed.
+#[global] Hint Rewrite qnormalize_sound : qeval.
+
+Lemma rnormalize_sound e r : reval e (rnormalize r) =₁ reval e r.
+Proof. now apply qrnormalize_sound_aux. Qed.
+#[global] Hint Rewrite rnormalize_sound : qeval reval.
+
+Lemma qrnormalize_nf_aux : 
+  (forall i, qnorm (qnormalize i)) * (forall r, rnorm (rnormalize r)).
 Proof.
-split.
-- intros H. split5.
-  + intros H' ; apply H ; clear H. apply QR_ren. now left.
-  + intros H' ; apply H ; clear H. apply QR_ren. now right.
-  + intros H' ; apply H ; clear H. destruct H' as (k & ->). now constructor.
-  + intros H' ; apply H ; clear H. destruct H' as (? & ? & ->). now constructor.
-  + intros (? & ? & ->). split ; intros H'' ; apply H ; clear H.
-    * subst. now constructor.
-    * destruct H'' as (? & H''). subst. now constructor.      
-- intros (H1 & H2 & H3 & H4 & H5) H. inv H.
-  + destruct H6 ; triv.
-  + apply H4. eexists ; eauto.
-  + apply H3. eexists ; eauto.
-  + enough (Q_zero <> Q_zero) by auto. apply H5. eexists ; eauto.
-  + enough (~is_qsucc (Q_succ k)).
-    { apply H0. eexists ; eauto. }
-    apply H5. eexists ; eauto.
+apply qnormalize_elim with (P := fun _ res => qnorm res) (P0 := fun _ res => rnorm res).
+all: intros ; triv.
+- now rewrite qnorm_succ.
+- now apply qplus_nf.
+- now apply rapply_nf.
+- now rewrite rnorm_shift.
+- now rewrite rnorm_cons.
+- now apply rcomp_nf.
 Qed.
 
-Lemma rapply_rcomp_nf : forall A B C (p : proto A B C) (x : A) (y : B),
-  (fun A B C (p : proto A B C) =>
-    match p in proto A0 B0 C0 return A0 -> B0 -> C0 -> Prop with 
-    | proto_rapply => fun r i res => rnorm r -> qnorm i -> qnorm res
-    | proto_rcomp => fun r1 r2 res => rnorm r1 -> rnorm r2 -> rnorm res
-    end) A B C p x y (rapply_rcomp p x 
-    y).
-Proof.
-apply rapply_rcomp_elim.
-- intros k i H1 H2. rewrite rnorm_shift in H1. now apply qplus_nf.
-- intros k r i H1 H2 H3. rewrite rnorm_shift_l in H2. apply H1 ; triv.
-  now apply qplus_nf.
-- intros k r H1 H2. rewrite rnorm_shift in H1. now apply rdrop_nf.
-- intros i r1 r2 H1 H2 H3 H4. rewrite rnorm_cons in *. split.
-  + now apply H1. 
-  + now apply H2. 
-- intros k r1 r2 H1 H2 H3. rewrite rnorm_shift_l in H2. 
-  apply rdrop_nf ; triv. now apply H1.
-- intros i r1 r2 r3 H1 H2. exfalso. apply H1. now constructor.
-- intros r0 r1 r2 r3 H1 H2. exfalso. apply H1. now constructor.       
-- intros m r1 r2 H1 H2 H3. rewrite rnorm_mvar_l in H2. apply rcomp_aux_nf ; triv.
-  + now apply H1.
-  + intros H. rewrite rnorm_mvar_l. split ; triv. now apply H1.
-- intros m r H1 H2. apply rcomp_aux_nf ; triv. now rewrite rnorm_mvar_l.
-- intros i r i' -> H _. now rewrite rnorm_cons in H.
-- intros i1 r i2 i3 H1 -> H2 H3. rewrite rnorm_cons in H2.
-  rewrite qnorm_succ in H3. now apply H1.
-- intros i1 r ? i2 i3 -> H1 H2. intros H. inv H. now destruct H3.
-- intros i1 r ? r' i' H1 -> H2 H3. rewrite qnorm_ren in *.
-   
+Lemma qnormalize_nf i : qnorm (qnormalize i).
+Proof. now apply qrnormalize_nf_aux. Qed.
+
+Lemma rnormalize_nf r : rnorm (rnormalize r).
+Proof. now apply qrnormalize_nf_aux. Qed.
 
 End Make.
 
@@ -820,7 +867,7 @@ Ltac2 test_tac () : unit :=
     printf "TERM ENV %t" e3 ;
     printf "SUBST ENV %t" e4 ;
     change 
-      (eval_expr
+      (eeval
         (fun idx => List.nth idx $e1 0) 
         (fun idx => List.nth idx $e2 O.rid) 
         (fun idx => List.nth idx $e3 (O.E_var 0))
@@ -833,471 +880,7 @@ Lemma test : left = right.
 Proof.
 unfold left, right.
 ltac2:(test_tac ()).
-cbv [eval_qnat eval_qnat_functional eval_ren_functional 
-     eval_expr eval_expr_functional nth].
+cbv [qeval qeval_functional reval_functional 
+     eeval eeval_functional nth].
 Admitted.
   
-(*********************************************************************************)
-(** *** Simplification. *)
-(*********************************************************************************)
-
-(** Apply a renaming to a quoted natural. *)
-Equations rapply : ren -> qnat -> qnat :=
-rapply (R_shift k) i := qplus k i ;
-rapply (R_cons k _) Q_zero := k ;
-rapply (R_cons _ r) (Q_succ i) := rapply r i ;
-rapply (R_comp r1 r2) i := rapply r2 (rapply r1 i) ;
-rapply r i := Q_mvar (eval_ren r (eval_qnat i)).
-
-Lemma rapply_sound r i : 
-  eval_qnat (rapply r i) = eval_ren r (eval_qnat i).
-Proof. 
-funelim (rapply r i) ; simp eval_qnat eval_ren ; try solve [ auto ].
-rewrite H0, H. reflexivity.
-Qed.
-#[global] Hint Rewrite rapply_sound : eval_qnat.
-
-(** Tail of a renaming. *)
-Equations rtail : ren -> ren := 
-rtail (R_shift k) := R_shift (Q_succ k) ;
-rtail (R_cons _ r) := r ;
-rtail (R_comp (R_shift k) r) := R_comp (R_shift (Q_succ k)) r ;
-rtail r := R_comp (R_shift Q_one) r.
-
-Lemma rtail_sound r : 
-  eval_ren (rtail r) =₁ O.rcomp (O.rshift 1) (eval_ren r).
-Proof. 
-funelim (rtail r) ; simp eval_ren eval_qnat ; try easy.
-- now rewrite O.rshift_succ_l.
-- repeat rewrite <-O.rcomp_assoc. now rewrite O.rshift_succ_l.
-Qed. 
-#[global] Hint Rewrite rtail_sound : eval_ren.    
-
-(** Drop the first [k] elements in a renaming. *)
-Equations rdrop : qnat -> ren -> ren :=
-rdrop Q_zero r := r ;
-rdrop (Q_succ k) r := rtail (rdrop k r) ;
-rdrop (Q_mvar k) r := R_comp (R_shift (Q_mvar k)) r.
-
-Lemma rdrop_sound k r : 
-  eval_ren (rdrop k r) =₁ O.rcomp (O.rshift (eval_qnat k)) (eval_ren r).
-Proof.
-funelim (rdrop k r) ; simp eval_ren eval_qnat ; try easy.
-rewrite H. now rewrite <-O.rcomp_assoc, O.rshift_succ_l.
-Qed.  
-#[global] Hint Rewrite rdrop_sound : eval_ren.    
-    
-(** Compose two renamings. *)
-Equations rcomp : ren -> ren -> ren :=
-rcomp (R_shift k) r := rdrop k r ;
-rcomp (R_cons i r1) r2 := R_cons (rapply r2 i) (rcomp r1 r2) ;
-rcomp (R_comp r1 r2) r3 := R_comp r1 (rcomp r2 r3) ;
-rcomp r1 r2 := R_comp r1 r2.
-
-Lemma rcomp_sound r1 r2 : 
-  eval_ren (rcomp r1 r2) =₁ O.rcomp (eval_ren r1) (eval_ren r2).
-Proof.
-funelim (rcomp r1 r2) ; simp eval_ren eval_qnat ; try easy.
-- now rewrite O.rcomp_rcons_distrib, H.
-- rewrite H. now repeat rewrite O.rcomp_assoc.
-Qed.
-#[global] Hint Rewrite rcomp_sound : eval_ren.    
-
-(** Apply a normal form substitution to a de Bruijn index. *)
-Equations sapply : subst -> qnat -> term :=
-sapply (S_shift k) i := E_tvar (qplus k i) ;
-sapply (S_cons t _) Q_zero := t ;
-sapply (S_cons _ s) (Q_succ i) := sapply s i ;
-sapply (S_comp (S_shift k) s) i := sapply s (qplus k i) ;
-sapply (S_comp (S_ren r) s) i := sapply s (rapply r i) ;
-sapply (S_ren r) i := E_tvar (rapply r i) ;
-sapply s i := E_subst (E_tvar i) s.  
-
-Lemma sapply_sound s i : 
-  eval_expr (sapply s i) = eval_subst s (eval_qnat i).
-Proof. funelim (sapply s i) ; simp eval_expr eval_qnat in * ;  easy. Qed.
-    
-(** Lift a renaming through a binder. *)
-Equations rup : ren -> ren :=
-rup r := R_cons Q_zero (rcomp r (R_shift Q_one)).
-
-Lemma rup_sound r : eval_ren (rup r) =₁ O.up_ren (eval_ren r).
-Proof. simp rup eval_ren. reflexivity. Qed.
-
-(** Instantiate an expressions with a renaming. *)
-Equations rinst {k} : nf_expr k -> nf_ren -> nf_expr k :=
-rinst (E_tvar i) r := E_tvar (rapply r i) ;
-rinst (E_tctor c al) r := E_tctor c (rinst al r) ;
-rinst E_al_nil _ := E_al_nil ;
-rinst (E_al_cons a al) r := E_al_cons (rinst a r) (rinst al r) ;
-rinst (E_abase b x) _ := E_abase b x ;
-rinst (E_aterm t) r := E_aterm (rinst t r) ;
-rinst (E_abind a) r := E_abind (rinst a (rup r)) ;
-
-rinst (E_ren t r1) r2 := E_ren t (rcomp r1 r2) ;
-rinst (E_subst t s) r := E_subst t (srcomp s r)
-
-rinst t r := E_ren t r
-
-(*rinst (E_ren_mvar x r1) r2 := E_ren_mvar x (rcomp r1 r2) ;
-rinst (E_subst_mvar x s) r := E_subst_mvar (srcomp s r) ;
-rinst (E_subst_var i s) r := apply_subst (srcomp s r) i *)
-
-(** Compose a substitution with a renaming. *)
-with srcomp : nf_subst -> nf_ren -> nf_subst :=
-srcomp (N_sshift k) r := N_sren (rdrop k r) ;
-srcomp (N_scons t s) r := N_scons (rinst t r) (srcomp s r) ;
-srcomp (N_scomp k xs s) r := N_scomp k xs (srcomp s r) ; 
-srcomp (N_sren r1) r2 := N_sren (rcomp r1 r2).
-
-
-
-
-
-
-(*********************************************************************************)
-(** *** Normal forms. *)
-(*********************************************************************************)
-
-(** The goal of normal forms is not to precisely capture the structure
-    of simplified terms/substitutions: rather, they add some structure 
-    above plain terms/substitutions, while still remaining simple to work with.
-    
-    In particular, normal forms are not unique, and all functions 
-    [term -> nf_term] are not equivalent. *)
-
-(** Normal form renamings: the left hand side of a composition
-    can't be a cons or a composition. *)
-Inductive nf_ren : Type :=
-(** [NR_shift k] represents [R_shift k]. *)
-| NR_shift : qnat -> nf_ren
-(** [NR_cons i r] represents [R_cons i r]. *)
-| NR_cons : qnat -> nf_ren -> nf_ren 
-(** [NR_comp_shift k r] represents [R_comp (R_shift k) r]. *)
-| NR_comp_shift : qnat -> nf_ren -> nf_ren 
-(** [NR_comp_mvar x r] represents [R_comp (R_mvar x) r]. *)
-| NR_comp_mvar : O.ren -> nf_ren -> nf_ren 
-(** [NR_mvar x] represents [R_mvar x]. *)
-| NR_mvar : O.ren -> nf_ren.
-
-Reserved Notation "'nf_term'" (at level 0).
-Reserved Notation "'nf_arg' ty" (at level 0, ty at level 0).
-Reserved Notation "'nf_args' tys" (at level 0, tys at level 0).
-
-(** Normal form expression: the hand side of an instantiation
-    (renaming/substitution) can only be a meta-variable or a de Bruijn index. *)
-Inductive nf_expr : kind -> Type :=
-| NE_tvar : qnat -> nf_term
-| NE_tctor : forall c, nf_args (ctor_type S.t c) -> nf_term
-| NE_al_nil : nf_args []
-| NE_al_cons {ty tys} : nf_arg ty -> nf_args tys -> nf_args (ty :: tys)
-| NE_abase : forall b, denote_base S.t b -> nf_arg (AT_base b)
-| NE_aterm : nf_term -> nf_arg AT_term
-| NE_abind {ty} : nf_arg ty -> nf_arg (AT_bind ty)
-| NE_mvar {k} : mvar k -> nf_expr k
-(** Renaming/substitution blocked on a metavariable. *)
-| NE_ren_mvar {k} : mvar k -> nf_ren -> nf_expr k
-| NE_subst_mvar {k} : mvar k -> nf_subst -> nf_expr k
-(** Renaming/susbtitution blocked on a variable. *)
-(*| NE_ren_var : qnat -> nf_ren -> nf_term*)
-| NE_subst_var : qnat -> nf_subst -> nf_term
-
-(** Normal form substitutions: the left hand side of a composition
-    can't be a cons or a composition. *)
-with nf_subst : Type :=
-| NS_shift : qnat -> nf_subst 
-| NS_cons : nf_term -> nf_subst -> nf_subst 
-| NS_comp_shift : qnat -> nf_subst -> nf_subst 
-| NS_comp_ren : nf_ren -> nf_subst -> nf_subst 
-| NS_comp_mvar : O.subst -> nf_subst -> nf_subst 
-| NS_ren : nf_ren -> nf_subst
-| NS_mvar : O.subst -> nf_subst
-
-where "'nf_term'" := (nf_expr Kt)
-  and "'nf_arg' ty" := (nf_expr (Ka ty))
-  and "'nf_args' tys" := (nf_expr (Kal tys)).
-
-Equations eval_nf_ren : nf_ren -> O.ren :=
-eval_nf_ren (NR_shift k) := O.rshift (eval_qnat k) ;
-eval_nf_ren (NR_cons i r) := O.rcons (eval_qnat i) (eval_nf_ren r) ;
-eval_nf_ren (NR_comp_shift k r) := O.rcomp (O.rshift (eval_qnat k)) (eval_nf_ren r) ;
-eval_nf_ren (NR_comp_mvar x r) := O.rcomp x (eval_nf_ren r) ;
-eval_nf_ren (NR_mvar x) := x.
-
-Equations eval_nf_expr {k} : nf_expr k -> O.expr (eval_kind k) :=
-eval_nf_expr (NE_tvar i) := O.E_var (eval_qnat i) ;
-eval_nf_expr (NE_tctor c al) := O.E_ctor c (eval_nf_expr al) ;
-eval_nf_expr NE_al_nil := O.E_al_nil ;
-eval_nf_expr (NE_al_cons a al) := O.E_al_cons (eval_nf_expr a) (eval_nf_expr al) ;
-eval_nf_expr (NE_abase b x) := O.E_abase b x ;
-eval_nf_expr (NE_aterm t) := O.E_aterm (eval_nf_expr t) ;
-eval_nf_expr (NE_abind a) := O.E_abind (eval_nf_expr a) ;
-eval_nf_expr (NE_mvar x) := x ;
-eval_nf_expr (NE_ren_mvar x r) := O.rename x (eval_nf_ren r) ;
-eval_nf_expr (NE_subst_mvar x s) := O.substitute x (eval_nf_subst s) ;
-(*eval_nf_expr (NE_ren_var i r) := O.E_var (eval_nf_ren r (eval_qnat i)) ;*)
-eval_nf_expr (NE_subst_var i s) := eval_nf_subst s (eval_qnat i) 
-
-with eval_nf_subst : nf_subst -> O.subst :=
-eval_nf_subst (NS_shift k) := O.sshift (eval_qnat k) ;
-eval_nf_subst (NS_cons t s) := O.scons (eval_nf_expr t) (eval_nf_subst s) ;
-eval_nf_subst (NS_comp_shift k s) := O.scomp (O.sshift (eval_qnat k)) (eval_nf_subst s) ;
-eval_nf_subst (NS_comp_ren r s) := O.rscomp (eval_nf_ren r) (eval_nf_subst s) ;
-eval_nf_subst (NS_comp_mvar xs s) := O.scomp xs (eval_nf_subst s) ;
-eval_nf_subst (NS_ren r) := O.rscomp (eval_nf_ren r) O.E_var ;
-eval_nf_subst (NS_mvar xs) := xs.
-
-(*********************************************************************************)
-(** *** Simplification. *)
-(*********************************************************************************)
-
-(** Apply a normal form renaming to a quoted natural. *)
-Equations rapply : nf_ren -> qnat -> qnat :=
-rapply (NR_shift k) i := qplus k i ;
-rapply (NR_cons k _) Q_zero := k ;
-rapply (NR_cons _ r) (Q_succ i) := rapply r i ;
-rapply (NR_comp_shift k r) i := rapply r (qplus k i) ;
-rapply (NR_comp_mvar x r) i := rapply r (Q_mvar (x (eval_qnat i))) ;
-rapply r i := Q_mvar (eval_nf_ren r (eval_qnat i)).
-
-Lemma rapply_sound r i : 
-  eval_qnat (rapply r i) = eval_nf_ren r (eval_qnat i).
-Proof. 
-funelim (rapply r i) ; simp eval_qnat eval_nf_ren ; try solve [ auto ].
-rewrite H. simp eval_qnat. reflexivity.
-Qed.
-#[global] Hint Rewrite rapply_sound : eval_qnat.
-
-(** Tail of a normal form renaming. *)
-Equations rtail : nf_ren -> nf_ren := 
-rtail (NR_shift k) := NR_shift (Q_succ k) ;
-rtail (NR_cons _ r) := r ;
-rtail (NR_comp_shift k r) := NR_comp_shift (Q_succ k) r ;
-rtail r := NR_comp_shift Q_one r.
-
-Lemma rtail_sound r : 
-  eval_nf_ren (rtail r) =₁ O.rcomp (O.rshift 1) (eval_nf_ren r).
-Proof. 
-funelim (rtail r) ; simp eval_nf_ren eval_qnat ; try easy.
-- now rewrite O.rshift_succ_l.
-- repeat rewrite <-O.rcomp_assoc. now rewrite O.rshift_succ_l.
-Qed. 
-#[global] Hint Rewrite rtail_sound : eval_nf_ren.    
-
-(** Drop the first [k] elements in a normal form renaming. *)
-Equations rdrop : qnat -> nf_ren -> nf_ren :=
-rdrop Q_zero r := r ;
-rdrop (Q_succ k) r := rtail (rdrop k r) ;
-rdrop (Q_mvar k) r := NR_comp_shift (Q_mvar k) r.
-
-Lemma rdrop_sound k r : 
-  eval_nf_ren (rdrop k r) =₁ O.rcomp (O.rshift (eval_qnat k)) (eval_nf_ren r).
-Proof.
-funelim (rdrop k r) ; simp eval_nf_ren eval_qnat ; try easy.
-rewrite H. now rewrite <-O.rcomp_assoc, O.rshift_succ_l.
-Qed.  
-#[global] Hint Rewrite rdrop_sound : eval_nf_ren.    
-    
-(** Compose two normal form renamings. *)
-Equations rcomp : nf_ren -> nf_ren -> nf_ren :=
-rcomp (NR_shift k) r := rdrop k r ;
-rcomp (NR_cons i r1) r2 := NR_cons (rapply r2 i) (rcomp r1 r2) ;
-rcomp (NR_comp_shift k r1) r2 := NR_comp_shift k (rcomp r1 r2) ;
-rcomp (NR_comp_mvar xr r1) r2 := NR_comp_mvar xr (rcomp r1 r2) ;
-rcomp (NR_mvar xr) r := NR_comp_mvar xr r.
-
-Lemma rcomp_sound r1 r2 : 
-  eval_nf_ren (rcomp r1 r2) =₁ O.rcomp (eval_nf_ren r1) (eval_nf_ren r2).
-Proof.
-funelim (rcomp r1 r2) ; simp eval_nf_ren eval_qnat ; try easy.
-- now rewrite O.rcomp_rcons_distrib, H.
-- rewrite H. now repeat rewrite O.rcomp_assoc.
-- rewrite H. now rewrite O.rcomp_assoc. 
-Qed.
-#[global] Hint Rewrite rcomp_sound : eval_nf_ren.    
-
-(** Apply a normal form substitution to a de Bruijn index. *)
-Equations sapply : nf_subst -> qnat -> nf_term :=
-sapply (NS_shift k) i := NE_tvar (qplus k i) ;
-sapply (NS_cons t _) Q_zero := t ;
-sapply (NS_cons _ s) (Q_succ i) := sapply s i ;
-sapply (NS_comp_shift k s) i := sapply s (qplus k i) ;
-sapply (NS_comp_mvar xs s) i := sapply s (NE_subst_var i (NS_mvar xs)) ;
-sapply (NS_comp_ren r s) i := sapply s (rapply r i) ;
-sapply (NS_ren r) i := NE_tvar (rapply r i) ;
-sapply s i := NE_subst_var i s.  
-
-Lemma sapply_sound s i : eval_nf (sapply s i) = eval_nf s i.
-Proof. 
-funelim (sapply s i) ; simp eval_nf ; try reflexivity.
-- now rewrite H.
-- now rewrite rapply_sound.
-Qed.    
-
-(** Lift a normal form renaming through a binder. *)
-Equations rup : nf_ren -> nf_ren :=
-rup r := NR_cons Q_zero (rcomp r (NR_shift Q_one)).
-
-Lemma rup_sound r : eval_nf_ren (rup r) =₁ O.up_ren (eval_nf_ren r).
-Proof. simp rup eval_nf_ren. reflexivity. Qed.
-
-(** Instantiate a normal form expressions with a normal form renaming. *)
-Equations rinst {k} : nf_expr k -> nf_ren -> nf_expr k :=
-rinst (NE_tvar i) r := NE_tvar (rapply r i) ;
-rinst (NE_tctor c al) r := NE_tctor c (rinst al r) ;
-rinst NE_al_nil _ := NE_al_nil ;
-rinst (NE_al_cons a al) r := NE_al_cons (rinst a r) (rinst al r) ;
-rinst (NE_abase b x) _ := NE_abase b x ;
-rinst (NE_aterm t) r := NE_aterm (rinst t r) ;
-rinst (NE_abind a) r := NE_abind (rinst a (rup r)) ;
-rinst (NE_mvar x) r := NE_ren_mvar x r ;
-rinst (NE_ren_mvar x r1) r2 := NE_ren_mvar x (rcomp r1 r2) ;
-rinst (NE_subst_mvar x s) r := NE_subst_mvar (srcomp s r) ;
-rinst (NE_subst_var i s) r := apply_subst (srcomp s r) i 
-
-(** Compose a normal form substitution with a normal form renaming. *)
-with srcomp : nf_subst -> nf_ren -> nf_subst :=
-srcomp (N_sshift k) r := N_sren (rdrop k r) ;
-srcomp (N_scons t s) r := N_scons (rinst t r) (srcomp s r) ;
-srcomp (N_scomp k xs s) r := N_scomp k xs (srcomp s r) ; 
-srcomp (N_sren r1) r2 := N_sren (rcomp r1 r2).
-
-Lemma rinst_srcomp_sound_aux : 
-  (forall k (t : nf_expr (K1 k)) r, 
-    eval_nf (rinst t r) = O.rename (eval_nf t) (eval_nf r)) *
-  (forall s r, 
-    eval_nf (srcomp s r) =₁ fun i => O.rename (eval_nf s i) (eval_nf r)).
-Proof.
-apply rinst_elim with 
-  (P := fun k (t : nf_expr (K1 k)) (r : nf_ren) (res : nf_expr (K1 k))  => 
-    eval_nf res = O.rename (eval_nf t) (eval_nf r))
-  (P0 := fun (s : nf_subst) (r : nf_ren) (res : nf_subst) =>
-    eval_nf res =₁ fun i => O.rename (eval_nf s i) (eval_nf r)).
-all: try (intros ; now simp eval_nf).
-- intros c al r H. simp eval_nf. rewrite H. now simp rename.
-- intros ty tys a al r H1 H2. simp eval_nf rename. now rewrite H1, H2.
-- intros t r H. simp eval_nf rename. now rewrite H.
-- intros ty a r H. simp eval_nf rename. now rewrite H, rup_sound.
-- intros k xt r1 r2. destruct k ; simp eval_nf ; now rewrite O.ren_ren.
-- intros k xt s r H. destruct k ; simp eval_nf ; now rewrite H, O.subst_ren.
-- intros i xs s r H. simp eval_nf substitute. cbv [O.scomp]. 
-  now rewrite H, O.subst_ren.
-- intros k r. simp eval_nf. intros i. rewrite rdrop_sound. reflexivity.
-- intros t s r H1 H2. simp eval_nf. rewrite H1, H2. intros [|i] ; reflexivity.
-- intros k xs s r H. simp eval_nf. rewrite H. intros i. cbv [O.scomp O.sshift].
-  simp substitute. now rewrite O.subst_ren.
-- intros r1 r2. simp eval_nf. intros i. simp rename. now rewrite rcomp_sound.
-Qed.
-
-Lemma rinst_sound k (t : nf_expr (K1 k)) r :   
-  eval_nf (rinst t r) = O.rename (eval_nf t) (eval_nf r).
-Proof. now apply rinst_srcomp_sound_aux. Qed.
-
-Lemma srcomp_sound s r :
-  eval_nf (srcomp s r) =₁ fun i => O.rename (eval_nf s i) (eval_nf r).
-Proof. now apply rinst_srcomp_sound_aux. Qed.
-
-(** Tail of a normal form substitution. *)
-Equations stail : nf_subst -> nf_subst :=
-stail (N_sshift k) := N_sshift (S k) ;
-stail (N_scons t s) := s ;
-stail (N_scomp k xs s) := N_scomp (S k) xs s ;
-stail (N_sren r) := N_sren (rtail r).
-
-Lemma stail_sound s : eval_nf (stail s) =₁ O.scomp (O.sshift 1) (eval_nf s).
-Proof. 
-funelim (stail s) ; simp eval_nf.
-- now rewrite O.sshift_succ_l.
-- now rewrite O.sshift_scons.
-- repeat rewrite <-O.scomp_assoc. now rewrite O.sshift_succ_l.
-- intros i. now rewrite rtail_sound.
-Qed.
-
-(** Drop the first [k] elements in a normal form substitution. *)
-Equations sdrop : nat -> nf_subst -> nf_subst :=
-sdrop 0 s := s ;
-sdrop (S k) s := stail (sdrop k s).
-
-Lemma sdrop_sound k s : eval_nf (sdrop k s) =₁ O.scomp (O.sshift k) (eval_nf s).
-Proof.
-funelim (sdrop k s) ; simp eval_nf.
-- now rewrite O.scomp_sid_l.
-- rewrite stail_sound, H. now rewrite <-O.scomp_assoc, O.sshift_succ_l.
-Qed.  
-
-(** Lift a normal form substitution through a binder. *)
-Equations sup : nf_subst -> nf_subst :=
-sup s := N_scons (N_tvar 0) (srcomp s (N_rshift 1)).
-
-Lemma sup_sound s : eval_nf (sup s) =₁ O.up_subst (eval_nf s).
-Proof. simp sup eval_nf. unfold O.up_subst. now rewrite srcomp_sound. Qed.
-
-(** Compose a normal form renaming with a normal form substitution. *)
-Equations rscomp : nf_ren -> nf_subst -> nf_subst :=
-rscomp (N_rshift k) s := sdrop k s ;
-rscomp (N_rcons i r) s := N_scons (sapply s i) (rscomp r s) ;
-rscomp (N_rcomp k xr r) s := N_scomp k (fun i => O.E_var (xr i)) (rscomp r s).
-
-Lemma rscomp_sound r s : 
-  eval_nf (rscomp r s) =₁ fun i => eval_nf s (eval_nf r i).
-Proof.
-funelim (rscomp r s) ; simp eval_nf.
-- now rewrite sdrop_sound.
-- rewrite sapply_sound, H. intros [|] ; reflexivity.
-- now rewrite H.
-Qed.     
-
-(** Instantiate a normal form expression with a normal form substitution. *)
-Equations sinst {k} (t : nf_expr (K1 k)) (s : nf_subst) : nf_expr (K1 k) by struct t :=
-sinst (N_tvar i) s := sapply s i ;
-sinst (N_tctor c al) s := N_tctor c (sinst al s) ;
-sinst N_al_nil _ := N_al_nil ;
-sinst (N_al_cons a al) s := N_al_cons (sinst a s) (sinst al s) ;
-sinst (N_abase b x) _ := N_abase b x ;
-sinst (N_aterm t) s := N_aterm (sinst t s) ;
-sinst (N_abind a) s := N_abind (sinst a (sup s)) ;
-sinst (N_rinst_l xt r) s := N_sinst_l xt (rscomp r s) ;
-sinst (N_sinst_l xt s1) s2 := N_sinst_l xt (scomp s1 s2) ;
-sinst (N_rinst_r i xr r) s := N_sinst_r i (fun i => O.E_var (xr i)) (rscomp r s) ;
-sinst (N_sinst_r i xs s1) s2 := N_sinst_r i xs (scomp s1 s2)
-
-(** Compose two normal form substitutions. *)
-with scomp (s1 : nf_subst) (s2 : nf_subst) : nf_subst by struct s1 :=
-scomp (N_sshift k) s := sdrop k s ;
-scomp (N_scons t s1) s2 := N_scons (sinst t s2) (scomp s1 s2) ;
-scomp (N_scomp k xs s1) s2 := N_scomp k xs (scomp s1 s2) ; 
-scomp (N_sren r) s := rscomp r s.
-
-Lemma sinst_scomp_sound_aux : 
-  (forall k (t : nf_expr (K1 k)) s, 
-    eval_nf (sinst t s) = O.substitute (eval_nf t) (eval_nf s)) *
-  (forall s1 s2, 
-    eval_nf (scomp s1 s2) =₁ O.scomp (eval_nf s1) (eval_nf s2)).
-Proof.
-apply sinst_elim with 
-  (P := fun k (t : nf_expr (K1 k)) (s : nf_subst) (res : nf_expr (K1 k))  => 
-    eval_nf res = O.substitute (eval_nf t) (eval_nf s))
-  (P0 := fun (s1 s2 res : nf_subst) =>
-    eval_nf res =₁ O.scomp (eval_nf s1) (eval_nf s2)).
-- intros i s. now rewrite sapply_sound.
-- intros c al s H. simp eval_nf. now rewrite H.
-- reflexivity.
-- intros ty tys a al s H1 H2. simp eval_nf substitute. now rewrite H1, H2.
-- intros b x s. now simp eval_nf substitute.
-- intros t s H. simp eval_nf substitute. now rewrite H.
-- intros ty a s H. simp eval_nf substitute. now rewrite H, sup_sound.
-- intros k xt r s. destruct k ; simp eval_nf substitute.
-  all: now rewrite rscomp_sound, O.ren_subst.
-- intros k xt s1 s2 H. destruct k ; simp eval_nf substitute.
-  all: now rewrite H, O.subst_subst.
-- intros i xr r s. simp eval_nf substitute rename.
-  cbv [O.scomp]. simp substitute. now rewrite rscomp_sound.
-- intros i xs s1 s2 H. simp eval_nf substitute. 
-  cbv [O.scomp]. now rewrite H, O.subst_subst.
-- intros k s. simp eval_nf. now rewrite sdrop_sound.
-- intros t s1 s2 H1 H2. simp eval_nf. rewrite H1, H2.
-  now rewrite O.scomp_scons_distrib.
-- intros k xs s1 s2 H. simp eval_nf. rewrite H. now repeat rewrite O.scomp_assoc.
-- intros r s. rewrite rscomp_sound. reflexivity.
-Qed. 
-    

@@ -7,18 +7,27 @@ Export ListNotations.
 #[export] Set Default Proof Mode "Classic".
 
 (** Convenience tactics. *)
+
 Ltac inv H := inversion H ; subst.
+
 Ltac split3 := split ; [|split].
 Ltac split4 := split ; [|split3].
 Ltac split5 := split ; [|split4].
 Ltac split6 := split ; [|split5].
 Ltac split7 := split ; [|split6].
 Ltac split8 := split ; [|split7].
+
 Ltac triv := try solve [ eauto | easy ].
 
+Ltac unfold_all :=
+  repeat match goal with 
+  | [ x := _ |- _ ] => unfold x in * ; clear x
+  end.
+
 (** Add some power to [auto]. *)
-#[global] Hint Extern 5 => f_equal : core.
+#[global] Hint Extern 4 => f_equal : core.
 #[global] Hint Extern 5 => simpl : core.
+#[global] Hint Extern 6 => exfalso : core.
 
 (** Pointwise equality for functions. *)
 Definition point_eq {A B} : relation (A -> B) := pointwise_relation _ eq.
