@@ -832,15 +832,14 @@ Axiom n : nat.
 Axiom m : nat.
 Axiom r : O.ren.
 
-Definition left := 
-  O.E_ctor CApp 
-    (O.E_al_cons (O.E_aterm (O.E_var (S (r (n + S m)) + n))) 
-    (O.E_al_cons (O.E_aterm (O.E_var 1)) 
-     O.E_al_nil)).
-Definition right := O.E_var n.
+Definition left := (O.rcons n r) (n + S m) + S n.
+Definition right := n.
 
 From Ltac2 Require Import Printf.
 
+(** Turn a list of [constr] into a Rocq list. 
+    [ty] is the type of each element in the list, which is needed
+    to build the empty list. *)
 Ltac2 rec coq_list (ty : constr) (xs : constr list) : constr :=
   match xs with 
   | [] => constr:(@nil $ty)
@@ -849,34 +848,40 @@ Ltac2 rec coq_list (ty : constr) (xs : constr list) : constr :=
     constr:(@cons $ty $x $xs)
   end.
 
+(** Turn the Ltac2 representation of the environment into the equivalent
+    Rocq representation. *)
+Ltac2 build_env (e : env) : constr :=
+  let e1 := coq_list constr:(nat) (e.(qnat_mvars)) in 
+  let e2 := coq_list constr:(O.ren) (e.(ren_mvars)) in 
+  let e3 := coq_list constr:(O.expr Kt) (e.(term_mvars)) in 
+  let e4 := coq_list constr:(O.subst) (e.(subst_mvars)) in 
+  constr:(
+    Build_env 
+      (fun n => List.nth n $e1 0)
+      (fun n => List.nth n $e2 O.rid)
+      (fun n => List.nth n $e3 (O.E_var 0))
+      (fun n => List.nth n $e4 O.sid)).
+
 Ltac2 test_tac () : unit :=
   lazy_match! Control.goal () with 
-  | @eq (O.expr Kt) ?l ?r => 
-    let (e, l') := reify_expr (empty_env ()) l in 
+  | @eq nat ?l ?r => 
+    let (e, l') := reify_nat (empty_env ()) l in 
     printf "%t" l' ;
-    let e1 := coq_list constr:(nat) (e.(qnat_mvars)) in 
-    let e2 := coq_list constr:(O.ren) (e.(ren_mvars)) in 
-    let e3 := coq_list constr:(O.expr Kt) (e.(term_mvars)) in 
-    let e4 := coq_list constr:(O.subst) (e.(subst_mvars)) in 
-    printf "QNAT ENV %t" e1 ;
-    printf "REN ENV %t" e2 ;
-    printf "TERM ENV %t" e3 ;
-    printf "SUBST ENV %t" e4 ;
-    change 
-      (eeval
-        (fun idx => List.nth idx $e1 0) 
-        (fun idx => List.nth idx $e2 O.rid) 
-        (fun idx => List.nth idx $e3 (O.E_var 0))
-        (fun idx => List.nth idx $e4 O.sid) 
-        $l' = $r)
-  | _ => Control.throw_invalid_argument "not an equality on level one terms"
+    let e := build_env e in
+    printf "ENV %t" e ;
+    change (qeval $e $l' = $r) ;
+    rewrite <-(qnormalize_sound $e $l')
+  | _ => Control.throw_invalid_argument "not an equality on naturals"
   end.
 
 Lemma test : left = right.
 Proof.
 unfold left, right.
 ltac2:(test_tac ()).
-cbv [qeval qeval_functional reval_functional 
-     eeval eeval_functional nth].
+cbv [qnormalize qnormalize_functional rnormalize_functional qplus qplus_neutral rapply
+     rapply_clause_3 rapply_clause_4].
+cbv [qeval reval qeval_functional reval_functional 
+     assign_ren assign_qnat nth].
+
 Admitted.
   
