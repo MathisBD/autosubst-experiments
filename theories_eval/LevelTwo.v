@@ -517,7 +517,7 @@ Qed.
 (** *** Normalization. *)
 (*********************************************************************************)
 
-(** We define the size of expressions, which is used to prove 
+(*(** We define the size of expressions, which is used to prove 
     termination of some simplification functions by well founded induction. *)
 
 (** Size of a quoted natural. *)
@@ -533,7 +533,7 @@ with rsize : ren -> nat :=
 rsize (R_shift k) := S (qsize k) ;
 rsize (R_cons i r) := S (qsize i + rsize r) ;
 rsize (R_comp r1 r2) := S (rsize r1 + rsize r2) ;
-rsize (R_mvar _) := 0.
+rsize (R_mvar _) := 0.*)
 
 (** Add two normal form quoted naturals, where the left hand side
     is neutral (i.e. is not Q_zero, Q_succ or Q_plus). *)
@@ -542,10 +542,10 @@ qplus_neutral n Q_zero := n ;
 qplus_neutral n (Q_succ x) := Q_succ (qplus_neutral n x) ;
 qplus_neutral n x := Q_plus n x.
 
-Lemma qsize_qplus_neutral x y : 
+(*Lemma qsize_qplus_neutral x y : 
   qsize (qplus_neutral x y) <= S (qsize x + qsize y).
 Proof. funelim (qplus_neutral x y) ; simp qsize ; lia. Qed.
-#[global] Hint Rewrite qsize_qplus_neutral : qsize.
+#[global] Hint Rewrite qsize_qplus_neutral : qsize.*)
 
 Lemma qplus_neutral_sound e x y : 
   qeval e (qplus_neutral x y) = qeval e x + qeval e y.
@@ -574,10 +574,10 @@ qplus (Q_succ x) y := Q_succ (qplus x y) ;
 qplus (Q_plus x y) z := qplus x (qplus y z) ;
 qplus x y := qplus_neutral x y.
 
-Lemma qsize_qplus x y : 
+(*Lemma qsize_qplus x y : 
   qsize (qplus x y) <= S (qsize x + qsize y).
 Proof. funelim (qplus x y) ; simp qsize ; lia. Qed.
-#[global] Hint Rewrite qsize_qplus : qsize.
+#[global] Hint Rewrite qsize_qplus : qsize.*)
 
 Lemma qplus_sound e x y :
   qeval e (qplus x y) = qeval e x + qeval e y.
@@ -602,7 +602,8 @@ intros H1 H2. funelim (qplus x y) ; clear Heqcall ; try easy.
   + intros (x1 & x2 & H) ; inv H.
 Qed.
 
-(** Helper function for [rdrop]. *)
+(** Helper function for [rdrop] which takes care of 
+    removing left composition by the identity. *)
 Equations do_shift : qnat -> ren -> ren :=
 do_shift Q_zero r := r ;
 do_shift k r := R_comp (R_shift k) r.
@@ -617,7 +618,7 @@ Lemma do_shift_nf k r :
 Proof. intros H1 H2 H3. funelim (do_shift k r) ; triv ; now apply H3. Qed.
 
 (** Drop the [k] first elements in a normal form renaming [r]. *)
-Equations? rdrop (k : qnat) (r : ren) : ren by wf (qsize k + rsize r) lt :=
+Equations rdrop (k : qnat) (r : ren) : ren by struct r :=
 rdrop k (R_shift k') := R_shift (qplus k k') ;
 rdrop k (R_mvar m) := do_shift k (R_mvar m) ;
 rdrop k (R_cons i r) with k => {
@@ -625,11 +626,6 @@ rdrop k (R_cons i r) with k => {
   | _ => do_shift k (R_cons i r) } ;
 rdrop k (R_comp (R_shift k') r) := rdrop (qplus k k') r ;
 rdrop k r := do_shift k r.
-
-Proof.
-all: simp qsize ; try lia.
-generalize (qsize_qplus k k'). lia.
-Qed.
 
 Lemma rdrop_sound e k r : 
   reval e (rdrop k r) =₁ O.rcomp (O.rshift (qeval e k)) (reval e r).

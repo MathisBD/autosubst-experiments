@@ -17,6 +17,7 @@ Ltac split6 := split ; [|split5].
 Ltac split7 := split ; [|split6].
 Ltac split8 := split ; [|split7].
 
+(** Surprisingly, neither [eauto] nor [easy] is more powerful than the other. *)
 Ltac triv := try solve [ eauto | easy ].
 
 Ltac unfold_all :=
@@ -24,7 +25,7 @@ Ltac unfold_all :=
   | [ x := _ |- _ ] => unfold x in * ; clear x
   end.
 
-(** Add some power to [auto]. *)
+(** Add some power to [auto] and [eauto]. *)
 #[global] Hint Extern 4 => f_equal : core.
 #[global] Hint Extern 5 => simpl : core.
 #[global] Hint Extern 6 => exfalso : core.
