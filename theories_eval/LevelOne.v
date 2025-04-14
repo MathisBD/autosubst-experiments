@@ -47,8 +47,8 @@ Definition ren := nat -> nat.
 (** The identity renaming. *)
 Definition rid : ren := fun i => i.
 
-(** [rshift k] shifts indices by [k]. *)
-Definition rshift (k : nat) : ren := fun i => k + i.
+(** [rshift] shifts indices by one. *)
+Definition rshift : ren := fun i => S i.
 
 (** Cons an index with a renaming. *)
 Equations rcons (i0 : nat) (r : ren) : ren :=
@@ -61,7 +61,7 @@ Definition rcomp (r1 r2 : ren) : ren :=
 
 (** Lift a renaming through a binder. *)
 Definition up_ren (r : ren) : ren := 
-  rcons 0 (rcomp r (rshift 1)).
+  rcons 0 (rcomp r rshift).
  
 (** Rename a term. *)
 Equations rename {k} (t : expr k) (r : ren) : expr k :=
@@ -84,9 +84,9 @@ Definition subst := nat -> term.
 (** The identity substitution. *)
 Definition sid : subst := fun i => E_var i.
 
-(** [sshift k] shifts indices by [k]. *)
-Definition sshift (k : nat) : subst := 
-  fun i => E_var (k + i).
+(** [sshift] shifts indices by one. *)
+Definition sshift : subst := 
+  fun i => E_var (S i).
 
 (** Cons a expr with a substitution. *)
 Equations scons (t : term) (s : subst) : subst :=
@@ -103,7 +103,7 @@ Definition rscomp (r : ren) (s : subst) :=
 
 (** Lift a substitution through a binder. *)
 Definition up_subst (s : subst) : subst :=
-  scons (E_var 0) (srcomp s (rshift 1)).
+  scons (E_var 0) (srcomp s rshift).
 
 (** Apply a substitution to a expr. *)
 Equations substitute {k} (t : expr k) (s : subst) : expr k :=
@@ -176,7 +176,7 @@ Proof. intros s1 s2 Hs r1 r2 Hr i. cbv [scomp]. now rewrite Hs, Hr. Qed.
 (** *** Properties of renaming and substitution. *)
 (*********************************************************************************)
 
-Lemma rshift_plus k l : rcomp (rshift k) (rshift l) =₁ rshift (k + l).
+(*Lemma rshift_plus k l : rcomp (rshift k) (rshift l) =₁ rshift (k + l).
 Proof. intros i. cbv [rcomp rshift]. lia. Qed.
 
 Lemma rshift_succ_l k : rcomp (rshift 1) (rshift k) =₁ rshift (S k).
@@ -196,12 +196,12 @@ Lemma sshift_succ_l k : scomp (sshift 1) (sshift k) =₁ sshift (S k).
 Proof. rewrite sshift_plus. reflexivity. Qed.
     
 Lemma sshift_succ_r k : scomp (sshift k) (sshift 1) =₁ sshift (S k).
-Proof. rewrite sshift_plus. intros i. cbv [sshift]. f_equal ; lia. Qed.
+Proof. rewrite sshift_plus. intros i. cbv [sshift]. f_equal ; lia. Qed.*)
 
-Lemma rid_rcons : rcons 0 (rshift 1) =₁ rid.
+Lemma rid_rcons : rcons 0 rshift =₁ rid.
 Proof. intros [|i] ; reflexivity. Qed.
 
-Lemma sid_scons : scons (E_var 0) (sshift 1) =₁ sid.
+Lemma sid_scons : scons (E_var 0) sshift =₁ sid.
 Proof. intros [|i] ; reflexivity. Qed.
 
 Lemma rcomp_rcons_distrib i (r1 r2 : ren) :
@@ -212,10 +212,10 @@ Lemma scomp_scons_distrib (t : term) (s1 s2 : subst) :
   scomp (scons t s1) s2 =₁ scons (substitute t s2) (scomp s1 s2).
 Proof. intros [|i] ; reflexivity. Qed.
 
-Lemma rshift_rcons i (r : ren) : rcomp (rshift 1) (rcons i r) =₁ r.
+Lemma rshift_rcons i (r : ren) : rcomp rshift (rcons i r) =₁ r.
 Proof. reflexivity. Qed.
     
-Lemma sshift_scons (t : term) (s : subst) : scomp (sshift 1) (scons t s) =₁ s.
+Lemma sshift_scons (t : term) (s : subst) : scomp sshift (scons t s) =₁ s.
 Proof. reflexivity. Qed.
 
 Lemma rcomp_rid_l (r : ren) : rcomp rid r =₁ r.
@@ -299,11 +299,11 @@ intros [|i] ; reflexivity.
 Qed.
 
 Lemma rshift_sshift {k} (t : expr k) : 
-  rename t (rshift 1) = substitute t (sshift 1).
+  rename t rshift = substitute t sshift.
 Proof. rewrite ren_is_subst. reflexivity. Qed.
     
 Lemma up_subst_alt (s : subst) :
-  up_subst s =₁ scons (E_var 0) (scomp s (sshift 1)).
+  up_subst s =₁ scons (E_var 0) (scomp s sshift).
 Proof.
 simp up_subst. apply scons_proper ; auto.
 intros i. cbv [scomp srcomp]. now rewrite rshift_sshift.
