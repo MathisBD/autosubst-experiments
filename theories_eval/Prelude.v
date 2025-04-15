@@ -8,8 +8,20 @@ Export ListNotations.
 
 (** Convenience tactics. *)
 
-Ltac inv H := inversion H ; subst.
+(** Simplify equations of the form [existT ?a ?b _ = existT ?a ?b _], 
+    which are often generates by Rocq's [inversion] tactic. *)
+Ltac simpl_existT :=
+  match goal with 
+  | [ H : existT _ _ _ = existT _ _ _ |- _ ] =>
+    apply Eqdep.EqdepTheory.inj_pair2 in H 
+  | _ => idtac
+  end.
 
+(** Run [inversion H], and cleanup the resulting equations. *)
+Ltac inv H := 
+  inversion H ; repeat first [ progress subst | progress simpl_existT ].
+
+(** Split n-ary conjunctions. *)
 Ltac split3 := split ; [|split].
 Ltac split4 := split ; [|split3].
 Ltac split5 := split ; [|split4].
@@ -32,10 +44,11 @@ Ltac feed2 H := feed H ; [| feed H].
 Ltac feed3 H := feed H ; [| feed2 H].
 Ltac feed4 H := feed H ; [| feed3 H].
 
-
 (** Surprisingly, neither [eauto] nor [easy] is more powerful than the other. *)
 Ltac triv := try solve [ eauto | easy ].
 
+(** Unfold all local definitions from the proof context,
+    then clear the definitions. *)
 Ltac unfold_all :=
   repeat match goal with 
   | [ x := _ |- _ ] => unfold x in * ; clear x
@@ -45,6 +58,7 @@ Ltac unfold_all :=
 #[global] Hint Extern 4 => f_equal : core.
 #[global] Hint Extern 5 => simpl : core.
 #[global] Hint Extern 6 => exfalso : core.
+#[global] Hint Extern 6 => subst : core.
 
 (** Pointwise equality for functions. *)
 Definition point_eq {A B} : relation (A -> B) := pointwise_relation _ eq.

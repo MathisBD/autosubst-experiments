@@ -228,9 +228,15 @@ Lemma rcomp_assoc (r1 r2 r3 : ren) :
   rcomp (rcomp r1 r2) r3 =₁ rcomp r1 (rcomp r2 r3).
 Proof. reflexivity. Qed.
 
+Lemma up_ren_rid : up_ren rid =₁ rid.
+Proof. intros [|] ; reflexivity. Qed.
+
 Lemma up_ren_comp (r1 r2 : ren) : 
   rcomp (up_ren r1) (up_ren r2) =₁ up_ren (rcomp r1 r2).
 Proof. intros [|i] ; reflexivity. Qed.
+
+Lemma ren_rid {k} (t : expr k) : rename t rid = t.
+Proof. induction t ; simp rename ; triv. now rewrite up_ren_rid, IHt. Qed.
 
 Lemma ren_ren {k} (t : expr k) (r1 r2 : ren) : 
   rename (rename t r1) r2 = rename t (rcomp r1 r2).

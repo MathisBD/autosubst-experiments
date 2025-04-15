@@ -3,6 +3,8 @@ From Prototype Require Import Prelude Sig LevelOne.
 Module Make (S : Sig).
 Module O := LevelOne.Make (S).
 
+Local Coercion is_true : bool >-> Sortclass.
+
 (** Meta-variables are represented by an index (a natural). *)
 Definition mvar := nat.
 
@@ -279,98 +281,55 @@ with reify_subst (e : env) (s : constr) : env * constr :=
 (*********************************************************************************)
 
 (** Simplification needs to distinguish terms based on their head constructor(s). 
-    We provide discriminator functions which handle this, as well as 
-    tactics [inv_discriminator] and [solve_discriminators]. *)
+    We provide discriminator functions which handle this. *)
 
-Definition is_qrapply x := exists r y, x = Q_rapply r y.
-Definition is_qmvar x := exists m, x = Q_mvar m.
+Definition is_qrapply x := 
+  match x with Q_rapply _ _ => true | _ => false end.
+Definition is_qmvar x :=
+  match x with Q_mvar _ => true | _ => false end.
 
-Definition is_rcons r := exists i r', r = R_cons i r'.
-Definition is_rcomp r := exists r1 r2 , r = R_comp r1 r2.
-Definition is_rmvar r := exists m, r = R_mvar m.
+Definition is_rcons r := 
+  match r with R_cons _ _ => true | _ => false end.
+Definition is_rcomp r := 
+  match r with R_comp _ _ => true | _ => false end.
+Definition is_rmvar r := 
+  match r with R_mvar _ => true | _ => false end. 
 
-Definition is_rid_l r := exists r2, r = R_comp R_id r2.
-Definition is_rshift_l r := exists r2, r = R_comp R_shift r2.
-Definition is_rcons_l r := exists i r' r2, r = R_comp (R_cons i r') r2.
-Definition is_rcomp_l r := exists r1 r2 r3, r = R_comp (R_comp r1 r2) r3.
-Definition is_rmvar_l r := exists m r2, r = R_comp (R_mvar m) r2.
+Definition is_rid_l r := 
+  match r with R_comp R_id _ => true | _ => false end.
+Definition is_rshift_l r := 
+  match r with R_comp R_shift _ => true | _ => false end.
+Definition is_rcons_l r := 
+  match r with R_comp (R_cons _ _) _ => true | _ => false end. 
+Definition is_rcomp_l r := 
+  match r with R_comp (R_comp _ _) _ => true | _ => false end.
+Definition is_rmvar_l r := 
+  match r with R_comp (R_mvar _) _ => true | _ => false end.
 
-Definition is_scons s := exists t s', s = S_cons t s'.
-Definition is_scomp s := exists s1 s2 , s = S_comp s1 s2.
-Definition is_smvar s := exists m, s = S_mvar m.
-Definition is_sren s := exists r, s = S_ren r.
+Definition is_tvar {k} (t : expr k) :=
+  match t with E_tvar _ => true | _ => false end.
+Definition is_tvar_zero {k} (t : expr k) :=
+  match t with E_tvar Q_zero => true | _ => false end.
+Definition is_tmvar {k} (e : expr k) :=
+  match e with E_mvar _ => True | _ => False end.
 
-Definition is_scons_l s := exists t s' s2, s = S_comp (S_cons t s') s2.
-Definition is_scomp_l s := exists s1 s2 s3, s = S_comp (S_comp s1 s2) s3.
-Definition is_smvar_l s := exists m s2, s = S_comp (S_mvar m) s2.
-Definition is_sren_l s := exists r s', s = S_comp (S_ren r) s'.
+Definition is_scons s :=
+  match s with S_cons _ _ => true | _ => false end.
+Definition is_scomp s :=
+  match s with S_comp _ _ => true | _ => false end.
+Definition is_smvar s :=
+  match s with S_mvar _ => true | _ => false end.
+Definition is_sren s := 
+  match s with S_ren _ => true | _ => false end.
 
-(** This tactic tries to solve the goal by inverting a hypothesis of
-    the form [is_qsucc _], [is_rmvar _], ... which is inconsistent.
-
-    It either closes the goal or does nothing. *)
-Ltac inv_discriminators :=
-  solve [
-    let H' := fresh "H" in
-    repeat match goal with 
-    | [ H : is_qrapply _ |- _ ] => destruct H as (? & ? & H') ; inv H'
-    | [ H : is_qmvar _ |- _ ] => destruct H as (? & H') ; inv H'
-
-    | [ H : is_rcons _ |- _ ] => destruct H as (? & ? & H') ; inv H'
-    | [ H : is_rcomp _ |- _ ] => destruct H as (? & ? & H') ; inv H'
-    | [ H : is_rmvar _ |- _ ] => destruct H as (? & H') ; inv H'
-    
-    | [ H : is_rid_l _ |- _ ] => destruct H as (? & H') ; inv H'
-    | [ H : is_rshift_l _ |- _ ] => destruct H as (? & H') ; inv H'
-    | [ H : is_rcons_l _ |- _ ] => destruct H as (? & ? & ? & H') ; inv H'
-    | [ H : is_rcomp_l _ |- _ ] => destruct H as (? & ? & ? & H') ; inv H'
-    | [ H : is_rmvar_l _ |- _ ] => destruct H as (? & ? & H') ; inv H'
-
-    | [ H : is_scons _ |- _ ] => destruct H as (? & ? & H') ; inv H'
-    | [ H : is_scomp _ |- _ ] => destruct H as (? & ? & H') ; inv H'
-    | [ H : is_smvar _ |- _ ] => destruct H as (? & H') ; inv H'
-    | [ H : is_sren _ |- _ ] => destruct H as (? & H') ; inv H'
-
-    | [ H : is_scons_l _ |- _ ] => destruct H as (? & ? & ? & H') ; inv H'
-    | [ H : is_scomp_l _ |- _ ] => destruct H as (? & ? & ? & H') ; inv H'
-    | [ H : is_smvar_l _ |- _ ] => destruct H as (? & ? & H') ; inv H'
-    | [ H : is_sren_l _ |- _ ] => destruct H as (? & ? & H') ; inv H'
-    end 
-  ].
-#[global] Hint Extern 3 => inv_discriminators : core.
-
-(** This tactic tries to solve trivial goals of the form 
-    [is_qsucc (Q_succ _)], [is_rmvar (R_mvar _)], ...
-
-    It either closes the goal or does nothing. *)
-Ltac solve_discriminators :=
-  solve [
-    match goal with 
-    | |- is_qrapply (Q_rapply _ _) => repeat eexists
-    | |- is_qmvar (Q_mvar _) => repeat eexists
-
-    | |- is_rcons (R_cons _ _)  => repeat eexists
-    | |- is_rcomp (R_comp _ _)  => repeat eexists
-    | |- is_rmvar (R_mvar _)  => repeat eexists
-
-    | |- is_rid_l (R_comp R_id _) => repeat eexists
-    | |- is_rshift_l (R_comp R_shift _) => repeat eexists
-    | |- is_rcons_l (R_comp (R_cons _ _) _) => repeat eexists
-    | |- is_rcomp_l (R_comp (R_comp _ _) _) => repeat eexists
-    | |- is_rmvar_l (R_comp (R_mvar _) _) => repeat eexists
-
-    | |- is_scons (S_cons _ _) => repeat eexists
-    | |- is_scomp (S_comp _ _) => repeat eexists
-    | |- is_smvar (S_mvar _) => repeat eexists
-    | |- is_sren (S_ren _) => repeat eexists
-
-    | |- is_scons_l (S_comp (S_cons _ _) _)  => repeat eexists
-    | |- is_scomp_l (S_comp (S_comp _ _) _)  => repeat eexists
-    | |- is_smvar_l (S_comp (S_mvar _) _)  => repeat eexists
-    | |- is_sren_l (S_comp (S_ren) _) => repeat eexists
-    end 
-  ].
-#[global] Hint Extern 3 => solve_discriminators : core.
+Definition is_scons_l s :=
+  match s with S_comp (S_cons _ _) _ => true | _ => false end.
+Definition is_scomp_l s :=
+  match s with S_comp (S_comp _ _) _ => true | _ => false end.
+Definition is_smvar_l s :=
+  match s with S_comp (S_mvar _) _ => true | _ => false end.
+Definition is_sren_l s := 
+  match s with S_comp (S_ren _) _ => true | _ => false end.
 
 (*********************************************************************************)
 (** *** Irreducible forms for renamings & naturals. *)
@@ -421,7 +380,7 @@ Lemma qirred_rapply_shift i :
 split ; intros H.
 - split ; intros H' ; apply H ; clear H.
   + constructor ; now right.
-  + destruct H' as (r & i' & ->). now constructor. 
+  + destruct i ; triv.
 - intros H'. inv H'.
   + destruct H1 ; triv.
   + destruct H ; triv.
@@ -434,7 +393,7 @@ Proof.
 split ; intros H.
 - split ; intros H' ; apply H ; clear H.
   + constructor ; now right.
-  + destruct H' as (r & i' & ->). now constructor. 
+  + destruct i ; triv.
 - intros H'. inv H'.
   + destruct H1 ; triv.
   + destruct H ; triv.
@@ -448,21 +407,10 @@ split.
 - intros H. split3.
   + intros H' ; apply H ; clear H. constructor ; left. constructor ; now left.
   + intros H' ; apply H ; clear H. constructor ; left. constructor ; now right. 
-  + destruct k ; triv. 
-- intros (H1 & H2 & (? & ->)) H. inv H ; triv.
-  destruct H3 ; triv. inv H0. destruct H4 ; triv.
+  + destruct k ; triv. exfalso. apply H. triv. 
+- intros (H1 & H2 & H3) H. destruct k ; triv. inv H ; triv.
+  destruct H4 ; triv. inv H0. destruct H5 ; triv.
 Qed.
-
-Lemma qirred_rapply_zero r : 
-  qirred (Q_rapply r Q_zero) <-> rirred r /\ r <> R_id /\ ~is_rcons r.
-Proof.
-split ; intros H.
-- split3 ; intros H' ; apply H ; triv. subst. triv.
-- intros H'. inv H' ; triv.
-  + destruct H1 ; triv.
-  + destruct H1 ; triv. destruct H0 as (? & ? & ? & ->). 
-    destruct H as (H & _) ; apply H. triv.
-Qed. 
 
 Lemma qirred_rapply r i : 
   qirred (Q_rapply r i) <-> 
@@ -471,15 +419,14 @@ Lemma qirred_rapply r i :
 Proof. 
 split ; intros H. 
 - split5 ; intros H' ; apply H ; triv.
-  + subst. triv.
-  + destruct H' as (? & ? & ->) ; triv.
-  + destruct H' as ((? & ? & ->) & ->). triv.
+  + destruct i ; triv.
+  + destruct r ; triv. destruct H' as (_ & ->). triv.
 - intros H' ; inv H' ; triv.
   + destruct H1 ; triv.
   + destruct H as (_ & _ & _ & H & _). triv.
-  + destruct H1 as [(? & ? & ->) | (? & ? & ? & ->)].
+  + destruct H1 ; destruct r ; triv.
     * destruct H as (_ & _ & _ & _ & H). triv.
-    * destruct H as (H & _). triv.          
+    * destruct H as (H & _). destruct r1 ; triv.        
 Qed.
 
 Lemma rirred_cons i r : 
@@ -506,9 +453,7 @@ Lemma rirred_shift_l r :
     rirred r /\ r <> R_id /\ ~is_rcons r /\ ~is_rcons_l r.
 Proof.
 split.
-- intros H. split4 ; triv.
-  + intros H' ; apply H ; triv.
-  + intros -> ; apply H. triv.
+- intros H. split4 ; triv. intros H' ; apply H ; triv.
 - intros (H1 & H2) H. inv H ; triv.
   + destruct H3 ; triv.
   + destruct H3 ; triv.
@@ -517,27 +462,6 @@ Qed.
 (*********************************************************************************)
 (** *** Simplification of renamings & quoted naturals. *)
 (*********************************************************************************)
-
-(** Drop the first element in an irreducible renaming. *)
-Equations rtail (r : ren) : ren by struct r :=
-rtail R_id := R_shift ;
-rtail (R_cons _ r) := r ;
-rtail r := R_comp R_shift r.
-
-Lemma rtail_sound e r : 
-  reval e (rtail r) =₁ O.rcomp O.rshift (reval e r).
-Proof. funelim (rtail r) ; simp qeval ; triv. Qed.  
-#[global] Hint Rewrite rtail_sound : qeval reval.
-
-Lemma rtail_irred r : rirred r -> rirred (rtail r).
-Proof.
-intros H. funelim (rtail r) ; triv.
-- rewrite rirred_shift_l. split4 ; triv.
-- now rewrite rirred_cons in H.
-- rewrite rirred_shift_l. split4 ; triv.
-  intros (? & ? & ? & H1). inv H1. triv.
-- rewrite rirred_shift_l. split4 ; triv.
-Qed. 
 
 (** Helper function for [rapply] which takes care of trivial cases. *)
 Equations rapply_aux (r : ren) (i : qnat) : qnat :=
@@ -556,12 +480,8 @@ Lemma rapply_aux_irred r i :
   qirred (rapply_aux r i).
 Proof.
 intros H1 H2 H3. funelim (rapply_aux r i) ; triv.
-- rewrite qirred_rapply_shift. split ; triv. intros (? & ? & ->). apply H3 ; triv.
-- rewrite rirred_cons in H1 ; triv.
-- apply H3 ; triv.
-- apply H3 ; triv.
-- apply H3 ; triv. intros [? ?] ; triv.
-- apply H3 ; triv. intros [? ?] ; triv.
+all: try solve [ apply H3 ; triv ].
+rewrite rirred_cons in H1 ; triv.
 Qed.   
 
 (** Helper function for [rcomp] which takes care of trivial cases. *)
@@ -581,11 +501,8 @@ Lemma rcomp_aux_irred r1 r2 :
   rirred (rcomp_aux r1 r2).
 Proof.
 intros H1 H2 H3. funelim (rcomp_aux r1 r2) ; triv.
-all: try (apply H3 ; now triv).
-- apply H3 ; triv. intros [? ?] ; triv.
-- now rewrite rirred_cons in H2.
-- apply H3 ; triv. intros [? ?] ; triv.
-- apply H3 ; triv. intros [? ?] ; triv.
+all: try solve [ apply H3 ; now triv ].
+now rewrite rirred_cons in H2.
 Qed.
 
 (** Apply an irreducible renaming to an irreducible quoted natural. *)
@@ -611,7 +528,16 @@ all: intros ; simp qeval reval ; triv.
 - rewrite H, H0. now rewrite O.rcomp_rcons_distrib.
 - rewrite H0, H. now rewrite O.rcomp_assoc.
 Qed.
-#[global] Hint Rewrite rapply_rcomp_sound : qeval reval.
+
+Lemma rapply_sound e r i : 
+  qeval e (rapply r i) = reval e r (qeval e i).
+Proof. now apply rapply_rcomp_sound. Qed.
+#[global] Hint Rewrite rapply_sound : qeval reval.
+
+Lemma rcomp_sound e r1 r2 :
+  reval e (rcomp r1 r2) =₁ O.rcomp (reval e r1) (reval e r2).
+Proof. now apply rapply_rcomp_sound. Qed.
+#[global] Hint Rewrite rcomp_sound : qeval reval.
 
 Lemma rapply_rcomp_irred :
   (forall r i, rirred r -> qirred i -> qirred (rapply r i)) *
@@ -621,15 +547,15 @@ apply rapply_elim with
   (P := fun r i res => rirred r -> qirred i -> qirred res)
   (P0 := fun r1 r2 res => rirred r1 -> rirred r2 -> rirred res).
 all: intros ; triv.
-- apply rapply_aux_irred ; triv. intros H1 H2. rewrite qirred_rapply_zero.
-  split3 ; triv.
+- apply rapply_aux_irred ; triv. intros H1 H2. rewrite qirred_rapply.
+  split5 ; triv.
 - rewrite qirred_rapply in H1. apply rapply_aux_irred ; triv. 
   + now apply H.
   + intros H2 H3. rewrite qirred_rapply. split5 ; triv. now apply H.
 - apply rapply_aux_irred ; triv. intros H1 H2. rewrite qirred_rapply.
   split5 ; triv.
 - apply rcomp_aux_irred ; triv. intros H1 H2. rewrite rirred_shift_l.
-  split4 ; triv. intros (? & ? & ? & ->) ; triv.
+  split4 ; triv. destruct r2 ; triv. destruct r2_1 ; triv.
 - rewrite rirred_cons in *. split.
   + now apply H.
   + now apply H0.
@@ -660,9 +586,9 @@ apply qsimp_elim with
   (P := fun i res => qeval e res = qeval e i)
   (P0 := fun r res => reval e res =₁ reval e r).
 all: intros ; simp qeval reval ; triv.
-- destruct (rapply_rcomp_sound e) as [-> _]. now rewrite H, H0.
 - now rewrite H, H0.
-- destruct (rapply_rcomp_sound e) as [_ ->]. now rewrite H, H0. 
+- now rewrite H, H0.
+- now rewrite H, H0. 
 Qed.    
 
 Lemma qsimp_sound e i : qeval e (qsimp i) = qeval e i.
@@ -693,12 +619,13 @@ Proof. now apply qsimp_rsimp_irred. Qed.
 (** *** Irreducible forms for substitutions & expressions. *)
 (*********************************************************************************)
 
-(** Expressions in which we can push renamings/substitutions. *)
-Definition is_epush {k} (e : expr k) : Prop :=
-  match e with 
-  | E_mvar _ | E_tvar _ => False  
-  | _ => True 
-  end.
+(** Expressions in which we can push renamings. *)
+Definition is_push_ren {k} (e : expr k) : Prop :=
+  match e with E_mvar _ => False | _ => True end.
+
+(** Expressions in which we can push substitutions. *)
+Definition is_push_subst {k} (e : expr k) : Prop :=
+  match e with E_mvar _ | E_tvar _ => False | _ => True end.
 
 (** Reducible expression. *)
 Inductive ered : forall {k}, expr k -> Prop :=
@@ -714,49 +641,42 @@ Inductive ered : forall {k}, expr k -> Prop :=
 | ER_subst {k} s (e : expr k) : sred s \/ ered e -> ered (E_subst e s)
 
 (** Push renamings/substitutions inside expressions. *)
-| ER_push_ren {k} r (e : expr k) : is_epush e -> ered (E_ren e r)
-| ER_push_subst {k} s (e : expr k) : is_epush e -> ered (E_subst e s)
-| ER_ren_var r i : ered (E_ren (E_tvar i) r)
+| ER_push_ren {k} r (e : expr k) : is_push_ren e -> ered (E_ren e r)
+| ER_push_subst {k} s (e : expr k) : is_push_subst e -> ered (E_subst e s)
 
-(** Apply a substitution to a variable. *)
-| ER_sshift_var i s : 
-    is_sshift s \/ is_sshift_l s -> ered (E_subst (E_tvar i) s)
+(** Identity renaming/substitution. *)
+| ER_ren_rid {k} (e : expr k) : ered (E_ren e R_id)
+| ER_subst_sid {k} (e : expr k) : ered (E_subst e S_id)
+
+(** Apply a substitution/renaming to a variable. *)
 | ER_scons_zero s : 
     is_scons s \/ is_scons_l s -> ered (E_subst (E_tvar Q_zero) s)
-| ER_scons_succ s i : 
-   is_scons s \/ is_scons_l s -> ered (E_subst (E_tvar (Q_succ i)) s)
-| ER_sren_var s i : 
-   is_sren s \/ is_sren_l s -> ered (E_subst (E_tvar i) s)
+| ER_sren_var s r i : 
+    ered (E_subst (E_tvar (Q_rapply r i)) s)
 
-(** Apply a substitution/renaming to a meta-variable. *)
-| ER_ren_rid (m : mvar) : ered (E_ren (E_mvar m) rid)
-| ER_subst_sid (m : mvar ) : ered (E_subst (E_mvar m) sid)
-| ER_ren_mvar (m : mvar) r : ered (E_subst (E_mvar m) (S_ren r))
+(** Substitute with a renaming. *)
+| ER_subst_ren {k} (e : expr k) r : ered (E_subst e (S_ren r))
 
 (** Reducible substitutions. *)
 with sred : subst -> Prop :=
 
 (** Congruence. *)
-| SR_shift k : qred k -> sred (S_shift k) 
 | SR_cons t s : ered t \/ sred s -> sred (S_cons t s)
 | SR_comp s1 s2 : sred s1 \/ sred s2 -> sred (S_comp s1 s2)
 | SR_ren r : rred r -> sred (S_ren r)
 
-(** Composition should be right associated, with neutral element [sid]. *)
-| SR_sid_l s : sred (S_comp sid s)
-| SR_sid_r s : sred (S_comp s sid)
+(** Composition should be right associated, with neutral element [S_id]. *)
+| SR_sid_l s : sred (S_comp S_id s)
+| SR_sid_r s : sred (S_comp s S_id)
 | SR_comp_l s1 s2 s3: sred (S_comp (S_comp s1 s2) s3)
 
 (** Push [S_ren] into renamings. *)
 | SR_ren_distrib r : ~is_rmvar r -> sred (S_ren r)
 (** Composition distributes over [S_cons]. *)
 | SR_cons_l t s1 s2 : sred (S_comp (S_cons t s1) s2)
-(** Combine successive shifts. *)
-| SR_shift_l k s : 
-  is_sshift s \/ is_sshift_l s -> sred (S_comp (S_shift k) s)
 (** Simplify [shift >> (t . s)] into [s]. *)
-| SR_shift_cons k s : 
-  is_scons s \/ is_scons_l s -> sred (S_comp (S_shift (Q_succ k)) s).
+| SR_shift_cons s : 
+  is_scons s \/ is_scons_l s -> sred (S_comp S_shift s).
 
 Hint Constructors ered : core.
 Hint Constructors sred : core.
@@ -771,12 +691,85 @@ Definition sirred s := ~sred s.
 (** *** Properties of substitution & expression irreducible forms. *)
 (*********************************************************************************)
 
-Lemma sirred_shift k : sirred (S_shift k) <-> qirred k.
+Lemma eirred_tvar i : eirred (E_tvar i) <-> qirred i.
+Proof. split ; intros H H' ; apply H ; triv. now inv H'. Qed.
+
+Lemma eirred_tctor c al : eirred (E_tctor c al) <-> eirred al.
+Proof. split ; intros H H' ; apply H ; triv. now inv H'. Qed.
+
+Lemma eirred_al_nil : eirred E_al_nil.
+Proof. intros H ; inv H. Qed.
+
+Lemma eirred_al_cons {ty tys} (a : arg ty) (al : args tys) :
+  eirred (E_al_cons a al) <-> eirred a /\ eirred al.
 Proof.
-split ; intros H H' ; apply H ; clear H.
-- now constructor.
-- now inv H'.
+split ; intros H.
+- split ; intros H' ; apply H ; triv.
+- intros H' ; inv H' ; triv. destruct H1 ; triv.
 Qed.
+
+Lemma eirred_abase b x : eirred (E_abase b x).
+Proof. triv. Qed.
+
+Lemma eirred_aterm t : eirred (E_aterm t) <-> eirred t.
+Proof. split ; intros H H' ; apply H ; triv. now inv H'. Qed.
+
+Lemma eirred_abind {ty} (a : arg ty) : 
+  eirred (E_abind a) <-> eirred a.
+Proof. split ; intros H H' ; apply H ; triv. now inv H'. Qed.
+
+Lemma eirred_ren {k} (e : expr k) r :
+  eirred (E_ren e r) <-> is_tmvar e /\ rirred r /\ r <> R_id.
+Proof.
+split ; intros H.
+- split3.
+  + destruct e ; triv.
+  + intros H' ; apply H ; triv.
+  + intros H' ; apply H ; triv.
+- intros H' ; inv H' ; triv.
+  + destruct H2 ; triv. destruct e ; triv.
+  + destruct e ; triv.
+Qed.
+
+Lemma eirred_subst_var s i :
+  eirred (E_subst (E_tvar i) s) <->
+    qirred i /\ sirred s /\ ~(i = Q_zero /\ is_scons s) /\ s <> S_id /\ 
+    ~is_sren s /\ ~is_qrapply i.
+Proof.
+split ; intros H.
+- split6 ; intros H' ; apply H ; clear H ; triv.
+  + destruct H' as [-> H']. triv.
+  + destruct s ; triv.
+  + destruct i ; triv.
+- destruct H as (H1 & H2 & H3 & H4 & H5 & H6). intros H' ; inv H' ; triv.
+  + destruct H7 ; triv. now inv H.
+  + destruct H7 ; triv. destruct s ; triv. destruct s1 ; triv.
+Qed.
+
+Definition is_tvar_rapply {k} (e : expr k) := 
+  match e with 
+  | E_tvar (Q_rapply _ _) => true 
+  | _ => false
+  end.
+
+Lemma eirred_subst {k} (e : expr k) s :
+  eirred (E_subst e s) <->
+    eirred e /\ sirred s /\ ~is_push_subst e /\ ~is_tvar_rapply e /\
+    ~(is_tvar_zero e /\ is_scons s) /\ s <> S_id /\ ~is_sren s.
+Proof.
+split ; intros H.
+- split7 ; intros H' ; apply H ; triv.
+  + destruct e ; triv. destruct q ; triv.
+  + destruct e ; triv. destruct q ; triv. destruct s ; triv.
+  + destruct s ; triv.
+- intros H' ; inv H' ; triv.
+  + destruct H2 ; triv.
+  + destruct H2 ; destruct s ; try discriminate.
+    * destruct H as (_ & _ & _ & _ & H & _). triv.
+    * destruct s1 ; triv. destruct H as (_ & H & _) ; triv.
+  + destruct H as (_ & _ & _ & H & _). triv.
+  + destruct H as (_ & _ & _ & _ & _ & _ & H). triv.
+Qed.     
 
 Lemma sirred_cons t s : 
   sirred (S_cons t s) <-> eirred t /\ sirred s.
@@ -788,46 +781,34 @@ split ; intros H.
 - intros H'. inv H'. destruct H1 ; triv.
 Qed.   
 
-Lemma sirred_shift_l k s : 
-  sirred (S_comp (S_shift k) s) <->
-    qirred k /\ 
-    sirred s /\ 
-    k <> Q_zero /\
-    ~is_sshift s /\ 
-    ~is_sshift_l s /\
-    ~(is_qsucc k /\ is_scons s).
+Lemma sirred_shift_l s : 
+  sirred (S_comp S_shift s) <->
+    sirred s /\ ~is_scons s /\ s <> S_id.
 Proof.
 split.
-- intros H. split6 ; intros H' ; apply H ; clear H.
-  + constructor. left. now constructor.
-  + constructor. now right.
-  + subst. now constructor.
-  + destruct H' as [k' ->]. apply SR_shift_l. triv.
-  + destruct H' as (k' & r' & ->). apply SR_shift_l ; triv. 
-  + destruct H' as [(k' & ->) (i & r' & ->)]. apply SR_shift_cons. left. triv.
-- intros (H1 & H2 & H3) H. inv H ; try easy.
-  + destruct H4 ; auto. now inv H0.
-  + destruct H3 as (_ & H3 & _) ; apply H3. triv.
-  + destruct H3 as (_ & H3 & H3' & _) ; apply H3. now destruct H4.
-  + destruct H3 as (_ & _ & _ & H3) ; apply H3.
-Admitted.
+- intros H. split3 ; intros H' ; apply H ; clear H ; triv.
+- intros (H1 & H2 & H3) H'. inv H' ; triv.
+  + destruct H0 ; triv.
+  + destruct H0 ; triv. destruct s ; triv. destruct s1 ; triv.
+Qed.  
 
-(*Lemma sirred_ren_l r s : 
-  sirred (S_comp (S_ren r) s) <-> is_rmvar r /\ sirred s /\ s <> sid.
+Lemma sirred_ren_l r s : 
+  sirred (S_comp (S_ren r) s) <-> is_rmvar r /\ sirred s /\ s <> S_id.
 Proof.
 split ; intros H.
 - split3.
-  + apply Decidable.not_not.
-    * unfold Decidable.decidable. destruct r ; triv.
-    * intros H'. apply H ; clear H. now apply SR_ren_l.
+  + destruct r ; triv. 
+    all: exfalso ; apply H.
+    all: constructor ; left.
+    all: now apply SR_ren_distrib.
   + intros H' ; apply H ; clear H. constructor. now right.
   + intros H'. apply H ; clear H. subst. now constructor.
-- intros H'. inv H' ; triv. destruct H1 ; triv. inv H0.
-  destruct H as ((m & ->) & _ & _). inv H2.
+- intros H'. inv H' ; triv. destruct H1 ; triv. inv H0 ; triv.
+  destruct r ; triv.
 Qed.
 
 Lemma sirred_mvar_l m s : 
-  sirred (S_comp (S_mvar m) s) <-> sirred s /\ s <> sid.
+  sirred (S_comp (S_mvar m) s) <-> sirred s /\ s <> S_id.
 Proof.
 split.
 - intros H. split.
@@ -836,80 +817,337 @@ split.
 - intros (H & H') H''. inv H'' ; triv. now destruct H1.
 Qed. 
 
-Lemma sirred_ren r : sirred (S_ren r) <-> rirred r.
+Lemma sirred_ren r : sirred (S_ren r) <-> is_rmvar r.
 Proof.
-split ; intros H H' ; apply H ; clear H.
-- now constructor.
-- now inv H'.
-Qed.  *)
+split ; intros H.
+- destruct r ; triv. all: exfalso ; apply H ; now constructor.
+- intros H' ; inv H' ; triv. destruct r ; triv.
+Qed.
 
 (*********************************************************************************)
 (** *** Simplify substitutions & expressions. *)
 (*********************************************************************************)
 
-(** Helper function for [sdrop] which takes care of 
-    removing left composition by the identity. *)
-Equations do_sshift : qnat -> subst -> subst :=
-do_sshift Q_zero s := s ;
-do_sshift k s := S_comp (S_shift k) s.
+(** Helper function for [sapply] which takes care of trivial cases. *)
+Equations sapply_aux : subst -> qnat -> term :=
+sapply_aux S_id i := E_tvar i ;
+sapply_aux (S_cons t _) Q_zero := t ;
+sapply_aux (S_ren r) i := E_tvar (rapply r i) ;
+sapply_aux s i := E_subst (E_tvar i) s.
 
-Lemma do_sshift_sound e k s : 
-  seval e (do_sshift k s) =₁ O.scomp (O.sshift (qeval e k)) (seval e s).
-Proof. funelim (do_sshift k s) ; triv. Qed.
-#[global] Hint Rewrite do_sshift_sound : seval.
+Lemma sapply_aux_sound e s i : 
+  eeval e (sapply_aux s i) = seval e s (qeval e i).
+Proof. funelim (sapply_aux s i) ; simp qeval eeval ; triv. Qed.
+#[global] Hint Rewrite sapply_aux_sound : eeval seval.
 
-Lemma do_sshift_irred k s :
-  qirred k -> sirred s -> (k <> Q_zero -> sirred (S_comp (S_shift k) s)) -> sirred (do_sshift k s).
-Proof. intros H1 H2 H3. funelim (do_sshift k s) ; triv ; now apply H3. Qed.
-
-(** Drop the [k] first elements in an irreducible substitution [s]. *)
-Equations sdrop (k : qnat) (s : subst) : subst by struct s :=
-sdrop k (S_shift k') := S_shift (qplus k k') ;
-sdrop k (S_cons t s) with k := {
-  | Q_succ k' => sdrop k' s ;
-  | _ => do_sshift k (S_cons t s) } ;
-sdrop k (S_comp (S_shift k') s) := sdrop (qplus k k') s ;
-sdrop k (S_ren r) := S_ren (rdrop k r) ;
-sdrop k s := do_sshift k s.
-
-Lemma sdrop_sound e k s : 
-  seval e (sdrop k s) =₁ O.scomp (O.sshift (qeval e k)) (seval e s).
+Lemma sapply_aux_irred s i :
+  sirred s -> qirred i ->
+  (s <> S_id -> ~is_sren s -> ~(is_scons s /\ i = Q_zero) -> eirred (E_subst (E_tvar i) s)) ->
+  eirred (sapply_aux s i).
 Proof.
-funelim (sdrop k s) ; simp seval eeval qeval ; triv.
-- now rewrite O.sshift_plus.
-- rewrite H. simp qeval. now rewrite <-O.scomp_assoc, O.sshift_plus.
+intros H1 H2 H3. funelim (sapply_aux s i).
+all: try solve [ apply H3 ; triv ].
+- now rewrite eirred_tvar.
+- now apply sirred_cons in H1.
+- rewrite eirred_tvar. apply rapply_rcomp_irred ; triv. 
+  rewrite sirred_ren in H1. destruct r ; triv.
 Qed.
-#[global] Hint Rewrite sdrop_sound : seval eeval.   
 
-Lemma sdrop_irred k s :
-  qirred k -> sirred s -> sirred (sdrop k s).
+(** Helper function for [rscomp], [srcomp], and [scomp]
+    which takes care of trivial cases. *)
+Equations scomp_aux : subst -> subst -> subst :=
+scomp_aux s S_id := s ;
+scomp_aux S_shift (S_cons t s) := s ;
+scomp_aux s1 s2 := S_comp s1 s2.
+
+Lemma scomp_aux_sound e s1 s2 : 
+  seval e (scomp_aux s1 s2) =₁ O.scomp (seval e s1) (seval e s2).
 Proof.
-intros H1 H2. funelim (sdrop k s) ; triv.
-all: try solve [ apply do_sshift_irred ; triv ; [] ; intros H3 ; rewrite sirred_shift_l ;
-  split6 ; triv ; [] ; intros (? & ?) ; triv ].
-- rewrite sirred_shift in *. now apply qplus_irred.
-- rewrite sirred_shift_l in H2. apply H ; triv. now apply qplus_irred.
-- rewrite sirred_ren in *. now apply rdrop_irred.
-- rewrite qirred_succ in H1. rewrite sirred_cons in H2. now apply H.
+funelim (scomp_aux s1 s2) ; simp seval eeval ; triv.
+now rewrite O.scomp_sid_r.
+Qed.
+#[global] Hint Rewrite scomp_aux_sound : seval eeval.
+
+Lemma scomp_aux_irred s1 s2 :
+  sirred s1 -> sirred s2 -> 
+  (s2 <> S_id -> ~(s1 = S_shift /\ is_scons s2) -> sirred (S_comp s1 s2)) ->
+  sirred (scomp_aux s1 s2).
+Proof.
+intros H1 H2 H3. funelim (scomp_aux s1 s2) ; triv.
+all: try solve [ apply H3 ; triv ]. 
+now rewrite sirred_cons in H2.
 Qed.
 
 (** Apply an irreducible substitution to an irreducible natural. *)
-Equations sapply (s : subst) (i : qnat) : term by struct s := 
-sapply (S_shift k) i := E_tvar (qplus k i) ;
-sapply (S_comp (S_shift k) s) i := sapply s (qplus k i) ;
+Equations sapply (s : subst) (i : qnat) : term by struct i :=
+sapply s (Q_rapply r i) := sapply_aux (rscomp r s) i ;
+sapply s i := sapply_aux s i
 
-sapply (S_cons t s) Q_zero := t ;
-sapply (S_comp (S_cons t s1) s2) Q_zero := t ;
+(** Compose an irreducible renaming with an irreducible substitution. *)
+with rscomp (r : ren) (s : subst) : subst by struct r :=
+rscomp R_id s := s ;
+rscomp R_shift s := scomp_aux S_shift s ;
+rscomp (R_cons i r) s := S_cons (sapply s i) (rscomp r s) ;
+rscomp (R_comp r1 r2) s := rscomp r1 (rscomp r2 s) ;
+rscomp (R_mvar m) s := scomp_aux (S_ren (R_mvar m)) s.
 
-sapply (S_cons t s) (Q_succ i) := sapply s i ;
-sapply (S_comp (S_cons t s1) s2) (Q_succ i) := sapply s2 (sapply s1 i) ;
+Lemma sapply_rscomp_sound e :
+  (forall s i, eeval e (sapply s i) = seval e s (qeval e i)) *
+  (forall r s, seval e (rscomp r s) =₁ O.rscomp (reval e r) (seval e s)).
+Proof.
+apply sapply_elim with 
+  (P := fun s i res => eeval e res = seval e s (qeval e i))
+  (P0 := fun r s res => seval e res =₁ O.rscomp (reval e r) (seval e s)).
+all: intros ; simp eeval ; triv.
+- rewrite H, H0. intros [|i'] ; reflexivity.
+- rewrite H0, H. reflexivity.
+Qed. 
 
-sapply (S_ren r) i := E_tvar (rapply r i) ;
-sapply (S_comp (S_ren r) s) i := sapply s (rapply r i) ;
+Lemma sapply_sound e s i:
+  eeval e (sapply s i) = seval e s (qeval e i).
+Proof. now apply sapply_rscomp_sound. Qed.
+#[global] Hint Rewrite sapply_sound : eeval seval.
 
-sapply s i with i := { 
-  | Q_rapply (R_cons i0 r0) i' => E_subst (S_cons (sapply s i0) (rscomp r0 s)) i'
-  | _ => E_subst (E_tvar i) s }.
+Lemma rscomp_sound e r s :
+  seval e (rscomp r s) =₁ O.rscomp (reval e r) (seval e s).
+Proof. now apply sapply_rscomp_sound. Qed.
+#[global] Hint Rewrite rscomp_sound : eeval seval.
+
+Lemma sapply_rscomp_irred :
+  (forall s i, sirred s -> qirred i -> eirred (sapply s i)) *
+  (forall r s, rirred r -> sirred s -> sirred (rscomp r s)).
+Proof.
+apply sapply_elim with 
+  (P := fun s i res => sirred s -> qirred i -> eirred res)
+  (P0 := fun r s res => rirred r -> sirred s -> sirred res).
+all: intros ; triv.
+- apply sapply_aux_irred ; triv. intros H1 H2 H3. rewrite eirred_subst_var.
+  split6 ; triv. intros [? ?] ; triv.
+- rewrite qirred_rapply in H1. apply sapply_aux_irred ; triv. 
+  + now apply H.
+  + intros H2 H3 H4. rewrite eirred_subst_var. split6 ; triv.
+    * now apply H.
+    * intros [? ?] ; triv.
+- apply sapply_aux_irred ; triv. intros H1 H2 H3. rewrite eirred_subst_var.
+  split6 ; triv. 
+- apply scomp_aux_irred ; triv. intros H1. rewrite sirred_shift_l.
+  split3 ; triv. 
+- rewrite sirred_cons. rewrite rirred_cons in H1. split.
+  + apply H ; triv.
+  + apply H0 ; triv.
+- assert (H3 : rirred r1 /\ rirred r2).
+  { split ; intros H' ; apply H1 ; triv. }
+  apply H0 ; triv. apply H ; triv.
+- apply scomp_aux_irred ; triv.
+  + rewrite sirred_ren ; triv.
+  + intros H1 H2. rewrite sirred_ren_l. split3 ; triv.
+Qed.
+
+(** Turn an irreducible renaming into an irreducible substitution. *)
+Equations sren (r : ren) : subst :=
+sren R_id := S_id ;
+sren R_shift := S_shift ;
+sren (R_cons i r) := S_cons (E_tvar i) (sren r) ;
+sren (R_comp r1 r2) := S_comp (sren r1) (sren r2) ;
+sren (R_mvar r) := S_ren (R_mvar r).
+
+Lemma sren_sound e r : 
+  seval e (sren r) =₁ O.rscomp (reval e r) O.E_var.
+Proof.
+funelim (sren r) ; simp eeval qeval ; triv.
++ rewrite H. intros [|] ; reflexivity.
++ rewrite H0, H. reflexivity.
+Qed.  
+#[global] Hint Rewrite sren_sound : seval eeval.
+
+Lemma sirred_comp s1 s2 : 
+  sirred (S_comp s1 s2) <->
+    sirred s1 /\ sirred s2 /\ ~is_scomp s1 /\ ~is_scons s1 /\ 
+    s1 <> S_id /\ s2 <> S_id /\ ~(s1 = S_shift /\ is_scons s2).
+Proof.
+split ; intros H.
+- split7 ; intros H' ; apply H ; triv.
+  + destruct s1 ; triv.
+  + destruct s1 ; triv.
+  + destruct H' as [-> H']. destruct s2 ; triv.
+- intros H' ; inv H' ; triv.
+  + destruct H1 ; triv.
+  + destruct H as (_ & _ & H & _) ; triv.
+  + destruct H as (_ & _ & _ & H & _) ; triv.
+  + destruct H1 ; destruct s2 ; triv.
+    * destruct H as (_ & _ & _ & _ & _ & _ & H). triv.
+    * destruct s2_1 ; triv. destruct H as (_ & H & _). triv.
+Qed. 
+
+Lemma sren_irred r : rirred r -> sirred (sren r).
+Proof.
+intros H. funelim (sren r) ; triv.
+- rewrite sirred_cons, eirred_tvar. rewrite rirred_cons in H0.
+  split ; triv. now apply H.
+- rewrite sirred_comp. split7 ; triv. all: admit. 
+- rewrite sirred_ren. triv.
+Admitted.    
+
+(** Lift a renaming through a binder. *)
+Equations rup (r : ren) : ren :=
+rup r := R_cons Q_zero (rcomp r R_shift).
+
+Lemma rup_sound e r : 
+  reval e (rup r) =₁ O.up_ren (reval e r).
+Proof. simp rup qeval. reflexivity. Qed.
+#[global] Hint Rewrite rup_sound : reval qeval.
+
+Lemma rup_irred r : rirred r -> rirred (rup r).
+Proof. 
+intros H. simp rup. rewrite rirred_cons. split ; triv.
+apply rapply_rcomp_irred ; triv.
+Qed.
+
+(** Helper function for [ren] which takes care of trivial cases. *)
+Equations rename_aux {k} (t : expr k) (r : ren) : expr k :=
+rename_aux t R_id := t ;
+rename_aux t r := E_ren t r.
+
+Lemma rename_aux_sound e {k} (t : expr k) r :
+  eeval e (rename_aux t r) = O.rename (eeval e t) (reval e r).
+Proof.
+funelim (rename_aux t r) ; simp reval ; triv. now rewrite O.ren_rid.
+Qed.
+#[global] Hint Rewrite rename_aux_sound : eeval seval.
+
+Lemma rename_aux_irred {k} (t : expr k) r :
+  eirred t -> rirred r -> (r <> R_id -> eirred (E_ren t r)) ->
+  eirred (rename_aux t r).
+Proof.
+intros H1 H2 H3. funelim (rename_aux t r) ; triv.
+all: solve [ apply H3 ; triv ].
+Qed.
+
+(** Helper function for [ren] and [subst] which takes care of trivial cases. *)
+Equations substitute_aux {k} (t : expr k) (s : subst) : expr k :=
+substitute_aux t S_id := t ;
+substitute_aux t (S_ren r) := rename_aux t r ;
+substitute_aux (E_tvar Q_zero) (S_cons t _) := t ;
+substitute_aux t s := E_subst t s.
+
+Lemma substitute_aux_sound e {k} (t : expr k) s :
+  eeval e (substitute_aux t s) = O.substitute (eeval e t) (seval e s).
+Proof.
+funelim (substitute_aux t s) ; simp seval eeval ; triv.
+- now rewrite O.subst_sid.
+- now rewrite O.ren_is_subst. 
+Qed.
+#[global] Hint Rewrite substitute_aux_sound : eeval seval.
+
+Lemma substitute_aux_irred {k} (t : expr k) s :
+  eirred t -> sirred s -> 
+  (match s with S_ren r => eirred (E_ren t r) | _ => True end) ->
+  (s <> S_id -> ~is_sren s -> ~(is_tvar_zero t /\ is_scons s) -> eirred (E_subst t s)) ->
+  eirred (substitute_aux t s).
+Proof.
+intros H1 H2 H3 H4. funelim (substitute_aux t s) ; triv.
+all: try solve [ apply H4 ; triv ].
+now rewrite sirred_cons in H2.
+Qed.
+
+(** Apply an irreducible renaming to an irreducible expression. *)
+Equations rename {k} (t : expr k) (r : ren) : expr k by struct t :=
+rename (E_tvar i) r := E_tvar (rapply r i) ;
+rename (E_tctor c al) r := E_tctor c (rename al r) ;
+rename E_al_nil _ := E_al_nil ;
+rename (E_al_cons a al) r := E_al_cons (rename a r) (rename al r) ;
+rename (E_abase b x) _ := E_abase b x ;
+rename (E_aterm t) r := E_aterm (rename t r) ;
+rename (E_abind a) r := E_abind (rename a (rup r)) ;
+rename (E_ren e r1) r2 := rename_aux e (rcomp r1 r2) ;
+rename (E_subst e s) r := substitute_aux e (srcomp s r) ;
+rename e r := rename_aux e r 
+
+(** Compose an irreducible substitution with an irreducible renaming. *)
+with srcomp (s : subst) (r : ren) : subst by struct s :=
+srcomp S_id r := sren r ;
+srcomp (S_cons t s) r := S_cons (rename t r) (srcomp s r) ;
+srcomp (S_comp s1 s2) r := scomp_aux s1 (srcomp s2 r) ;
+srcomp s r := scomp_aux s (sren r). 
+
+Lemma rename_srcomp_sound e : 
+  (forall {k} (t : expr k) r, eeval e (rename t r) = O.rename (eeval e t) (reval e r)) *
+  (forall s r, seval e (srcomp s r) =₁ O.srcomp (seval e s) (reval e r)).
+Proof.
+apply rename_elim with 
+  (P := fun {k} (t : expr k) r res => eeval e res = O.rename (eeval e t) (reval e r))
+  (P0 := fun s r res => seval e res =₁ O.srcomp (seval e s) (reval e r)).
+all: intros ; simp eeval seval qeval reval ; triv.
+- now rewrite H.
+- now rewrite H, H0.
+- now rewrite H.
+- rewrite H. now rewrite rup_sound.
+- now rewrite O.ren_ren.
+- now rewrite O.ren_subst, H.
+- rewrite H, H0. intros [|] ; reflexivity.
+- rewrite H. intros i. cbv [O.scomp O.srcomp]. now rewrite O.ren_subst.
+- intros i. cbv [O.scomp O.srcomp]. now rewrite O.ren_is_subst.
+Qed.
+
+Lemma rename_sound {k} e (t : expr k) r :
+  eeval e (rename t r) = O.rename (eeval e t) (reval e r).
+Proof. now apply rename_srcomp_sound. Qed.
+#[global] Hint Rewrite @rename_sound : eeval seval.
+
+Lemma srcomp_sound e s r :
+  seval e (srcomp s r) =₁ O.srcomp (seval e s) (reval e r).
+Proof. now apply rename_srcomp_sound. Qed.
+#[global] Hint Rewrite srcomp_sound : eeval seval.
+
+Lemma rename_srcomp_irred :
+  (forall {k} (t : expr k) r, eirred t -> rirred r -> eirred (rename t r)) *
+  (forall s r, sirred s -> rirred r -> sirred (srcomp s r)).
+Proof.
+apply rename_elim with 
+  (P := fun {k} (t : expr k) r res => eirred t -> rirred r -> eirred res)
+  (P0 := fun s r res => sirred s -> rirred r -> sirred res).
+all: intros ; triv.
+- rewrite eirred_tvar in *. apply rapply_rcomp_irred ; triv.
+- rewrite eirred_tctor in *. now apply H.
+- apply rename_aux_irred ; triv. intros H1. intros H' ; inv H' ; triv.
+  destruct H4 ; triv.
+- rewrite eirred_al_cons in *. split ; [apply H | apply H0] ; triv.
+- rewrite eirred_aterm in *. now apply H.
+- rewrite eirred_abind in *. apply H ; triv. now apply rup_irred.
+- rewrite eirred_ren in H. apply rename_aux_irred ; triv.
+  + destruct e ; triv.
+  + apply rapply_rcomp_irred ; triv.
+  + intros H2. rewrite eirred_ren. split3 ; triv.
+    apply rapply_rcomp_irred ; triv.
+- rewrite eirred_subst in H0. feed2 H ; triv. apply substitute_aux_irred ; triv.
+  + destruct (srcomp s r) ; triv. rewrite sirred_ren in H. destruct r0 ; triv.
+    rewrite eirred_ren. split3 ; triv.  
+
+    
+- now apply sren_irred.
+- apply scomp_aux_irred ; triv. 
+  + now apply sren_irred.
+  + intros H1 H2. rewrite sirred_shift_l. split3 ; triv.
+    now apply sren_irred.
+- rewrite sirred_cons in *. split ; [apply H | apply H0] ; triv.
+- rewrite sirred_comp in H0. apply scomp_aux_irred ; triv.
+  + now apply H.
+  + intros H2 H3. rewrite sirred_comp. split7 ; triv.
+    * now apply H.
+    * intros [-> H4]. destruct H4 ; triv. feed2 H ; triv. 
+      revert H H4 ; clear. generalize (srcomp s2 r).
+      intros s ; destruct s ; triv. destruct s1 ; triv.
+- rewrite sirred_ren in H. destruct r0 ; triv. apply scomp_aux_irred.
+  + now rewrite sirred_ren.
+  + now apply sren_irred.
+  + intros H1 H2. rewrite sirred_ren_l. split3 ; triv. now apply sren_irred.
+- apply scomp_aux_irred ; triv.
+  + now apply sren_irred.
+  + intros H1 H2. rewrite sirred_mvar_l. split ; triv.
+    now apply sren_irred.        
+Admitted.
+
+
 
 End Make.
 
