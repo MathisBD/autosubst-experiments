@@ -17,6 +17,22 @@ Ltac split6 := split ; [|split5].
 Ltac split7 := split ; [|split6].
 Ltac split8 := split ; [|split7].
 
+(** On a hypothesis of the form [H : A -> B], this generates two goals:
+    - the first asks to prove [A]. 
+    - the second asks to prove the original goal, 
+      in a context where [H : B]. *)
+Ltac feed H := 
+  match type of H with 
+  | ?A -> ?B => 
+    let HA := fresh "H" in 
+    assert (HA : A) ; [| specialize (H HA)]
+  end.
+
+Ltac feed2 H := feed H ; [| feed H].
+Ltac feed3 H := feed H ; [| feed2 H].
+Ltac feed4 H := feed H ; [| feed3 H].
+
+
 (** Surprisingly, neither [eauto] nor [easy] is more powerful than the other. *)
 Ltac triv := try solve [ eauto | easy ].
 

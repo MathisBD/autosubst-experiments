@@ -383,6 +383,7 @@ Inductive qred : qnat -> Prop :=
 | QR_ren r x : rred r \/ qred x -> qred (Q_rapply r x)
 
 | QR_ren_ren r1 r2 i : qred (Q_rapply r1 (Q_rapply r2 i))
+| QR_ren_id i : qred (Q_rapply R_id i)
 | QR_rcons_zero r : 
     is_rcons r \/ is_rcons_l r -> qred (Q_rapply r Q_zero)
 
@@ -415,7 +416,19 @@ Definition rirred r := ~ rred r.
 (** *** Properties of renaming & natural irreducible forms. *)
 (*********************************************************************************)
 
-Lemma qirred_ren_mvar m i : 
+Lemma qirred_rapply_shift i : 
+  qirred (Q_rapply R_shift i) <-> qirred i /\ ~is_qrapply i.
+split ; intros H.
+- split ; intros H' ; apply H ; clear H.
+  + constructor ; now right.
+  + destruct H' as (r & i' & ->). now constructor. 
+- intros H'. inv H'.
+  + destruct H1 ; triv.
+  + destruct H ; triv.
+  + destruct H1 ; triv.
+Qed.
+
+Lemma qirred_rapply_mvar m i : 
   qirred (Q_rapply (R_mvar m) i) <-> qirred i /\ ~is_qrapply i.
 Proof.
 split ; intros H.
@@ -428,7 +441,7 @@ split ; intros H.
   + destruct H1 ; triv.
 Qed.     
 
-Lemma qirred_ren_cons i r k :
+Lemma qirred_rapply_cons i r k :
   qirred (Q_rapply (R_cons i r) k) <-> qirred i /\ rirred r /\ is_qmvar k.
 Proof.
 split.
@@ -438,6 +451,35 @@ split.
   + destruct k ; triv. 
 - intros (H1 & H2 & (? & ->)) H. inv H ; triv.
   destruct H3 ; triv. inv H0. destruct H4 ; triv.
+Qed.
+
+Lemma qirred_rapply_zero r : 
+  qirred (Q_rapply r Q_zero) <-> rirred r /\ r <> R_id /\ ~is_rcons r.
+Proof.
+split ; intros H.
+- split3 ; intros H' ; apply H ; triv. subst. triv.
+- intros H'. inv H' ; triv.
+  + destruct H1 ; triv.
+  + destruct H1 ; triv. destruct H0 as (? & ? & ? & ->). 
+    destruct H as (H & _) ; apply H. triv.
+Qed. 
+
+Lemma qirred_rapply r i : 
+  qirred (Q_rapply r i) <-> 
+    rirred r /\ qirred i /\ r <> R_id /\ ~is_qrapply i /\
+    ~(is_rcons r /\ i = Q_zero).
+Proof. 
+split ; intros H. 
+- split5 ; intros H' ; apply H ; triv.
+  + subst. triv.
+  + destruct H' as (? & ? & ->) ; triv.
+  + destruct H' as ((? & ? & ->) & ->). triv.
+- intros H' ; inv H' ; triv.
+  + destruct H1 ; triv.
+  + destruct H as (_ & _ & _ & H & _). triv.
+  + destruct H1 as [(? & ? & ->) | (? & ? & ? & ->)].
+    * destruct H as (_ & _ & _ & _ & H). triv.
+    * destruct H as (H & _). triv.          
 Qed.
 
 Lemma rirred_cons i r : 
@@ -472,37 +514,9 @@ split.
   + destruct H3 ; triv.
 Qed.
 
-(*Lemma rirred_comp r1 r2 : 
-  rirred (R_comp r1 r2) <-> 
-    rirred r1 /\ rirred r2 /\ r2 <> R_id /\ (r1 = R_shift \/ is_rmvar r1).
-Proof.
-split.
-- intros H. split4.
-  + intros H' ; apply H. triv.
-  + intros H' ; apply H. triv.
-  + intros ->. triv.
-  + destruct r1 ; triv.
-- intros (H1 & H2 & H3 & [-> | (? & ->)]).
-  + rewrite rirred_shift_l. split4 ; triv.  *)
-
 (*********************************************************************************)
 (** *** Simplification of renamings & quoted naturals. *)
 (*********************************************************************************)
-
-(*(** Helper function for [rdrop] which takes care of 
-    removing left composition by the identity. *)
-Equations do_rshift : qnat -> ren -> ren :=
-do_rshift Q_zero r := r ;
-do_rshift k r := R_comp (R_shift k) r.
-
-Lemma do_rshift_sound e k r : 
-  reval e (do_rshift k r) =₁ O.rcomp (O.rshift (qeval e k)) (reval e r).
-Proof. funelim (do_rshift k r) ; triv. Qed.
-#[global] Hint Rewrite do_rshift_sound : reval.
-
-Lemma do_rshift_irred k r :
-  qirred k -> rirred r -> (k <> Q_zero -> rirred (R_comp (R_shift k) r)) -> rirred (do_rshift k r).
-Proof. intros H1 H2 H3. funelim (do_rshift k r) ; triv ; now apply H3. Qed.*)
 
 (** Drop the first element in an irreducible renaming. *)
 Equations rtail (r : ren) : ren by struct r :=
@@ -525,113 +539,120 @@ intros H. funelim (rtail r) ; triv.
 - rewrite rirred_shift_l. split4 ; triv.
 Qed. 
 
-(** Apply an irreducible renaming to an irreducible quoted natural. *)
-Equations rapply (r : ren) (i : qnat) : qnat by struct r := 
-rapply R_id i := i ;
-rapply R_shift 
-rapply (R_shift k) i := qplus k i ;
-rapply (R_mvar m) r := Q_rapply (R_mvar m) r ;
-rapply (R_cons i1 r) i with i => {
-  | Q_zero := i1
-  | Q_succ i' := rapply r i'
-  | _ := Q_rapply (R_cons i1 r) i } ;
-rapply (R_comp r1 r2) i with r1 => {
-  | R_shift k := rapply r2 (qplus k i) ;
-  | R_mvar m := rapply r2 (Q_rapply (R_mvar m) i)
-  | _ => (* This should not happen. *) Q_rapply (R_comp r1 r2) i }.
+(** Helper function for [rapply] which takes care of trivial cases. *)
+Equations rapply_aux (r : ren) (i : qnat) : qnat :=
+rapply_aux R_id i := i ;
+rapply_aux (R_cons k r) Q_zero := k ;
+rapply_aux r i := Q_rapply r i.
 
-Lemma rapply_sound e r i : 
-  qeval e (rapply r i) = reval e r (qeval e i).
+Lemma rapply_aux_sound e r i : 
+  qeval e (rapply_aux r i) = reval e r (qeval e i).
+Proof. funelim (rapply_aux r i) ; simp qeval ; triv. Qed.
+#[global] Hint Rewrite rapply_aux_sound : qeval.
+
+Lemma rapply_aux_irred r i : 
+  rirred r -> qirred i -> 
+  (r <> R_id -> ~(is_rcons r /\ i = Q_zero) -> qirred (Q_rapply r i)) -> 
+  qirred (rapply_aux r i).
 Proof.
-funelim (rapply r i) ; simp qeval ; triv.
-rewrite H. simp qeval. reflexivity.
-Qed.
-#[global] Hint Rewrite rapply_sound : qeval.
-
-Lemma rapply_irred r i : 
-  rirred r -> qirred i -> qirred (rapply r i).
-Proof. 
-intros H1 H2. funelim (rapply r i) ; triv.
-- rewrite rirred_shift in H1. now apply qplus_irred.
-- now rewrite qirred_ren_mvar.
-- now rewrite rirred_cons in H1.
-- rewrite rirred_cons in H1. rewrite qirred_succ in H2. now apply H.
-- rewrite qirred_ren_cons. rewrite rirred_cons in H1. split5 ; triv.
-- rewrite qirred_ren_cons. rewrite rirred_cons in H1. split5 ; triv.
-- rewrite qirred_ren_cons. rewrite rirred_cons in H1. split5 ; triv.
-- rewrite rirred_shift_l in H1. apply H ; triv. now apply qplus_irred.
-- rewrite rirred_mvar_l in H1. apply H ; triv. now rewrite qirred_ren_mvar.
+intros H1 H2 H3. funelim (rapply_aux r i) ; triv.
+- rewrite qirred_rapply_shift. split ; triv. intros (? & ? & ->). apply H3 ; triv.
+- rewrite rirred_cons in H1 ; triv.
+- apply H3 ; triv.
+- apply H3 ; triv.
+- apply H3 ; triv. intros [? ?] ; triv.
+- apply H3 ; triv. intros [? ?] ; triv.
 Qed.   
 
-(** Helper function for [rcomp] which takes care of 
-    removing [rid] in the right hand side.*)
-Equations rcomp_aux : ren -> ren -> ren :=
-rcomp_aux r rid := r ;
-rcomp_aux r1 r2 := R_comp r1 r2. 
+(** Helper function for [rcomp] which takes care of trivial cases. *)
+Equations rcomp_aux (r1 r2 : ren) : ren :=
+rcomp_aux r R_id := r ;
+rcomp_aux R_shift (R_cons _ r) := r ;
+rcomp_aux r1 r2 := R_comp r1 r2.
 
-Lemma rcomp_aux_sound e r1 r2 : 
+Lemma rcomp_aux_sound e r1 r2 :
   reval e (rcomp_aux r1 r2) =₁ O.rcomp (reval e r1) (reval e r2).
 Proof. funelim (rcomp_aux r1 r2) ; simp qeval ; triv. Qed.
-#[global] Hint Rewrite rcomp_aux_sound : qeval reval. 
+#[global] Hint Rewrite rcomp_aux_sound : qeval reval.
 
-Lemma rcomp_aux_irred r1 r2 :
-  rirred r1 -> rirred r2 -> (r2 <> rid -> rirred (R_comp r1 r2)) -> rirred (rcomp_aux r1 r2).
-Proof. 
+Lemma rcomp_aux_irred r1 r2 : 
+  rirred r1 -> rirred r2 -> 
+  (r2 <> R_id -> ~(r1 = R_shift /\ is_rcons r2) -> rirred (R_comp r1 r2)) -> 
+  rirred (rcomp_aux r1 r2).
+Proof.
 intros H1 H2 H3. funelim (rcomp_aux r1 r2) ; triv.
-all: apply H3 ; intros H ; inv H.
-Qed.  
+all: try (apply H3 ; now triv).
+- apply H3 ; triv. intros [? ?] ; triv.
+- now rewrite rirred_cons in H2.
+- apply H3 ; triv. intros [? ?] ; triv.
+- apply H3 ; triv. intros [? ?] ; triv.
+Qed.
+
+(** Apply an irreducible renaming to an irreducible quoted natural. *)
+Equations rapply (r : ren) (i : qnat) : qnat by struct i := 
+rapply r (Q_rapply r' i) := rapply_aux (rcomp r' r) i ;
+rapply r i := rapply_aux r i
 
 (** Compose two irreducible renamings. *)
-Equations rcomp (r1 r2 : ren) : ren by struct r1 :=
-rcomp (R_shift k) r := rdrop k r ;
+with rcomp (r1 r2 : ren) : ren by struct r1 :=
+rcomp R_id r := r ;
 rcomp (R_cons i r1) r2 := R_cons (rapply r2 i) (rcomp r1 r2) ;
-rcomp (R_comp r1 r2) r3 with r1 => {
-  | R_mvar m => rcomp_aux (R_mvar m) (rcomp r2 r3) ;
-  | R_shift k => rdrop k (rcomp r2 r3) 
-  | _ => (* This should not happen. *) R_comp (R_comp r1 r2) r3 } ;
-rcomp (R_mvar m) r := rcomp_aux (R_mvar m) r.
+rcomp (R_comp r1 r2) r3 := rcomp r1 (rcomp r2 r3) ;
+rcomp r1 r2 := rcomp_aux r1 r2.
 
-Lemma rcomp_sound e r1 r2 : 
-  reval e (rcomp r1 r2) =₁ O.rcomp (reval e r1) (reval e r2).
+Lemma rapply_rcomp_sound e :
+  (forall r i, qeval e (rapply r i) = reval e r (qeval e i)) * 
+  (forall r1 r2, reval e (rcomp r1 r2) =₁ O.rcomp (reval e r1) (reval e r2)).
 Proof.
-funelim (rcomp r1 r2) ; simp reval qeval ; triv.
-- rewrite H. now rewrite O.rcomp_rcons_distrib.
-- rewrite H. now rewrite O.rcomp_assoc.
-- rewrite H. now rewrite O.rcomp_assoc.
-Qed.  
-#[global] Hint Rewrite rcomp_sound : reval qeval.
-
-Lemma rcomp_irred r1 r2 : 
-  rirred r1 -> rirred r2 -> rirred (rcomp r1 r2).
-Proof.
-intros H1 H2. funelim (rcomp r1 r2) ; triv.
-- rewrite rirred_shift in H1. now apply rdrop_irred.
-- rewrite rirred_cons in * ; split.
-  + now apply rapply_irred.
-  + now apply H.
-- apply rcomp_aux_irred ; triv. intros H. now rewrite rirred_mvar_l.
-- rewrite rirred_shift_l in H1. apply rdrop_irred ; triv. now apply H.
-- rewrite rirred_mvar_l in H1. apply rcomp_aux_irred ; triv.  
-  + now apply H.
-  + intros H3. rewrite rirred_mvar_l. split ; triv. apply H ; triv.
+apply rapply_elim with 
+  (P := fun r i res => qeval e res = reval e r (qeval e i))
+  (P0 := fun r1 r2 res => reval e res =₁ O.rcomp (reval e r1) (reval e r2)).
+all: intros ; simp qeval reval ; triv.
+- rewrite H, H0. now rewrite O.rcomp_rcons_distrib.
+- rewrite H0, H. now rewrite O.rcomp_assoc.
 Qed.
+#[global] Hint Rewrite rapply_rcomp_sound : qeval reval.
+
+Lemma rapply_rcomp_irred :
+  (forall r i, rirred r -> qirred i -> qirred (rapply r i)) *
+  (forall r1 r2, rirred r1 -> rirred r2 -> rirred (rcomp r1 r2)).
+Proof.
+apply rapply_elim with 
+  (P := fun r i res => rirred r -> qirred i -> qirred res)
+  (P0 := fun r1 r2 res => rirred r1 -> rirred r2 -> rirred res).
+all: intros ; triv.
+- apply rapply_aux_irred ; triv. intros H1 H2. rewrite qirred_rapply_zero.
+  split3 ; triv.
+- rewrite qirred_rapply in H1. apply rapply_aux_irred ; triv. 
+  + now apply H.
+  + intros H2 H3. rewrite qirred_rapply. split5 ; triv. now apply H.
+- apply rapply_aux_irred ; triv. intros H1 H2. rewrite qirred_rapply.
+  split5 ; triv.
+- apply rcomp_aux_irred ; triv. intros H1 H2. rewrite rirred_shift_l.
+  split4 ; triv. intros (? & ? & ? & ->) ; triv.
+- rewrite rirred_cons in *. split.
+  + now apply H.
+  + now apply H0.
+- assert (H3 : rirred r1 /\ rirred r2).
+  { split ; intros H' ; apply H1 ; triv. }
+  apply H0 ; triv. apply H ; triv.
+- apply rcomp_aux_irred ; triv. intros H1 H2. rewrite rirred_mvar_l.
+  split ; triv.
+Qed. 
 
 (** Simplify a quoted natural. *)
 Equations qsimp : qnat -> qnat :=
 qsimp Q_zero := Q_zero ;
-qsimp (Q_succ i) := Q_succ (qsimp i) ;
-qsimp (Q_plus x y) := qplus (qsimp x) (qsimp y) ;
 qsimp (Q_rapply r i) := rapply (rsimp r) (qsimp i) ;
 qsimp (Q_mvar m) := Q_mvar m 
 
 (** Simplify a renaming. *)
 with rsimp : ren -> ren :=
-rsimp (R_shift k) := R_shift (qsimp k) ;
 rsimp (R_cons i r) := R_cons (qsimp i) (rsimp r) ;
 rsimp (R_comp r1 r2) := rcomp (rsimp r1) (rsimp r2) ;
-rsimp (R_mvar m) := R_mvar m.
+rsimp r := r.
 
-Lemma qrsimp_sound_aux e :
+Lemma qsimp_rsimp_sound e :
   (forall i, qeval e (qsimp i) = qeval e i) *
   (forall r, reval e (rsimp r) =₁ reval e r).
 Proof. 
@@ -639,38 +660,34 @@ apply qsimp_elim with
   (P := fun i res => qeval e res = qeval e i)
   (P0 := fun r res => reval e res =₁ reval e r).
 all: intros ; simp qeval reval ; triv.
+- destruct (rapply_rcomp_sound e) as [-> _]. now rewrite H, H0.
 - now rewrite H, H0.
-- now rewrite H.
-- now rewrite H, H0.
-- now rewrite H, H0.
+- destruct (rapply_rcomp_sound e) as [_ ->]. now rewrite H, H0. 
 Qed.    
 
 Lemma qsimp_sound e i : qeval e (qsimp i) = qeval e i.
-Proof. now apply qrsimp_sound_aux. Qed.
+Proof. now apply qsimp_rsimp_sound. Qed.
 #[global] Hint Rewrite qsimp_sound : qeval.
 
 Lemma rsimp_sound e r : reval e (rsimp r) =₁ reval e r.
-Proof. now apply qrsimp_sound_aux. Qed.
+Proof. now apply qsimp_rsimp_sound. Qed.
 #[global] Hint Rewrite rsimp_sound : qeval reval.
 
-Lemma qrsimp_irred_aux : 
+Lemma qsimp_rsimp_irred : 
   (forall i, qirred (qsimp i)) * (forall r, rirred (rsimp r)).
 Proof.
 apply qsimp_elim with (P := fun _ res => qirred res) (P0 := fun _ res => rirred res).
 all: intros ; triv.
-- now rewrite qirred_succ.
-- now apply qplus_irred.
-- now apply rapply_irred.
-- now rewrite rirred_shift.
+- now apply rapply_rcomp_irred.
 - now rewrite rirred_cons.
-- now apply rcomp_irred.
+- now apply rapply_rcomp_irred.
 Qed.
 
 Lemma qsimp_irred i : qirred (qsimp i).
-Proof. now apply qrsimp_irred_aux. Qed.
+Proof. now apply qsimp_rsimp_irred. Qed.
 
 Lemma rsimp_irred r : rirred (rsimp r).
-Proof. now apply qrsimp_irred_aux. Qed.
+Proof. now apply qsimp_rsimp_irred. Qed.
   
 (*********************************************************************************)
 (** *** Irreducible forms for substitutions & expressions. *)
