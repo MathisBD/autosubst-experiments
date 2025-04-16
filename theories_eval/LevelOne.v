@@ -1,8 +1,10 @@
 From Prototype Require Import Prelude Sig.
 
-(** This file defines exprs and substitutions over an abstract signature.
-    Substitutions are represented as functions [nat -> term],
-    and we prove the main properties of substitution. *)
+(** This file defines a generic term grammar with _admissible_ renamings 
+    and substitutions, i.e. renamings are functions [nat -> nat] 
+    and substitutions are functions [nat -> term].
+    
+    We prove the main properties of substitution and renaming. *)
 
 Module Make (S : Sig).
 

@@ -3,8 +3,11 @@ From Ltac2 Require Export Ltac2.
 From Equations Require Export Equations.
 Export ListNotations.
 
-(** Ltac2 is still missing many basic Ltac1 tactics. *)
+(** Ltac2 is still missing many basic Ltac1 tactics,
+    so I use Ltac1 for proofs. *)
 #[export] Set Default Proof Mode "Classic".
+
+Coercion is_true : bool >-> Sortclass.
 
 (** Convenience tactics. *)
 
@@ -64,7 +67,7 @@ Ltac unfold_all :=
 Definition point_eq {A B} : relation (A -> B) := pointwise_relation _ eq.
 Notation "f =₁ g" := (point_eq f g) (at level 75).
 
-(** [fin n] represents the finite set with [n] elements [0], [1], ..., [n-1]. *)
+(*(** [fin n] represents the finite set with [n] elements [0], [1], ..., [n-1]. *)
 Inductive fin : nat -> Type :=
 | (** [0] is in [fin n] whenever [n > 0]. *)
   fin_zero {n} : fin (S n)
@@ -74,4 +77,4 @@ Inductive fin : nat -> Type :=
 (** Mapping from [i] to [i + k]. *)
 Equations fin_weaken {n} (k : nat) (i : fin n) : fin (k + n) :=
 fin_weaken 0 i := i ;
-fin_weaken (S k) i := fin_succ (fin_weaken k i).
+fin_weaken (S k) i := fin_succ (fin_weaken k i).*)
