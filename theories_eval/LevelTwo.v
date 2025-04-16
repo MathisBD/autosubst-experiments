@@ -137,12 +137,28 @@ Section Evaluation.
   seval S_id := O.sid ;
   seval S_shift := O.sshift ;
   seval (S_cons t s) := O.scons (eeval t) (seval s) ;
-  seval (S_comp s1 s2) := O.scomp (seval s1) (seval s2) ;
+  seval (S_comp s1 s2) :=
+    match s1, s2 with 
+    | S_ren r, s => O.rscomp (reval r) (seval s)
+    | s, S_ren r => O.srcomp (seval s) (reval r)
+    | s1, s2 => O.scomp (seval s1) (seval s2)
+    end ;
   seval (S_ren r) := O.rscomp (reval r) O.E_var ;
   seval (S_mvar x) := e.(assign_subst) x.
 
 End Evaluation.
- 
+
+Lemma seval_comp e s1 s2 : 
+  seval e (S_comp s1 s2) =₁ O.scomp (seval e s1) (seval e s2).
+Proof.
+destruct s1 ; destruct s2 ; simp eeval ; try now reflexivity.
+- intros i. cbv [O.srcomp O.scomp]. now rewrite O.ren_is_subst.
+- destruct s1_1 ; destruct s1_2.
+all: try (intros i ; cbv [O.srcomp O.scomp] ; now rewrite O.ren_is_subst).
+- intros i. cbv [O.srcomp O.scomp]. now rewrite O.ren_is_subst.
+Qed.
+#[global] Hint Rewrite seval_comp : eeval seval.
+
 (*********************************************************************************)
 (** *** Reification. *)
 (*********************************************************************************)
@@ -285,5 +301,30 @@ with reify_subst (e : env) (s : constr) : env * constr :=
     let e := add_subst_mvar s e in
     e, constr:(S_mvar $idx)
   end.
+
+(** Turn a list of [constr] into a Rocq list. 
+    [ty] is the type of each element in the list, which is needed
+    to build the empty list. *)
+Ltac2 rec coq_list (ty : constr) (xs : constr list) : constr :=
+  match xs with 
+  | [] => constr:(@nil $ty)
+  | x :: xs =>
+    let xs := coq_list ty xs in 
+    constr:(@cons $ty $x $xs)
+  end.
+
+(** Turn the Ltac2 representation of the environment into the equivalent
+    Rocq representation. *)
+Ltac2 build_env (e : env) : constr :=
+  let e1 := coq_list constr:(nat) (e.(qnat_mvars)) in 
+  let e2 := coq_list constr:(O.ren) (e.(ren_mvars)) in 
+  let e3 := coq_list constr:(O.expr Kt) (e.(term_mvars)) in 
+  let e4 := coq_list constr:(O.subst) (e.(subst_mvars)) in 
+  constr:(
+    Build_env 
+      (fun n => List.nth n $e1 0)
+      (fun n => List.nth n $e2 O.rid)
+      (fun n => List.nth n $e3 (O.E_var 0))
+      (fun n => List.nth n $e4 O.sid)).
 
 End Make.

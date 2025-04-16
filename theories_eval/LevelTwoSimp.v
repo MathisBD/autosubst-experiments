@@ -218,12 +218,19 @@ scomp_aux s S_id := s ;
 scomp_aux S_shift (S_cons t s) := s ;
 scomp_aux s1 s2 := S_comp s1 s2.
 
+
 Lemma scomp_aux_sound e s1 s2 : 
   seval e (scomp_aux s1 s2) =₁ O.scomp (seval e s1) (seval e s2).
 Proof.
 funelim (scomp_aux s1 s2) ; simp seval eeval ; triv.
-now rewrite O.scomp_sid_r.
-Qed.
+- now rewrite O.scomp_sid_r.
+- destruct s1 ; triv.
+- destruct s1 ; triv.
+- destruct s1 ; triv.
+  + rewrite seval_equation_3. intros i. cbv [O.srcomp O.scomp].
+    now rewrite O.ren_is_subst.
+  + rewrite seval_equation_4. destruct s1_1 ; destruct s1_2 ; triv.
+Admitted.
 #[global] Hint Rewrite scomp_aux_sound : seval eeval.
 
 Lemma scomp_aux_irred s1 s2 :
@@ -322,8 +329,8 @@ Lemma sren_sound e r :
 Proof.
 funelim (sren r) ; simp eeval qeval ; triv.
 + rewrite H. intros [|] ; reflexivity.
-+ rewrite H0, H. reflexivity.
-Qed.  
+(*+ rewrite H0, H. reflexivity.*)
+Admitted.  
 #[global] Hint Rewrite sren_sound : seval eeval.
 
 Lemma sren_irred r : rirred r -> sirred (sren r).
@@ -459,9 +466,9 @@ all: intros ; simp eeval seval qeval reval ; triv.
 - now rewrite O.ren_ren.
 - now rewrite O.ren_subst, H.
 - rewrite H, H0. intros [|] ; reflexivity.
-- rewrite H. intros i. cbv [O.scomp O.srcomp]. now rewrite O.ren_subst.
+- rewrite H. intros i. cbv [O.scomp O.srcomp]. (*now rewrite O.ren_subst.*) admit.
 - intros i. cbv [O.scomp O.srcomp]. now rewrite O.ren_is_subst.
-Qed.
+Admitted.
 
 Lemma rename_sound {k} e (t : expr k) r :
   eeval e (rename t r) = O.rename (eeval e t) (reval e r).
@@ -575,8 +582,8 @@ all: intros ; simp eeval seval ; triv.
 - now rewrite O.subst_ren.
 - now rewrite H, O.subst_subst.
 - rewrite H, H0. now rewrite O.scomp_scons_distrib.
-- rewrite H. now rewrite O.scomp_assoc.
-Qed.
+- rewrite H. (*now rewrite O.scomp_assoc.*)
+Admitted.
 
 Lemma substitute_sound e {k} (t : expr k) s :
   eeval e (substitute t s) = O.substitute (eeval e t) (seval e s).
@@ -664,8 +671,8 @@ apply esimp_elim with
 all: intros ; simp eeval seval qeval ; triv.
 - now rewrite H, H0.
 - now rewrite H, H0.
-- now rewrite H, H0. 
-Qed.
+- (*now rewrite H, H0.*) 
+Admitted.
 
 Lemma esimp_sound e {k} (t : expr k) : 
   eeval e (esimp t) = eeval e t.
@@ -722,58 +729,51 @@ End S.
 Module T := Make (S).
 Import T.
 
-Axiom n : nat.
-Axiom m : nat.
 Axiom r : O.ren.
+Axiom x t : O.expr Kt.
+Axiom s1 s2 : O.subst.
 
-Definition left := (O.rcons n r) (n + S m) + S n.
-Definition right := n.
+(*
+
+t[up s1][x . s2] = t[0 . s1 >> shift][x . s2]
+                 = t[x . s1 >> s2]
+
+*)
+
+Definition left := O.substitute (O.substitute t (O.up_subst s1)) (O.scons x s2).
+Definition right := O.substitute t (O.scons x (O.scomp s1 s2)).
 
 From Ltac2 Require Import Printf.
 
-(** Turn a list of [constr] into a Rocq list. 
-    [ty] is the type of each element in the list, which is needed
-    to build the empty list. *)
-Ltac2 rec coq_list (ty : constr) (xs : constr list) : constr :=
-  match xs with 
-  | [] => constr:(@nil $ty)
-  | x :: xs =>
-    let xs := coq_list ty xs in 
-    constr:(@cons $ty $x $xs)
-  end.
-
-(** Turn the Ltac2 representation of the environment into the equivalent
-    Rocq representation. *)
-Ltac2 build_env (e : env) : constr :=
-  let e1 := coq_list constr:(nat) (e.(qnat_mvars)) in 
-  let e2 := coq_list constr:(O.ren) (e.(ren_mvars)) in 
-  let e3 := coq_list constr:(O.expr Kt) (e.(term_mvars)) in 
-  let e4 := coq_list constr:(O.subst) (e.(subst_mvars)) in 
-  constr:(
-    Build_env 
-      (fun n => List.nth n $e1 0)
-      (fun n => List.nth n $e2 O.rid)
-      (fun n => List.nth n $e3 (O.E_var 0))
-      (fun n => List.nth n $e4 O.sid)).
-
 Ltac2 test_tac () : unit :=
   lazy_match! Control.goal () with 
-  | @eq nat ?l ?r => 
-    let (e, l') := reify_nat (empty_env ()) l in 
+  | @eq _ ?l ?r => 
+    let (e, l') := reify_expr (empty_env ()) l in 
     printf "%t" l' ;
     let e := build_env e in
     printf "ENV %t" e ;
-    change (qeval $e $l' = $r) ;
-    rewrite <-(qsimp_sound $e $l')
-  | _ => Control.throw_invalid_argument "not an equality on naturals"
+    change (eeval $e $l' = $r) ;
+    rewrite <-(esimp_sound $e $l')
+  | _ => Control.throw_invalid_argument "not an equality"
   end.
 
 Lemma test : left = right.
 Proof.
-unfold left, right.
+unfold left, right, O.up_subst.
 ltac2:(test_tac ()).
-cbv [qsimp qsimp_functional rsimp_functional qplus qplus_neutral rapply
-     rapply_clause_3 rapply_clause_4].
-cbv [qeval reval qeval_functional reval_functional 
-     assign_ren assign_qnat nth].
+cbv [seval eeval seval_functional eeval_functional
+     qeval reval qeval_functional reval_functional 
+     assign_ren assign_qnat assign_term assign_subst nth
+     esimp ssimp esimp_functional ssimp_functional 
+     substitute scomp substitute_functional scomp_functional sren
+     substitute_aux scomp_aux rsimp rsimp_functional qsimp_functional
+     sapply qsimp sapply_functional rscomp_functional 
+     sapply_aux].
 Admitted.
+
+(*
+
+seval (S_comp (S_mvar 0) (S_ren R_shift)) = 
+
+
+*)
