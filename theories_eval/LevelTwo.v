@@ -459,6 +459,25 @@ split.
   + destruct H3 ; triv.
 Qed.
 
+Lemma rirred_comp r1 r2 : 
+  rirred (R_comp r1 r2) <->
+    rirred r1 /\ rirred r2 /\ ~is_rcomp r1 /\ ~is_rcons r1 /\ 
+    r1 <> R_id /\ r2 <> R_id /\ ~(r1 = R_shift /\ is_rcons r2).
+Proof.
+split ; intros H.
+- split7 ; intros H' ; apply H ; triv.
+  + destruct r1 ; triv.
+  + destruct r1 ; triv.
+  + destruct H' as [-> H']. destruct r2 ; triv.
+- intros H' ; inv H' ; triv.
+  + destruct H1 ; triv.
+  + destruct H as (_ & _ & H & _) ; triv.
+  + destruct H as (_ & _ & _ & H & _) ; triv.
+  + destruct H1 ; destruct r2 ; triv.
+    * destruct H as (_ & _ & _ & _ & _ & _ & H). triv.
+    * destruct r2_1 ; triv. destruct H as (_ & H & _). triv.
+Qed. 
+
 (*********************************************************************************)
 (** *** Simplification of renamings & quoted naturals. *)
 (*********************************************************************************)
@@ -824,6 +843,25 @@ split ; intros H.
 - intros H' ; inv H' ; triv. destruct r ; triv.
 Qed.
 
+Lemma sirred_comp s1 s2 : 
+  sirred (S_comp s1 s2) <->
+    sirred s1 /\ sirred s2 /\ ~is_scomp s1 /\ ~is_scons s1 /\ 
+    s1 <> S_id /\ s2 <> S_id /\ ~(s1 = S_shift /\ is_scons s2).
+Proof.
+split ; intros H.
+- split7 ; intros H' ; apply H ; triv.
+  + destruct s1 ; triv.
+  + destruct s1 ; triv.
+  + destruct H' as [-> H']. destruct s2 ; triv.
+- intros H' ; inv H' ; triv.
+  + destruct H1 ; triv.
+  + destruct H as (_ & _ & H & _) ; triv.
+  + destruct H as (_ & _ & _ & H & _) ; triv.
+  + destruct H1 ; destruct s2 ; triv.
+    * destruct H as (_ & _ & _ & _ & _ & _ & H). triv.
+    * destruct s2_1 ; triv. destruct H as (_ & H & _). triv.
+Qed. 
+
 (*********************************************************************************)
 (** *** Simplify substitutions & expressions. *)
 (*********************************************************************************)
@@ -960,33 +998,21 @@ funelim (sren r) ; simp eeval qeval ; triv.
 Qed.  
 #[global] Hint Rewrite sren_sound : seval eeval.
 
-Lemma sirred_comp s1 s2 : 
-  sirred (S_comp s1 s2) <->
-    sirred s1 /\ sirred s2 /\ ~is_scomp s1 /\ ~is_scons s1 /\ 
-    s1 <> S_id /\ s2 <> S_id /\ ~(s1 = S_shift /\ is_scons s2).
-Proof.
-split ; intros H.
-- split7 ; intros H' ; apply H ; triv.
-  + destruct s1 ; triv.
-  + destruct s1 ; triv.
-  + destruct H' as [-> H']. destruct s2 ; triv.
-- intros H' ; inv H' ; triv.
-  + destruct H1 ; triv.
-  + destruct H as (_ & _ & H & _) ; triv.
-  + destruct H as (_ & _ & _ & H & _) ; triv.
-  + destruct H1 ; destruct s2 ; triv.
-    * destruct H as (_ & _ & _ & _ & _ & _ & H). triv.
-    * destruct s2_1 ; triv. destruct H as (_ & H & _). triv.
-Qed. 
-
 Lemma sren_irred r : rirred r -> sirred (sren r).
 Proof.
 intros H. funelim (sren r) ; triv.
 - rewrite sirred_cons, eirred_tvar. rewrite rirred_cons in H0.
   split ; triv. now apply H.
-- rewrite sirred_comp. split7 ; triv. all: admit. 
+- rewrite rirred_comp in H1. feed H ; triv. feed H0 ; triv.
+  rewrite sirred_comp. split7 ; triv.
+  + funelim (sren r1) ; try discriminate. triv.
+  + funelim (sren r1) ; try discriminate. triv.
+  + funelim (sren r1) ; try discriminate. triv.
+  + funelim (sren r2) ; try discriminate. triv.
+  + funelim (sren r1) ; triv. funelim (sren r2) ; triv.
+    destruct H2 as (_ & _ & _ & _ & _ & _ & H2). triv.     
 - rewrite sirred_ren. triv.
-Admitted.    
+Qed.
 
 (** Lift a renaming through a binder. *)
 Equations rup (r : ren) : ren :=
@@ -1023,31 +1049,35 @@ intros H1 H2 H3. funelim (rename_aux t r) ; triv.
 all: solve [ apply H3 ; triv ].
 Qed.
 
-(** Helper function for [ren] and [subst] which takes care of trivial cases. *)
+(** Helper function for [ren] which takes care of trivial cases. *)
 Equations substitute_aux {k} (t : expr k) (s : subst) : expr k :=
 substitute_aux t S_id := t ;
-substitute_aux t (S_ren r) := rename_aux t r ;
+substitute_aux (E_tvar i) (S_ren r) := E_tvar (rapply r i) ;
+substitute_aux t (S_ren r) := E_ren t r ;
 substitute_aux (E_tvar Q_zero) (S_cons t _) := t ;
 substitute_aux t s := E_subst t s.
 
 Lemma substitute_aux_sound e {k} (t : expr k) s :
   eeval e (substitute_aux t s) = O.substitute (eeval e t) (seval e s).
 Proof.
-funelim (substitute_aux t s) ; simp seval eeval ; triv.
-- now rewrite O.subst_sid.
-- now rewrite O.ren_is_subst. 
+funelim (substitute_aux t s) ; simp seval eeval qeval ; triv.
+all: try solve [ now rewrite O.ren_is_subst ].
+now rewrite O.subst_sid.
 Qed.
 #[global] Hint Rewrite substitute_aux_sound : eeval seval.
 
 Lemma substitute_aux_irred {k} (t : expr k) s :
   eirred t -> sirred s -> 
-  (match s with S_ren r => eirred (E_ren t r) | _ => True end) ->
+  (match s with S_ren r => ~is_tvar t -> eirred (E_ren t r) | _ => True end) ->
   (s <> S_id -> ~is_sren s -> ~(is_tvar_zero t /\ is_scons s) -> eirred (E_subst t s)) ->
   eirred (substitute_aux t s).
 Proof.
 intros H1 H2 H3 H4. funelim (substitute_aux t s) ; triv.
+all: try solve [ apply H3 ; triv ].
 all: try solve [ apply H4 ; triv ].
-now rewrite sirred_cons in H2.
+- now rewrite sirred_cons in H2.
+- rewrite eirred_tvar in *. rewrite sirred_ren in H2. 
+  destruct r ; try discriminate. apply rapply_rcomp_irred ; triv.
 Qed.
 
 (** Apply an irreducible renaming to an irreducible expression. *)
@@ -1119,24 +1149,20 @@ all: intros ; triv.
   + apply rapply_rcomp_irred ; triv.
   + intros H2. rewrite eirred_ren. split3 ; triv.
     apply rapply_rcomp_irred ; triv.
-- rewrite eirred_subst in H0. feed2 H ; triv. apply substitute_aux_irred ; triv.
-  + destruct (srcomp s r) ; triv. rewrite sirred_ren in H. destruct r0 ; triv.
-    rewrite eirred_ren. split3 ; triv.  
-
-    
+- rewrite eirred_subst in H0. feed2 H ; triv. 
+  apply substitute_aux_irred ; triv.
+  + destruct (srcomp s r) ; triv. intros H4. rewrite sirred_ren in H. 
+    destruct r0 ; try discriminate. rewrite eirred_ren. split3 ; triv.
+    destruct H0 as (_ & _ & H0 & _). destruct e ; triv.
+  + intros H4 H5 H6. rewrite eirred_subst. split7 ; triv.
 - now apply sren_irred.
 - apply scomp_aux_irred ; triv. 
   + now apply sren_irred.
   + intros H1 H2. rewrite sirred_shift_l. split3 ; triv.
     now apply sren_irred.
 - rewrite sirred_cons in *. split ; [apply H | apply H0] ; triv.
-- rewrite sirred_comp in H0. apply scomp_aux_irred ; triv.
-  + now apply H.
-  + intros H2 H3. rewrite sirred_comp. split7 ; triv.
-    * now apply H.
-    * intros [-> H4]. destruct H4 ; triv. feed2 H ; triv. 
-      revert H H4 ; clear. generalize (srcomp s2 r).
-      intros s ; destruct s ; triv. destruct s1 ; triv.
+- rewrite sirred_comp in H0. feed2 H ; triv. apply scomp_aux_irred ; triv.
+  intros H4 H5. rewrite sirred_comp. split7 ; triv.
 - rewrite sirred_ren in H. destruct r0 ; triv. apply scomp_aux_irred.
   + now rewrite sirred_ren.
   + now apply sren_irred.
@@ -1144,8 +1170,8 @@ all: intros ; triv.
 - apply scomp_aux_irred ; triv.
   + now apply sren_irred.
   + intros H1 H2. rewrite sirred_mvar_l. split ; triv.
-    now apply sren_irred.        
-Admitted.
+    now apply sren_irred.   
+Qed.
 
 
 
