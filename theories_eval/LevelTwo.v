@@ -148,7 +148,10 @@ Section Evaluation.
 
 End Evaluation.
 
-Lemma seval_comp e s1 s2 : 
+(** The definition of [seval] on [S_comp] is hard to work with
+    (but necessary to obtain the right computational behaviour).
+    We use a different equation for [simp] and [autorewrite]. *)
+Lemma seval_comp_aux e s1 s2 : 
   seval e (S_comp s1 s2) =₁ O.scomp (seval e s1) (seval e s2).
 Proof.
 destruct s1 ; destruct s2 ; simp eeval ; try now reflexivity.
@@ -157,7 +160,8 @@ destruct s1 ; destruct s2 ; simp eeval ; try now reflexivity.
 all: try (intros i ; cbv [O.srcomp O.scomp] ; now rewrite O.ren_is_subst).
 - intros i. cbv [O.srcomp O.scomp]. now rewrite O.ren_is_subst.
 Qed.
-#[global] Hint Rewrite seval_comp : eeval seval.
+#[global] Remove Hints seval_equation_4 : eeval seval.
+#[global] Hint Rewrite seval_comp_aux : eeval seval.
 
 (*********************************************************************************)
 (** *** Reification. *)

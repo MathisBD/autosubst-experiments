@@ -218,19 +218,12 @@ scomp_aux s S_id := s ;
 scomp_aux S_shift (S_cons t s) := s ;
 scomp_aux s1 s2 := S_comp s1 s2.
 
-
 Lemma scomp_aux_sound e s1 s2 : 
   seval e (scomp_aux s1 s2) =₁ O.scomp (seval e s1) (seval e s2).
 Proof.
 funelim (scomp_aux s1 s2) ; simp seval eeval ; triv.
-- now rewrite O.scomp_sid_r.
-- destruct s1 ; triv.
-- destruct s1 ; triv.
-- destruct s1 ; triv.
-  + rewrite seval_equation_3. intros i. cbv [O.srcomp O.scomp].
-    now rewrite O.ren_is_subst.
-  + rewrite seval_equation_4. destruct s1_1 ; destruct s1_2 ; triv.
-Admitted.
+now rewrite O.scomp_sid_r.
+Qed.
 #[global] Hint Rewrite scomp_aux_sound : seval eeval.
 
 Lemma scomp_aux_irred s1 s2 :
@@ -329,8 +322,8 @@ Lemma sren_sound e r :
 Proof.
 funelim (sren r) ; simp eeval qeval ; triv.
 + rewrite H. intros [|] ; reflexivity.
-(*+ rewrite H0, H. reflexivity.*)
-Admitted.  
++ rewrite H0, H. reflexivity.
+Qed.  
 #[global] Hint Rewrite sren_sound : seval eeval.
 
 Lemma sren_irred r : rirred r -> sirred (sren r).
@@ -466,9 +459,9 @@ all: intros ; simp eeval seval qeval reval ; triv.
 - now rewrite O.ren_ren.
 - now rewrite O.ren_subst, H.
 - rewrite H, H0. intros [|] ; reflexivity.
-- rewrite H. intros i. cbv [O.scomp O.srcomp]. (*now rewrite O.ren_subst.*) admit.
+- rewrite H. intros i. cbv [O.scomp O.srcomp]. now rewrite O.ren_subst.
 - intros i. cbv [O.scomp O.srcomp]. now rewrite O.ren_is_subst.
-Admitted.
+Qed.
 
 Lemma rename_sound {k} e (t : expr k) r :
   eeval e (rename t r) = O.rename (eeval e t) (reval e r).
@@ -582,8 +575,8 @@ all: intros ; simp eeval seval ; triv.
 - now rewrite O.subst_ren.
 - now rewrite H, O.subst_subst.
 - rewrite H, H0. now rewrite O.scomp_scons_distrib.
-- rewrite H. (*now rewrite O.scomp_assoc.*)
-Admitted.
+- rewrite H. now rewrite O.scomp_assoc.
+Qed.
 
 Lemma substitute_sound e {k} (t : expr k) s :
   eeval e (substitute t s) = O.substitute (eeval e t) (seval e s).
@@ -671,8 +664,8 @@ apply esimp_elim with
 all: intros ; simp eeval seval qeval ; triv.
 - now rewrite H, H0.
 - now rewrite H, H0.
-- (*now rewrite H, H0.*) 
-Admitted.
+- now rewrite H, H0. 
+Qed.
 
 Lemma esimp_sound e {k} (t : expr k) : 
   eeval e (esimp t) = eeval e t.
@@ -770,10 +763,3 @@ cbv [seval eeval seval_functional eeval_functional
      sapply qsimp sapply_functional rscomp_functional 
      sapply_aux].
 Admitted.
-
-(*
-
-seval (S_comp (S_mvar 0) (S_ren R_shift)) = 
-
-
-*)
