@@ -8,6 +8,9 @@ From Prototype Require Import Prelude Sig.
 
 Module Make (S : Sig).
 
+(** Add some power to [auto] and variants. *)
+#[local] Hint Extern 4 => f_equal : core.
+
 (*********************************************************************************)
 (** *** Terms. *)
 (*********************************************************************************)
@@ -38,32 +41,11 @@ where "'term'" := (expr Kt)
   and "'arg' ty" := (expr (Ka ty))
   and "'args' tys" := (expr (Kal tys)).
 
+Derive Signature NoConfusion NoConfusionHom for expr.
+
 (*********************************************************************************)
 (** *** Renamings. *)
 (*********************************************************************************)
-
-(** A renaming on terms is a function [nat -> nat] which is applied
-    to all free variables. *)
-Definition ren := nat -> nat.
-
-(** The identity renaming. *)
-Definition rid : ren := fun i => i.
-
-(** [rshift] shifts indices by one. *)
-Definition rshift : ren := fun i => S i.
-
-(** Cons an index with a renaming. *)
-Equations rcons (i0 : nat) (r : ren) : ren :=
-rcons i0 _ 0 := i0 ;
-rcons i0 r (S i) := r i.
-
-(** Compose two renamings (left to right composition). *)
-Definition rcomp (r1 r2 : ren) : ren :=
-  fun i => r2 (r1 i).
-
-(** Lift a renaming through a binder. *)
-Definition up_ren (r : ren) : ren := 
-  rcons 0 (rcomp r rshift).
  
 (** Rename a term. *)
 Equations rename {k} (t : expr k) (r : ren) : expr k :=

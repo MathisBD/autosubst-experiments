@@ -13,6 +13,10 @@ Module Make (S : Sig).
 Module T := LevelTwo.Make (S).
 Export T.
 
+(** Add some power to [auto] and variants. *)
+#[local] Hint Extern 6 => exfalso : core.
+#[local] Hint Extern 6 => subst : core.
+
 (*********************************************************************************)
 (** *** Discriminators. *)
 (*********************************************************************************)
@@ -320,7 +324,9 @@ Lemma eirred_ren {k} (e : expr k) r :
 Proof.
 split ; intros H.
 - split3.
-  + destruct e ; triv.
+  + destruct e ; triv. 
+    all: exfalso ; apply H ; clear H. 
+    all: apply ER_push_ren ; triv.
   + intros H' ; apply H ; triv.
   + intros H' ; apply H ; triv.
 - intros H' ; inv H' ; triv.

@@ -7,6 +7,7 @@ Inductive arg_ty {base} :=
 | AT_base : base -> arg_ty
 | AT_term : arg_ty
 | AT_bind : arg_ty -> arg_ty.
+Derive NoConfusion NoConfusionHom for arg_ty.
 
 (** Kind of an expression (this is used in both level one and level two). *)
 Inductive kind {base} := 
@@ -16,7 +17,7 @@ Inductive kind {base} :=
   Ka : @arg_ty base -> kind
 | (** List of constructor arguments. *)
   Kal : list (@arg_ty base) -> kind.
-Derive NoConfusion for kind.
+Derive NoConfusion NoConfusionHom for kind.
 
 (** Signatures for abstract terms. *)
 Record signature :=

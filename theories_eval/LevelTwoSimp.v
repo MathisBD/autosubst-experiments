@@ -46,7 +46,7 @@ rcomp_aux R_shift (R_cons _ r) := r ;
 rcomp_aux r1 r2 := R_comp r1 r2.
 
 Lemma rcomp_aux_sound e r1 r2 :
-  reval e (rcomp_aux r1 r2) =₁ O.rcomp (reval e r1) (reval e r2).
+  reval e (rcomp_aux r1 r2) =₁ rcomp (reval e r1) (reval e r2).
 Proof. funelim (rcomp_aux r1 r2) ; simp qeval ; triv. Qed.
 #[global] Hint Rewrite rcomp_aux_sound : qeval reval.
 
@@ -78,11 +78,11 @@ rcomp r1 r2 := rcomp_aux r1 r2.
 
 Lemma rapply_rcomp_sound e :
   (forall r i, qeval e (rapply r i) = reval e r (qeval e i)) * 
-  (forall r1 r2, reval e (rcomp r1 r2) =₁ O.rcomp (reval e r1) (reval e r2)).
+  (forall r1 r2, reval e (rcomp r1 r2) =₁ P.rcomp (reval e r1) (reval e r2)).
 Proof.
 apply rapply_elim with 
   (P := fun r i res => qeval e res = reval e r (qeval e i))
-  (P0 := fun r1 r2 res => reval e res =₁ O.rcomp (reval e r1) (reval e r2)).
+  (P0 := fun r1 r2 res => reval e res =₁ P.rcomp (reval e r1) (reval e r2)).
 all: intros ; simp qeval reval ; triv.
 - rewrite H, H0. now rewrite O.rcomp_rcons_distrib.
 - rewrite H0, H. now rewrite O.rcomp_assoc.
@@ -94,7 +94,7 @@ Proof. now apply rapply_rcomp_sound. Qed.
 #[global] Hint Rewrite rapply_sound : qeval reval.
 
 Lemma rcomp_sound e r1 r2 :
-  reval e (rcomp r1 r2) =₁ O.rcomp (reval e r1) (reval e r2).
+  reval e (rcomp r1 r2) =₁ P.rcomp (reval e r1) (reval e r2).
 Proof. now apply rapply_rcomp_sound. Qed.
 #[global] Hint Rewrite rcomp_sound : qeval reval.
 
@@ -351,7 +351,7 @@ Equations rup (r : ren) : ren :=
 rup r := R_cons Q_zero (rcomp r R_shift).
 
 Lemma rup_sound e r : 
-  reval e (rup r) =₁ O.up_ren (reval e r).
+  reval e (rup r) =₁ up_ren (reval e r).
 Proof. simp rup qeval. reflexivity. Qed.
 #[global] Hint Rewrite rup_sound : reval qeval.
 
@@ -498,6 +498,7 @@ all: intros ; triv.
   + destruct (srcomp s r) ; triv. intros H4. rewrite sirred_ren in H. 
     destruct r0 ; try discriminate. rewrite eirred_ren. split3 ; triv.
     destruct H0 as (_ & _ & H0 & _). destruct e ; triv.
+    all: exfalso ; apply H0 ; triv.
   + intros H4 H5 H6. rewrite eirred_subst. split7 ; triv.
 - now apply sren_irred.
 - apply scomp_aux_irred ; triv. 
@@ -615,9 +616,10 @@ all: intros ; triv.
     apply sapply_rscomp_irred ; triv. 
 - rewrite eirred_subst in H0. feed2 H ; triv. apply substitute_aux_irred ; triv.
   + destruct (scomp s1 s2) ; triv. intros H4. rewrite eirred_ren.
-    destruct H0 as (H5 & H6 & H7 & H8 & H9 & H10 & H11). destruct e ; triv.
-    rewrite sirred_ren in H. destruct r ; triv.
-  +  intros H4 H5 H6. rewrite eirred_subst. split7 ; triv.
+    destruct H0 as (H5 & H6 & H7 & H8 & H9 & H10 & H11). 
+    rewrite sirred_ren in H. destruct r ; triv. destruct e ; triv.
+    all: solve [ exfalso ; apply H7 ; triv ].
+  + intros H4 H5 H6. rewrite eirred_subst. split7 ; triv.
 - apply scomp_aux_irred ; triv. intros H1 H2. rewrite sirred_shift_l. split3 ; triv.
 - rewrite sirred_cons in *. feed2 H ; triv. feed2 H0 ; triv.
 - rewrite sirred_comp in H0. feed2 H ; triv. apply scomp_aux_irred ; triv.
@@ -662,9 +664,8 @@ apply esimp_elim with
   (P := fun _ t res => eeval e res = eeval e t)
   (P0 := fun s res => seval e res =₁ seval e s).
 all: intros ; simp eeval seval qeval ; triv.
-- now rewrite H, H0.
-- now rewrite H, H0.
-- now rewrite H, H0. 
+all: try solve [ now rewrite H ]. 
+all: try solve [ now rewrite H, H0 ]. 
 Qed.
 
 Lemma esimp_sound e {k} (t : expr k) : 

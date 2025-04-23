@@ -57,15 +57,32 @@ Ltac unfold_all :=
   | [ x := _ |- _ ] => unfold x in * ; clear x
   end.
 
-(** Add some power to [auto] and [eauto]. *)
-#[global] Hint Extern 4 => f_equal : core.
-#[global] Hint Extern 5 => simpl : core.
-#[global] Hint Extern 6 => exfalso : core.
-#[global] Hint Extern 6 => subst : core.
-
 (** Pointwise equality for functions. *)
 Definition point_eq {A B} : relation (A -> B) := pointwise_relation _ eq.
 Notation "f =₁ g" := (point_eq f g) (at level 75).
+
+(** A renaming on terms is a function [nat -> nat] which is applied
+    to all free variables. *)
+Definition ren := nat -> nat.
+
+(** The identity renaming. *)
+Definition rid : ren := fun i => i.
+
+(** [rshift] shifts indices by one. *)
+Definition rshift : ren := fun i => S i.
+
+(** Cons an index with a renaming. *)
+Equations rcons (i0 : nat) (r : ren) : ren :=
+rcons i0 _ 0 := i0 ;
+rcons i0 r (S i) := r i.
+
+(** Compose two renamings (left to right composition). *)
+Equations rcomp (r1 r2 : ren) : ren :=
+rcomp r1 r2 i := r2 (r1 i).
+
+(** Lift a renaming through a binder. *)
+Equations up_ren (r : ren) : ren := 
+up_ren r := rcons 0 (rcomp r rshift).
 
 (*(** [fin n] represents the finite set with [n] elements [0], [1], ..., [n-1]. *)
 Inductive fin : nat -> Type :=

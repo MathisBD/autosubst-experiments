@@ -8,6 +8,7 @@ From Prototype Require Import Prelude Sig LevelOne.
     level two) and _evaluation_ (mapping from level two to level one). *)
 
 Module Make (S : Sig).
+Module P := Prelude.
 Module O := LevelOne.Make (S).
 
 (** Meta-variables are represented by an index (a natural)
@@ -102,23 +103,23 @@ where "'term'" := (expr Kt)
 (** An environment is a mapping from meta-variables to level one expressions. *)
 Record env := 
   { assign_qnat : mvar -> nat
-  ; assign_ren : mvar -> O.ren 
+  ; assign_ren : mvar -> P.ren 
   ; assign_term : mvar -> O.expr Kt
   ; assign_subst : mvar -> O.subst }. 
 
 Section Evaluation.
   Context (e : env).
-
+ 
   Equations qeval : qnat -> nat :=
   qeval Q_zero := 0 ;
   qeval (Q_rapply r i) := reval r (qeval i) ;
   qeval (Q_mvar x) := e.(assign_qnat) x
   
-  with reval : ren -> O.ren :=
-  reval R_id := O.rid ;
-  reval R_shift := O.rshift ;
-  reval (R_cons i r) := O.rcons (qeval i) (reval r) ;
-  reval (R_comp r1 r2) := O.rcomp (reval r1) (reval r2) ;
+  with reval : ren -> P.ren :=
+  reval R_id := rid ;
+  reval R_shift := rshift ;
+  reval (R_cons i r) := rcons (qeval i) (reval r) ;
+  reval (R_comp r1 r2) := rcomp (reval r1) (reval r2) ;
   reval (R_mvar x) := e.(assign_ren) x.
 
   Equations eeval {k} : expr k -> O.expr k :=
@@ -230,13 +231,13 @@ Ltac2 rec reify_nat (e : env) (t : constr) : env * constr :=
 
 with reify_ren (e : env) (t : constr) : env * constr :=
   lazy_match! t with 
-  | O.rid => e, constr:(R_id)
-  | O.rshift => e, constr:(R_shift) 
-  | O.rcons ?i ?r =>
+  | rid => e, constr:(R_id)
+  | rshift => e, constr:(R_shift) 
+  | rcons ?i ?r =>
     let (e, i) := reify_nat e i in 
     let (e, r) := reify_ren e r in 
     e, constr:(R_cons $i $r)
-  | O.rcomp ?r1 ?r2 =>
+  | rcomp ?r1 ?r2 =>
     let (e, r1) := reify_ren e r1 in 
     let (e, r2) := reify_ren e r2 in 
     e, constr:(R_comp $r1 $r2)
@@ -321,13 +322,13 @@ Ltac2 rec coq_list (ty : constr) (xs : constr list) : constr :=
     Rocq representation. *)
 Ltac2 build_env (e : env) : constr :=
   let e1 := coq_list constr:(nat) (e.(qnat_mvars)) in 
-  let e2 := coq_list constr:(O.ren) (e.(ren_mvars)) in 
+  let e2 := coq_list constr:(P.ren) (e.(ren_mvars)) in 
   let e3 := coq_list constr:(O.expr Kt) (e.(term_mvars)) in 
   let e4 := coq_list constr:(O.subst) (e.(subst_mvars)) in 
   constr:(
     Build_env 
       (fun n => List.nth n $e1 0)
-      (fun n => List.nth n $e2 O.rid)
+      (fun n => List.nth n $e2 rid)
       (fun n => List.nth n $e3 (O.E_var 0))
       (fun n => List.nth n $e4 O.sid)).
 
