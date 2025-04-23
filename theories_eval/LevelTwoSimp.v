@@ -7,8 +7,7 @@ From Prototype Require Import Prelude Sig LevelOne LevelTwo LevelTwoIrred.
     and an irreducibility lemma. *)
 
 Module Make (S : Sig).
-Module T := LevelTwoIrred.Make (S).
-Export T.
+Include LevelTwoIrred.Make (S).
 
 (*********************************************************************************)
 (** *** [rapply_aux] *)

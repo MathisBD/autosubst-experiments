@@ -26,7 +26,7 @@ Record signature :=
   base : Type 
 ; (** The actual type that each base type represents,
       e.g. a mapping BNat => nat ; BBool => bool ; BUnit => unit. *)
-  denote_base : base -> Type
+  eval_base : base -> Type
 ;  (** The set of _non variable_ constructors, 
        e.g. [Inductive ctor := CApp | CLam]. *)
   ctor : Type

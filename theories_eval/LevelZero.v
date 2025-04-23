@@ -1,4 +1,5 @@
-From Prototype Require Import Prelude Sig LevelOne LevelTwo LevelTwoIrred LevelTwoSimp.
+From Prototype Require Import Prelude Sig.
+From Prototype Require LevelOne LevelTwo LevelTwoIrred LevelTwoSimp.
 Module P := Prelude.
 
 (** Concrete terms, renamings and substitutions. *)
@@ -126,7 +127,7 @@ Definition t := Build_signature base denote_base ctor ctor_type.
 End S.
 
 Module T := LevelTwoSimp.Make (S).
-Module O := T.T.T.O.
+Module O := T.O.
 
 (** Custom induction principle on level one terms. *)
 
@@ -386,7 +387,6 @@ Definition left := substitute (substitute t (scons x s1)) s2.
 Definition right := substitute t (scons (substitute x s2) (scomp s1 s2)).
 
 From Ltac2 Require Import Printf.
-Import T.
 
 Ltac2 test_tac () : unit :=
   lazy_match! Control.goal () with 
@@ -395,20 +395,28 @@ Ltac2 test_tac () : unit :=
     let (l1, p) := reify l0 in
     rewrite <-$p ; 
     (* Reify one -> two. *)
-    let (e, l2) := reify_expr (empty_env ()) l1 in 
-    let e := build_env e in
-    change (eval (eeval $e $l2) = $r) ;
+    let (e, l2) := T.reify_expr (T.empty_env ()) l1 in 
+    let e := T.build_env e in
+    change (eval (T.eeval $e $l2) = $r) ;
     (* Simplify. *)
-    rewrite <-(esimp_sound $e $l2) ;
+    rewrite <-(T.esimp_sound $e $l2) ;
     (* Eval two -> one. *)
-    cbv [seval eeval seval_functional eeval_functional
+    (*cbv [seval eeval seval_functional eeval_functional
          qeval reval qeval_functional reval_functional 
          assign_ren assign_qnat assign_term assign_subst nth
          esimp ssimp esimp_functional ssimp_functional 
          substitute scomp substitute_functional scomp_functional sren
          substitute_aux scomp_aux rsimp rsimp_functional qsimp_functional
          sapply qsimp sapply_functional rscomp_functional 
-         sapply_aux] 
+         sapply_aux] *)
+    cbv [T.seval T.eeval T.seval_functional T.eeval_functional
+         T.qeval T.reval T.qeval_functional T.reval_functional 
+         T.assign_ren T.assign_qnat T.assign_term T.assign_subst List.nth
+         T.esimp T.ssimp T.esimp_functional T.ssimp_functional 
+         T.substitute T.scomp T.substitute_functional T.scomp_functional T.sren
+         T.substitute_aux T.scomp_aux T.rsimp T.rsimp_functional T.qsimp_functional
+         T.sapply T.qsimp T.sapply_functional T.rscomp_functional 
+         T.sapply_aux]
   | _ => Control.throw_invalid_argument "not an equality"
   end.
 

@@ -10,8 +10,7 @@ From Prototype Require Import Prelude Sig LevelOne LevelTwo.
     We then prove numerous lemmas that characterize irreducible forms. *)
 
 Module Make (S : Sig).
-Module T := LevelTwo.Make (S).
-Export T.
+Include LevelTwo.Make (S).
 
 (** Add some power to [auto] and variants. *)
 #[local] Hint Extern 6 => exfalso : core.

@@ -1,4 +1,6 @@
-From Prototype Require Import Prelude Sig LevelOne.
+From Prototype Require Import Prelude Sig.
+From Prototype Require LevelOne.
+Module P := Prelude.
 
 (** This file defines a generic term grammar with _explicit_ renamings 
     and substitutions. Quoted naturals, terms, renamings, and substitutions
@@ -8,7 +10,6 @@ From Prototype Require Import Prelude Sig LevelOne.
     level two) and _evaluation_ (mapping from level two to level one). *)
 
 Module Make (S : Sig).
-Module P := Prelude.
 Module O := LevelOne.Make (S).
 
 (** Meta-variables are represented by an index (a natural)
@@ -67,7 +68,7 @@ Inductive expr : kind -> Type :=
 | E_al_cons {ty tys} : arg ty -> args tys -> args (ty :: tys)
 
 (** Base argument (e.g. bool or string). *)
-| E_abase : forall b, denote_base S.t b -> arg (AT_base b)
+| E_abase : forall b, eval_base S.t b -> arg (AT_base b)
 (** Term argument. *)
 | E_aterm : term -> arg AT_term
 (** Binder argument. *)
@@ -162,7 +163,7 @@ all: try (intros i ; cbv [O.srcomp O.scomp] ; now rewrite O.ren_is_subst).
 - intros i. cbv [O.srcomp O.scomp]. now rewrite O.ren_is_subst.
 Qed.
 #[global] Remove Hints seval_equation_4 : eeval seval.
-#[global] Hint Rewrite seval_comp_aux : eeval seval.
+#[global] Hint Rewrite @seval_comp_aux : eeval seval.
 
 (*********************************************************************************)
 (** *** Reification. *)

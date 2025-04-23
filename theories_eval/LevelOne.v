@@ -32,7 +32,7 @@ Inductive expr : kind -> Type :=
 | (** Non-empty argument list. *)
   E_al_cons {ty tys} : arg ty -> args tys -> args (ty :: tys)
 | (** Base argument (e.g. bool or string). *)
-  E_abase : forall b, denote_base S.t b -> arg (AT_base b)
+  E_abase : forall b, eval_base S.t b -> arg (AT_base b)
 | (** Term argument. *)
   E_aterm : term -> arg AT_term
 | (** Binder argument. *)
