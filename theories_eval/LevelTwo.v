@@ -189,29 +189,56 @@ Ltac2 Type env :=
 Ltac2 empty_env () := 
   { qnat_mvars := [] ; ren_mvars := [] ; term_mvars := [] ; subst_mvars := [] }.
 
-Ltac2 add_qnat_mvar (t : constr) (e : env) : env :=
-  { qnat_mvars := List.append (e.(qnat_mvars)) [t] 
-  ; ren_mvars := e.(ren_mvars)
-  ; term_mvars := e.(term_mvars)
-  ; subst_mvars := e.(subst_mvars) }.
+(** [index_of p xs] returns the index of the first element in [xs] 
+    that satisfies [p], or [None] if no element is found. *)
+Ltac2 rec index_of (p : 'a -> bool) (xs : 'a list) : int option :=
+  match xs with 
+  | [] => None 
+  | x :: xs =>
+    if p x then Some 0 else
+    match index_of p xs with 
+    | None => None 
+    | Some i => Some (Int.add 1 i)
+    end 
+  end.
+
+(** Add a term [x] to the list [xs], and return the corresponding index.
+    Generates a new metavariable index only if [x] is not already in [xs]. *)
+Ltac2 add_mvar (x : constr) (xs : constr list) : int * constr list :=
+  match index_of (Constr.equal x) xs with 
+  (* [x] is already in [xs]: simply return its index. *)
+  | Some i => i, xs
+  (* Add [x] to [xs] and return its index. *)
+  | None => List.length xs, List.append xs [x]
+  end.
   
-Ltac2 add_ren_mvar (t : constr) (e : env) : env :=
-  { qnat_mvars := e.(qnat_mvars) 
-  ; ren_mvars := List.append (e.(ren_mvars)) [t]
-  ; term_mvars := e.(term_mvars)
-  ; subst_mvars := e.(subst_mvars) }.
+Ltac2 add_qnat_mvar (t : constr) (e : env) : int * env :=
+  let (i, qnat_mvars) := add_mvar t (e.(qnat_mvars)) in 
+  i, { qnat_mvars := qnat_mvars
+     ; ren_mvars := e.(ren_mvars)
+     ; term_mvars := e.(term_mvars)
+     ; subst_mvars := e.(subst_mvars) }.
+  
+Ltac2 add_ren_mvar (t : constr) (e : env) : int * env :=
+  let (i, ren_mvars) := add_mvar t (e.(ren_mvars)) in 
+  i, { qnat_mvars := e.(qnat_mvars) 
+     ; ren_mvars := ren_mvars
+     ; term_mvars := e.(term_mvars)
+     ; subst_mvars := e.(subst_mvars) }.
 
-Ltac2 add_term_mvar (t : constr) (e : env) : env :=
-  { qnat_mvars := e.(qnat_mvars) 
-  ; ren_mvars := e.(ren_mvars)
-  ; term_mvars := List.append (e.(term_mvars)) [t]
-  ; subst_mvars := e.(subst_mvars) }.
+Ltac2 add_term_mvar (t : constr) (e : env) : int * env :=
+  let (i, term_mvars) := add_mvar t (e.(term_mvars)) in 
+  i, { qnat_mvars := e.(qnat_mvars) 
+     ; ren_mvars := e.(ren_mvars)
+     ; term_mvars := term_mvars
+     ; subst_mvars := e.(subst_mvars) }.
 
-Ltac2 add_subst_mvar (t : constr) (e : env) : env :=
-  { qnat_mvars := e.(qnat_mvars) 
-  ; ren_mvars := e.(ren_mvars)
-  ; term_mvars := e.(term_mvars)
-  ; subst_mvars := List.append (e.(subst_mvars)) [t] }.
+Ltac2 add_subst_mvar (t : constr) (e : env) : int * env :=
+  let (i, subst_mvars) := add_mvar t (e.(subst_mvars)) in 
+  i, { qnat_mvars := e.(qnat_mvars) 
+     ; ren_mvars := e.(ren_mvars)
+     ; term_mvars := e.(term_mvars)
+     ; subst_mvars := subst_mvars }.
 
 (* TODO: handle renamings directly applied to naturals. *)
 Ltac2 rec reify_nat (e : env) (t : constr) : env * constr := 
@@ -225,8 +252,8 @@ Ltac2 rec reify_nat (e : env) (t : constr) : env * constr :=
     let (e, i) := reify_nat e i in
     e, constr:(Q_rapply $r $i)
   | ?i => 
-    let idx := nat_of_int (List.length (e.(qnat_mvars))) in
-    let e := add_qnat_mvar i e in
+    let (idx, e) := add_qnat_mvar i e in
+    let idx := nat_of_int idx in
     e, constr:(Q_mvar $idx)
   end
 
@@ -243,8 +270,8 @@ with reify_ren (e : env) (t : constr) : env * constr :=
     let (e, r2) := reify_ren e r2 in 
     e, constr:(R_comp $r1 $r2)
   | ?r => 
-    let idx := nat_of_int (List.length (e.(ren_mvars))) in 
-    let e := add_ren_mvar r e in
+    let (idx, e) := add_ren_mvar r e in
+    let idx := nat_of_int idx in
     e, constr:(R_mvar $idx)
   end.
 
@@ -277,8 +304,8 @@ Ltac2 rec reify_expr (e : env) (t : constr) : env * constr :=
     let (e, s) := reify_subst e s in
     e, constr:(E_subst $t $s)
   | ?t => 
-    let idx := nat_of_int (List.length (e.(term_mvars))) in
-    let e := add_term_mvar t e in
+    let (idx, e) := add_term_mvar t e in
+    let idx := nat_of_int idx in
     e, constr:(E_mvar $idx)
   end
 
@@ -303,8 +330,8 @@ with reify_subst (e : env) (s : constr) : env * constr :=
     let (e, s) := reify_subst e s in 
     e, constr:(S_comp (S_ren $r) $s)
   | ?s => 
-    let idx := nat_of_int (List.length (e.(subst_mvars))) in
-    let e := add_subst_mvar s e in
+    let (idx, e) := add_subst_mvar s e in
+    let idx := nat_of_int idx in
     e, constr:(S_mvar $idx)
   end.
 

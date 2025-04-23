@@ -323,14 +323,16 @@ with reify_subst (s : constr) : constr * constr :=
   lazy_match! s with 
   | sshift => 
     constr:(O.sshift), constr:(@reflexivity subst point_eq _ sshift)
-  | scons ?t ?s1 =>
+  | scons ?t ?s =>
     let (t', p1) := reify t in 
-    let (s1', p2) := reify_subst s1 in 
-    let s' := constr:(O.scons $t' $s1') in 
-    let p := constr:(
-      transitivity (eval_scons $t' $s1') (congr_scons $p1 $p2)) 
-    in
-    (s', p)
+    let (s', p2) := reify_subst s in 
+    constr:(O.scons $t' $s'), 
+    constr:(transitivity (eval_scons $t' $s') (congr_scons $p1 $p2)) 
+  | scomp ?s1 ?s2 =>
+    let (s1', p1) := reify_subst s1 in 
+    let (s2', p2) := reify_subst s2 in
+    constr:(O.scomp $s1' $s2'),
+    constr:(transitivity (eval_scomp $s1' $s2') (congr_scomp $p1 $p2)) 
   | ?s => 
     let s' := constr:(sreify $s) in 
     let p := constr:(seval_sreify_inv $s) in 
@@ -390,16 +392,21 @@ From Ltac2 Require Import Printf.
 
 Ltac2 test_tac () : unit :=
   lazy_match! Control.goal () with 
-  | @eq _ ?l0 ?r => 
+  | @eq _ ?l0 ?r0 => 
     (* Reify zero -> one. *)
-    let (l1, p) := reify l0 in
-    rewrite <-$p ; 
+    let (l1, pl) := reify l0 in
+    let (r1, pr) := reify r0 in
+    rewrite <-$pl ;
+    rewrite <-$pr ; 
     (* Reify one -> two. *)
-    let (e, l2) := T.reify_expr (T.empty_env ()) l1 in 
+    let e := T.empty_env () in
+    let (e, l2) := T.reify_expr e l1 in 
+    let (e, r2) := T.reify_expr e r1 in 
     let e := T.build_env e in
-    change (eval (T.eeval $e $l2) = $r) ;
+    change (eval (T.eeval $e $l2) = eval (T.eeval $e $r2)) ;
     (* Simplify. *)
     rewrite <-(T.esimp_sound $e $l2) ;
+    rewrite <-(T.esimp_sound $e $r2)
     (* Eval two -> one. *)
     (*cbv [seval eeval seval_functional eeval_functional
          qeval reval qeval_functional reval_functional 
@@ -409,25 +416,31 @@ Ltac2 test_tac () : unit :=
          substitute_aux scomp_aux rsimp rsimp_functional qsimp_functional
          sapply qsimp sapply_functional rscomp_functional 
          sapply_aux] *)
-    cbv [T.seval T.eeval T.seval_functional T.eeval_functional
+    (*cbv [T.eeval T.seval T.seval_functional T.eeval_functional
          T.qeval T.reval T.qeval_functional T.reval_functional 
          T.assign_ren T.assign_qnat T.assign_term T.assign_subst List.nth
          T.esimp T.ssimp T.esimp_functional T.ssimp_functional 
          T.substitute T.scomp T.substitute_functional T.scomp_functional T.sren
          T.substitute_aux T.scomp_aux T.rsimp T.rsimp_functional T.qsimp_functional
          T.sapply T.qsimp T.sapply_functional T.rscomp_functional 
-         T.sapply_aux]
+         T.sapply_aux]*)
   | _ => Control.throw_invalid_argument "not an equality"
   end.
+
+Lemma aux k e (t t' : T.expr k) : 
+  t = t' -> eval (T.eeval e t) = eval (T.eeval e t').
+Proof. now intros ->. Qed.
 
 Lemma test : left = right.
 Proof.
 unfold left, right.
 ltac2:(test_tac ()).
-ltac2:(
+apply aux. vm_compute. reflexivity.
+
+(*ltac2:(
   lazy_match! Control.goal () with 
   | eval ?l1 = _ =>
     let (_, p) := eval l1 in 
     rewrite $p
-  end).
+  end).*)
 Admitted.
