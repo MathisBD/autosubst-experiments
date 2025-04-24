@@ -3,7 +3,7 @@
  (public_name autosubst-experiments.plugin)
  (flags
   (:standard -warn-error +A -w -27-32-69 -rectypes))
- (libraries coq-core.tactics))
+ (libraries coq-core.vernac coq-core.tactics))
 
 (coq.pp
  (modules g_plugin))

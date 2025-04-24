@@ -12,9 +12,9 @@
  (authors "Mathis Bouverot-Dupuis")
  (homepage "https://github.com/MathisBD/autosubst-experiments")
  (bug_reports "https://github.com/MathisBD/autosubst-experiments/issues")
- (synopsis "Experimenting with a reflexive version of autosubst")
+ (synopsis "Experimenting with a reflective version of autosubst")
  (depends
   (coq
-   (>= 8.20.0))
+   (= 8.20.0))
   (ocaml
    (= 4.14.1))))
