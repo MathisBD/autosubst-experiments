@@ -5,5 +5,5 @@ DECLARE PLUGIN "autosubst-experiments.plugin"
 }
 
 VERNAC COMMAND EXTEND Test CLASSIFIED AS SIDEFF
-| [ "Test" ref(ind_ref) ] -> { Feedback.msg_notice (Pp.str "hello") }
+| [ "Test" ref(ind) ] -> { Gen_funcs.main ind }
 END

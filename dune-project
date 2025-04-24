@@ -16,5 +16,4 @@
  (depends
   (coq
    (= 8.20.0))
-  (ocaml
-   (= 4.14.1))))
+  coq-equations))
