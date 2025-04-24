@@ -1,0 +1,9 @@
+DECLARE PLUGIN "autosubst-experiments.plugin"
+
+{ 
+  open Stdarg
+}
+
+VERNAC COMMAND EXTEND Test CLASSIFIED AS SIDEFF
+| [ "Test" ref(ind_ref) ] -> { Gen_funcs.test ind_ref }
+END

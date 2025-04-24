@@ -236,11 +236,10 @@ Proof. intros i ; cbv [seval sreify]. now rewrite eval_reify_inv. Qed.
 Lemma eval_rename (t : O.expr Kt) (r : ren) :
   eval (O.rename t r) = rename (eval t) r.
 Proof.
-revert t r. 
-apply (@term_ind' (fun (t : O.expr Kt) => forall r, eval (O.rename t r) = rename (eval t) r)).
-- intros i r. simpl. simp rename. simpl. reflexivity.
-- intros t1 t2 H1 H2 r. repeat (simp rename ; simpl). now rewrite H1, H2.
-- intros str t H r. repeat (simp rename ; simpl). now rewrite H.
+revert r ; induction t using term_ind' ; intros r.
+- reflexivity.
+- repeat (simp rename ; simpl). now rewrite IHt1, IHt2.
+- repeat (simp rename ; simpl). now rewrite IHt.
 Qed.   
 
 Lemma eval_scons t s : 
@@ -373,6 +372,25 @@ with eval_subst (s' : constr) : constr * constr :=
 
 (** Testing. *)
 
+(*
+
+t -> t'
+
+reify (ltac) : zero -> one
+reify t -> t', p : eval t' = t
+
+eval (rocq) : one -> zero
+reify (rocq) : zero -> one
+
+
+
+
+eval t' = t
+
+
+*)
+
+
 (*Axiom t_ax : term.
 
 Ltac2 Eval 
@@ -435,7 +453,7 @@ Lemma test : left = right.
 Proof.
 unfold left, right.
 ltac2:(test_tac ()).
-apply aux. vm_compute. reflexivity.
+apply aux. vm_cast_no_check (@eq_refl (T.expr Kt)).
 
 (*ltac2:(
   lazy_match! Control.goal () with 
