@@ -1,8 +1,5 @@
 Declare ML Module "autosubst-experiments.plugin".
+From Coq Require Import String.
 
-Inductive term :=
-| Var : nat -> term
-| App : term -> term -> term 
-| Lam : (*string ->*) term -> term.
-
-Test term.
+Test.
+Print term.
