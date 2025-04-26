@@ -12,9 +12,9 @@ open Monad
     [mk_kername ["Coq"; "Init"; "Nat"] "add"]. *)
 val mk_kername : string list -> string -> Names.KerName.t
 
-(** [fresh_ident basename] returns a fresh identifier built from [basename] and which is
-    guaranteed to be distinct from all identifiers returned by this function so far. *)
-val fresh_ident : Names.Id.t -> Names.Id.t
+(** [fresh_ident base] returns an identifier built from [base], which is guaranteed to be
+    fresh in the current named (local) context. *)
+val fresh_ident : Names.Id.t -> Names.Id.t m
 
 (** [typecheck t] checks that [t] is well-typed and computes the type of [t], using typing
     information to resolve unification variable in [t]. *)

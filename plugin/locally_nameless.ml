@@ -11,12 +11,10 @@ let mk_kername (dir : string list) (label : string) : Names.KerName.t =
   let label = Names.Label.make label in
   Names.KerName.make dir label
 
-let fresh_ident : Names.Id.t -> Names.Id.t =
-  let used_names = ref Names.Id.Set.empty in
-  fun basename ->
-    let name = Namegen.next_ident_away basename !used_names in
-    used_names := Names.Id.Set.add name !used_names;
-    name
+let fresh_ident (id : Names.Id.t) : Names.Id.t m =
+  let* env = get_env in
+  let idset = Environ.ids_of_named_context_val (Environ.named_context_val env) in
+  ret @@ Namegen.next_ident_away id idset
 
 let typecheck (t : EConstr.t) : EConstr.types m =
  fun env sigma -> Typing.type_of env sigma t
@@ -44,7 +42,7 @@ let vdef (name : string) (def : EConstr.t) (ty : EConstr.t) : EConstr.rel_declar
     , ty )
 
 let with_local_decl (decl : EConstr.rel_declaration) (k : Names.Id.t -> 'a m) : 'a m =
-  let id =
+  let* id =
     fresh_ident
       (match Context.Rel.Declaration.get_name decl with
       | Name n -> n

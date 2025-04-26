@@ -6,3 +6,12 @@ Test.
 
 Print term.
 Print rename.
+Print subst.
+Print srcomp.
+Print rscomp.
+Print sid.
+Print sshift.
+Print scons.
+Print up_subst.
+Print substitute.
+Print scomp.
