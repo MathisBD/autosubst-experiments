@@ -35,3 +35,14 @@ val set_sigma : Evd.evar_map -> unit m
 
 (** Modify the current evar map. *)
 val modify_sigma : (Evd.evar_map -> Evd.evar_map) -> unit m
+
+(** Additional functions on lists. *)
+module List : sig
+  include module type of List
+
+  (** Map a monadic function over a list, sequencing effects from left to right. *)
+  val monad_map : ('a -> 'b m) -> 'a list -> 'b list m
+
+  (** Same as [monad_map] but the function also gets the index of each argument. *)
+  val monad_mapi : (int -> 'a -> 'b m) -> 'a list -> 'b list m
+end

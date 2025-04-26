@@ -3,10 +3,9 @@ open Monad
 (** This module provides functions to build and destruct terms, in the locally nameless
     style. *)
 
-(** We use ['a m] in the signatures of many functions. Formally [m] is a monad, but
-    monadic programming in OCaml is awkward so we simply treat [m] as syntax sugar to have
-    more readable function signatures. *)
-(*type 'a m = Environ.env -> Evd.evar_map -> Evd.evar_map * 'a*)
+(**************************************************************************************)
+(** *** Miscellaneous. *)
+(**************************************************************************************)
 
 (** [mk_kername path label] makes the kernel name with directory path [path] and label
     [label]. For instance to create the kernel name of [Nat.add] you can use
@@ -15,13 +14,32 @@ val mk_kername : string list -> string -> Names.KerName.t
 
 (** [fresh_ident basename] returns a fresh identifier built from [basename] and which is
     guaranteed to be distinct from all identifiers returned by this function so far. *)
-val fresh_ident : string -> Names.Id.t
+val fresh_ident : Names.Id.t -> Names.Id.t
 
-(** [with_local_decl basename ?def ty k] generates a fresh identifier [x] built from
-    [basename] and executes the continuation [k x] in the environment extended with
-    [x : ty := def]. *)
-val with_local_decl :
-  string -> ?def:EConstr.t -> EConstr.types -> (Names.Id.t -> 'a m) -> 'a m
+(** [typecheck t] checks that [t] is well-typed and computes the type of [t], using typing
+    information to resolve unification variable in [t]. *)
+val typecheck : EConstr.t -> EConstr.types m
+
+(** [retype t] computes the type of [t], assuming [t] is already well-typed. *)
+val retype : EConstr.t -> EConstr.types m
+
+(**************************************************************************************)
+(** *** Manipulating contexts. *)
+(**************************************************************************************)
+
+(** [vass x ty] builds the local assumption [x : ty]. *)
+val vass : string -> EConstr.types -> EConstr.rel_declaration
+
+(** [vdef x def ty] builds the local assumption [x : ty := def]. *)
+val vdef : string -> EConstr.t -> EConstr.types -> EConstr.rel_declaration
+
+(** [with_local_decl decl k] generates a fresh identifier [x] from [decl] and executes the
+    continuation [k x] in an environment extended with a _named_ declaration [decl']. *)
+val with_local_decl : EConstr.rel_declaration -> (Names.Id.t -> 'a m) -> 'a m
+
+(** Generalization of [with_local_decl] to a de Bruijn context. The continuation receives
+    the variables from outermost to innermost. *)
+val with_local_ctx : EConstr.rel_context -> (Names.Id.t list -> 'a m) -> 'a m
 
 (**************************************************************************************)
 (** *** Building terms. *)
@@ -40,6 +58,23 @@ val arrow : EConstr.types -> EConstr.types -> EConstr.types
 (** [arrows [t1 ; ... , tn] t] constructs the non-dependent product
     [t1 -> ... -> tn -> t]. It takes care of lifting. *)
 val arrows : EConstr.types list -> EConstr.types -> EConstr.types
+
+(** Instantiate an inductive with a fresh universe instance. *)
+val fresh_ind : Names.Ind.t -> EConstr.t m
+
+(** Instantiate a constructor with a fresh universe instance. *)
+val fresh_ctor : Names.Construct.t -> EConstr.t m
+
+(** Instantiate a constant with a fresh universe instance. *)
+val fresh_const : Names.Constant.t -> EConstr.t m
+
+(** [fresh_type] creates a [Type] term with a fresh universe level, and adds the new
+    universe level to the evar map. *)
+val fresh_type : EConstr.t m
+
+(** [fresh_evar ty] creates a fresh evar with type [ty] (if provided). If [ty] is not
+    provided, it creates another fresh evar (of type [Type]) for the type. *)
+val fresh_evar : EConstr.t option -> EConstr.t m
 
 (** [lambda name ty body] makes a lambda abstraction with the given parameters, in the
     locally nameless style. *)
@@ -67,13 +102,33 @@ val let_in :
     [fix "add" 1 '(nat -> nat -> nat) (fun add -> ...)]. *)
 val fix : string -> int -> EConstr.types -> (Names.Id.t -> EConstr.t m) -> EConstr.t m
 
+(** [case scrutinee ?return branches] build a case expression on [scrutinee]. It assumes
+    the type of [scrutinee] is and inductive without any parameters or indices.
+    - [return] is the case return type. If not provided, an evar will be used instead.
+    - [branches] is a function which builds the [i]-th branch (starting at [0]) of the
+      case expression, with the arguments of the constructor in context. *)
+val case :
+  EConstr.t -> ?return:EConstr.t -> (int -> Names.Id.t list -> EConstr.t m) -> EConstr.t m
+
 (**************************************************************************************)
 (** *** Declaring definitions/indutives. *)
 (**************************************************************************************)
 
-(** [declare_ind name arity ctor_names ctor_types] declares a single inductive
-    (non-mutual) with no parameters, no indices, and not universe polymorphic. It also
-    generates the associated elimination & induction principles.
+(** [declare_def kind name ?ty body] adds a new definition [name : ty := body] to the
+    global environment. Does not handle universe polymorphism.
+
+    It returns the name of the newly created constant. *)
+val declare_def :
+     Decls.definition_object_kind
+  -> string
+  -> ?ty:EConstr.t
+  -> EConstr.t
+  -> Names.Constant.t m
+
+(** [declare_ind name arity ctor_names ctor_types] adds an inductive to the global
+    environment. It handles non-mutual inductives with no parameters, no indices, and not
+    universe polymorphic. It also generates the associated elimination & induction
+    principles.
     - [name] is the name of the inductive.
     - [ctor_names] contains the names of the constructors.
     - [ctor_types] contains the types of the constructors, which can depend on the
@@ -81,7 +136,7 @@ val fix : string -> int -> EConstr.types -> (Names.Id.t -> EConstr.t m) -> ECons
 
     It returns the name of the newly created inductive. *)
 val declare_ind :
-  string -> EConstr.t -> string list -> (Names.Id.t -> EConstr.t m) list -> Names.Ind.t
+  string -> EConstr.t -> string list -> (Names.Id.t -> EConstr.t m) list -> Names.Ind.t m
 
 (**************************************************************************************)
 (** *** Destructing terms. *)

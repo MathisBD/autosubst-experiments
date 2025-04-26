@@ -29,7 +29,15 @@ let string : EConstr.t =
   EConstr.UnsafeMonomorphic.mkInd
     (Names.MutInd.make1 @@ mk_kername [ "Coq"; "Strings"; "String" ] "string", 0)
 
-let declare_ind (s : signature) : unit =
+let ren : EConstr.t =
+  EConstr.UnsafeMonomorphic.mkConst @@ Names.Constant.make1
+  @@ mk_kername [ "Prototype"; "Prelude" ] "ren"
+
+let up_ren : EConstr.t =
+  EConstr.UnsafeMonomorphic.mkConst @@ Names.Constant.make1
+  @@ mk_kername [ "Prototype"; "Prelude" ] "up_ren"
+
+let declare_ind (s : signature) : Names.Ind.t m =
   (* Constructor names and types. We add an extra constructor for variables. *)
   let ctor_names = "Var" :: Array.to_list s.ctor_names in
   let ctor_types =
@@ -40,11 +48,52 @@ let declare_ind (s : signature) : unit =
             s.ctor_types)
   in
   (* Declare the inductive. *)
-  ignore @@ declare_ind "term" EConstr.mkSet ctor_names ctor_types
+  declare_ind "term" EConstr.mkSet ctor_names ctor_types
+
+let rec rename_arg (rename : EConstr.t) (r : EConstr.t) (arg : EConstr.t) (ty : arg_ty) :
+    EConstr.t =
+  match ty with
+  | AT_base _ -> arg
+  | AT_term -> apps rename [| r; arg |]
+  | AT_bind ty -> rename_arg rename (app up_ren r) arg ty
+
+let build_rename (ind : Names.Ind.t) (s : signature) : EConstr.t m =
+  let open EConstr in
+  (* Bind the input parameters. *)
+  let* term = fresh_ind ind in
+  fix "rename" 1 (arrows [ ren; term ] term) @@ fun rename ->
+  lambda "r" ren @@ fun r ->
+  lambda "t" term @@ fun t ->
+  (* Build the case expression. *)
+  case (mkVar t) @@ fun i args ->
+  let* ctor = fresh_ctor (ind, i + 1) in
+  if i = 0
+  then
+    (* Variable branch. *)
+    ret @@ app ctor @@ app (mkVar r) (mkVar @@ List.hd args)
+  else
+    (* Other branches. *)
+    let args' =
+      List.map2
+        (rename_arg (mkVar rename) (mkVar r))
+        (List.map mkVar args)
+        s.ctor_types.(i - 1)
+    in
+    ret @@ apps ctor @@ Array.of_list args'
 
 let main () =
-  declare_ind
+  let s =
     { ctor_names = [| "App"; "Lam" |]
     ; ctor_types = [| [ AT_term; AT_term ]; [ AT_base string; AT_bind AT_term ] |]
-    };
+    }
+  in
+  let ind = monad_run @@ declare_ind s in
+  let rename =
+    monad_run
+      begin
+        let* func = build_rename ind s in
+        let* _ = typecheck func in
+        declare_def Decls.Definition "rename" func
+      end
+  in
   Log.printf "plugin done"

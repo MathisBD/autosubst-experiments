@@ -1,5 +1,9 @@
 open Monad
 
+(**************************************************************************************)
+(** *** Miscellaneous. *)
+(**************************************************************************************)
+
 let mk_kername (dir : string list) (label : string) : Names.KerName.t =
   let dir =
     Names.ModPath.MPfile (Names.DirPath.make @@ List.rev_map Names.Id.of_string_soft dir)
@@ -7,48 +11,112 @@ let mk_kername (dir : string list) (label : string) : Names.KerName.t =
   let label = Names.Label.make label in
   Names.KerName.make dir label
 
-let fresh_ident : string -> Names.Id.t =
+let fresh_ident : Names.Id.t -> Names.Id.t =
   let used_names = ref Names.Id.Set.empty in
   fun basename ->
-    let name = Namegen.next_ident_away (Names.Id.of_string_soft basename) !used_names in
+    let name = Namegen.next_ident_away basename !used_names in
     used_names := Names.Id.Set.add name !used_names;
     name
 
-let with_local_decl (basename : string) ?(def : EConstr.t option) (ty : EConstr.t)
-    (k : Names.Id.t -> 'a m) : 'a m =
-  let id = fresh_ident basename in
+let typecheck (t : EConstr.t) : EConstr.types m =
+ fun env sigma -> Typing.type_of env sigma t
+
+let retype (t : EConstr.t) : EConstr.types m =
+ fun env sigma -> (sigma, Retyping.get_type_of env sigma t)
+
+(**************************************************************************************)
+(** *** Manipulating contexts. *)
+(**************************************************************************************)
+
+let vass (name : string) (ty : EConstr.t) : EConstr.rel_declaration =
+  Context.Rel.Declaration.LocalAssum
+    ( { binder_name = Name (Names.Id.of_string_soft name)
+      ; binder_relevance = EConstr.ERelevance.relevant
+      }
+    , ty )
+
+let vdef (name : string) (def : EConstr.t) (ty : EConstr.t) : EConstr.rel_declaration =
+  Context.Rel.Declaration.LocalDef
+    ( { binder_name = Name (Names.Id.of_string_soft name)
+      ; binder_relevance = EConstr.ERelevance.relevant
+      }
+    , def
+    , ty )
+
+let with_local_decl (decl : EConstr.rel_declaration) (k : Names.Id.t -> 'a m) : 'a m =
+  let id =
+    fresh_ident
+      (match Context.Rel.Declaration.get_name decl with
+      | Name n -> n
+      | Anonymous -> Names.Id.of_string "x")
+  in
   let* sigma = get_sigma in
-  let decl =
-    match def with
-    | None ->
+  let named_decl =
+    match decl with
+    | LocalAssum (_, ty) ->
         Context.Named.Declaration.LocalAssum
           ( { binder_name = id; binder_relevance = Sorts.Relevant }
           , EConstr.to_constr sigma ty )
-    | Some def ->
+    | LocalDef (_, def, ty) ->
         Context.Named.Declaration.LocalDef
           ( { binder_name = id; binder_relevance = Sorts.Relevant }
           , EConstr.to_constr sigma def
           , EConstr.to_constr sigma ty )
   in
-  with_env' (Environ.push_named decl) @@ k id
+  with_env' (Environ.push_named named_decl) @@ k id
+
+let with_local_ctx (ctx : EConstr.rel_context) (k : Names.Id.t list -> 'a m) : 'a m =
+  (* We process declarations from outermost to innermost. *)
+  let rec loop decls ids =
+    match decls with
+    | [] -> k (List.rev ids)
+    | d :: decls ->
+        let d_subst = EConstr.Vars.substl_decl (List.map EConstr.mkVar ids) d in
+        with_local_decl d_subst @@ fun id -> loop decls (id :: ids)
+  in
+  loop (List.rev ctx) []
+
+(**************************************************************************************)
+(** *** Building terms. *)
+(**************************************************************************************)
 
 let app f x = EConstr.mkApp (f, [| x |])
 let apps f xs = EConstr.mkApp (f, xs)
 let arrow t1 t2 = EConstr.mkArrowR t1 (EConstr.Vars.lift 1 t2)
 let rec arrows ts t = match ts with [] -> t | t1 :: ts -> arrow t1 (arrows ts t)
 
-(*let rec with_local_decls (basenames : string list) (tys : EConstr.t list)
-    (k : Environ.env -> Evd.evar_map -> Names.Id.t list -> Evd.evar_map * 'a) :
-    Evd.evar_map * 'a =
-  match (basenames, tys) with
-  | [], [] -> k env sigma []
-  | b :: basenames, t :: tys ->
-      with_local_decls env sigma basenames tys (fun env sigma ids ->
-          with_local_decl env sigma b t @@ fun env sigma id -> k env sigma (id :: ids))
-  | _ -> failwith "with_local_decl: lengths differ"*)
+let fresh_ind (ind : Names.Ind.t) : EConstr.t m =
+ fun env sigma ->
+  let sigma, (_, uinst) = Evd.fresh_inductive_instance env sigma ind in
+  (sigma, EConstr.mkIndU (ind, EConstr.EInstance.make uinst))
+
+let fresh_ctor (ctor : Names.Construct.t) : EConstr.t m =
+ fun env sigma ->
+  let sigma, (_, uinst) = Evd.fresh_constructor_instance env sigma ctor in
+  (sigma, EConstr.mkConstructU (ctor, EConstr.EInstance.make uinst))
+
+let fresh_const (const : Names.Constant.t) : EConstr.t m =
+ fun env sigma ->
+  let sigma, (_, uinst) = Evd.fresh_constant_instance env sigma const in
+  (sigma, EConstr.mkConstU (const, EConstr.EInstance.make uinst))
+
+let fresh_type : EConstr.t m =
+ fun env sigma ->
+  let level = UnivGen.fresh_level () in
+  let sigma = Evd.add_global_univ sigma level in
+  (sigma, EConstr.mkType @@ Univ.Universe.make level)
+
+let fresh_evar (ty : EConstr.t option) : EConstr.t m =
+ fun env sigma ->
+  match ty with
+  | Some ty -> Evarutil.new_evar env sigma ty
+  | None ->
+      let sigma, t = fresh_type env sigma in
+      let sigma, ty = Evarutil.new_evar env sigma t in
+      Evarutil.new_evar env sigma ty
 
 let lambda name ty mk_body =
-  with_local_decl name ty @@ fun id ->
+  with_local_decl (vass name ty) @@ fun id ->
   let* body = mk_body id in
   let* sigma = get_sigma in
   ret
@@ -57,7 +125,7 @@ let lambda name ty mk_body =
        ty body
 
 let prod name ty mk_body =
-  with_local_decl name ty @@ fun id ->
+  with_local_decl (vass name ty) @@ fun id ->
   let* body = mk_body id in
   let* sigma = get_sigma in
   ret
@@ -66,7 +134,7 @@ let prod name ty mk_body =
        ty body
 
 let let_in name def ty mk_body =
-  with_local_decl name ~def ty @@ fun id ->
+  with_local_decl (vdef name def ty) @@ fun id ->
   let* body = mk_body id in
   let* sigma = get_sigma in
   ret
@@ -74,8 +142,9 @@ let let_in name def ty mk_body =
        { binder_name = id; binder_relevance = EConstr.ERelevance.relevant }
        def ty body
 
-let fix name rec_arg_idx ty mk_body =
-  with_local_decl name ty @@ fun id ->
+let fix (name : string) (rec_arg_idx : int) (ty : EConstr.t)
+    (mk_body : Names.Id.t -> EConstr.t m) : EConstr.t m =
+  with_local_decl (vass name ty) @@ fun id ->
   let* body = mk_body id in
   let* sigma = get_sigma in
   ret
@@ -85,23 +154,97 @@ let fix name rec_arg_idx ty mk_body =
          , [| ty |]
          , [| EConstr.Vars.subst_var sigma id body |] ) )
 
+let rec lambda_vars (vars : Names.Id.t list) (body : EConstr.t) : EConstr.t m =
+  match vars with
+  | [] -> ret body
+  | v :: vars ->
+      let* body = lambda_vars vars body in
+      let* env = get_env in
+      let* sigma = get_sigma in
+      let v_decl = Environ.lookup_named v env in
+      ret
+      @@ EConstr.mkNamedLambda sigma
+           { binder_name = v; binder_relevance = EConstr.ERelevance.relevant }
+           (EConstr.of_constr @@ Context.Named.Declaration.get_type v_decl)
+           body
+
+let case (scrutinee : EConstr.t) ?(return : EConstr.t option)
+    (branches : int -> Names.Id.t list -> EConstr.t m) : EConstr.t m =
+  let* env = get_env in
+  (* Get the inductive we are matching over. *)
+  let* ty = retype scrutinee in
+  let* sigma = get_sigma in
+  let ind, uinst = EConstr.destInd sigma ty in
+  let ind_fam = Inductiveops.make_ind_family ((ind, uinst), []) in
+  (* Get the return type. *)
+  let* return =
+    match return with
+    | Some return -> ret return
+    | None ->
+        let* ind' = fresh_ind ind in
+        lambda "_" ind' @@ fun _ -> fresh_evar None
+  in
+  (* Build the branches. *)
+  let ctor_summaries = Inductiveops.get_constructors env ind_fam in
+  let* branch_list =
+    List.monad_mapi
+      begin
+        fun i ctor ->
+          with_local_ctx ctor.Inductiveops.cs_args @@ fun args ->
+          let* body = branches i args in
+          lambda_vars args body
+      end
+    @@ Array.to_list ctor_summaries
+  in
+  (* Assemble everything. *)
+  let* env = get_env in
+  let* sigma = get_sigma in
+  ret
+  @@ Inductiveops.simple_make_case_or_project env sigma
+       (Inductiveops.make_case_info env ind Constr.RegularStyle)
+       (return, EConstr.ERelevance.relevant)
+       Constr.NoInvert scrutinee (Array.of_list branch_list)
+
+(**************************************************************************************)
+(** *** Declaring definitions/indutives. *)
+(**************************************************************************************)
+
+let declare_def (kind : Decls.definition_object_kind) (name : string)
+    ?(ty : EConstr.t option) (body : EConstr.t) : Names.Constant.t m =
+  (* Constant info. *)
+  let info =
+    Declare.Info.make ~kind:(Decls.IsDefinition kind)
+      ~scope:(Locality.Global Locality.ImportDefaultBehavior) ()
+  in
+  (* Declare the constant. *)
+  let* sigma = get_sigma in
+  let ref =
+    Declare.declare_definition ~info
+      ~cinfo:(Declare.CInfo.make ~name:(Names.Id.of_string_soft name) ~typ:ty ())
+      ~opaque:false ~body sigma
+  in
+  (* Check the returned global reference is indeed a constant name. *)
+  match ref with
+  | Names.GlobRef.ConstRef cname -> ret cname
+  | _ -> Log.error "declare_def: expected a [ConstRef]."
+
 let declare_ind (name : string) (arity : EConstr.t) (ctor_names : string list)
-    (ctor_types : (Names.Id.t -> EConstr.t m) list) : Names.Ind.t =
+    (ctor_types : (Names.Id.t -> EConstr.t m) list) : Names.Ind.t m =
   let open Entries in
   (* Build the constructor types. *)
-  let build_ctor_type (mk_ty : Names.Id.t -> EConstr.t m) : Constr.t =
-    monad_run @@ with_local_decl name arity
-    @@ fun ind ->
+  let build_ctor_type (mk_ty : Names.Id.t -> EConstr.t m) : Constr.t m =
+    with_local_decl (vass name arity) @@ fun ind ->
     let* ty = mk_ty ind in
     let* sigma = get_sigma in
     ret @@ EConstr.to_constr sigma @@ EConstr.Vars.subst_var sigma ind ty
   in
+  let* ctor_types = List.monad_map build_ctor_type ctor_types in
   (* Declare the inductive. *)
   let ind =
     { mind_entry_typename = Names.Id.of_string_soft name
     ; mind_entry_arity = EConstr.to_constr Evd.empty arity
     ; mind_entry_consnames = List.map Names.Id.of_string_soft ctor_names
-    ; mind_entry_lc = List.map build_ctor_type ctor_types
+    ; mind_entry_lc = ctor_types
     }
   in
   let mind =
@@ -119,7 +262,7 @@ let declare_ind (name : string) (arity : EConstr.t) (ctor_names : string list)
       (Monomorphic_entry Univ.ContextSet.empty, UnivNames.empty_binders)
       []
   in
-  (mind_name, 0)
+  ret (mind_name, 0)
 
 (** Generalizes [namedLambda] to multiple variables in a [EConstr.rel_context].
 
