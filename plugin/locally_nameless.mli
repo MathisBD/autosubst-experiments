@@ -111,7 +111,7 @@ val case :
   EConstr.t -> ?return:EConstr.t -> (int -> Names.Id.t list -> EConstr.t m) -> EConstr.t m
 
 (**************************************************************************************)
-(** *** Declaring definitions/indutives. *)
+(** *** Declaring definitions/inductives. *)
 (**************************************************************************************)
 
 (** [declare_def kind name ?ty body] adds a new definition [name : ty := body] to the
@@ -124,6 +124,13 @@ val declare_def :
   -> ?ty:EConstr.t
   -> EConstr.t
   -> Names.Constant.t m
+
+(** [declare_theorem kind name stmt tac] adds a new theorem [name : ty] to the global
+    environment, proved with tactic [tac]. Does not handle universe polymorphism.
+
+    It returns the name of the newly created constant. *)
+val declare_theorem :
+  Decls.theorem_kind -> string -> EConstr.t -> unit Proofview.tactic -> Names.Constant.t m
 
 (** [declare_ind name arity ctor_names ctor_types] adds an inductive to the global
     environment. It handles non-mutual inductives with no parameters, no indices, and not

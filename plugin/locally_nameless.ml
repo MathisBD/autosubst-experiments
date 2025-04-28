@@ -226,6 +226,24 @@ let declare_def (kind : Decls.definition_object_kind) (name : string)
   | Names.GlobRef.ConstRef cname -> ret cname
   | _ -> Log.error "declare_def: expected a [ConstRef]."
 
+let declare_theorem (kind : Decls.theorem_kind) (name : string) (stmt : EConstr.t)
+    (tac : unit Proofview.tactic) : Names.Constant.t m =
+  (* Constant info. *)
+  let info =
+    Declare.Info.make ~kind:(Decls.IsProof kind)
+      ~scope:(Locality.Global Locality.ImportDefaultBehavior) ()
+  in
+  let cinfo = Declare.CInfo.make ~name:(Names.Id.of_string_soft name) ~typ:stmt () in
+  (* Declare the lemma. *)
+  let* sigma = get_sigma in
+  let proof = Declare.Proof.start ~info ~cinfo sigma in
+  let proof, _ = Declare.Proof.by tac proof in
+  let refs = Declare.Proof.save_regular ~proof ~opaque:Vernacexpr.Opaque ~idopt:None in
+  (* Get the name of the declared lemma. *)
+  match refs with
+  | [ Names.GlobRef.ConstRef cname ] -> ret cname
+  | _ -> Log.error "While defining lemma %s: expected a single constant name" name
+
 let declare_ind (name : string) (arity : EConstr.t) (ctor_names : string list)
     (ctor_types : (Names.Id.t -> EConstr.t m) list) : Names.Ind.t m =
   let open Entries in

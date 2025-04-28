@@ -207,6 +207,21 @@ let def (name : string) ?(kind : Decls.definition_object_kind option)
       declare_def kind name body
     end
 
+(** Helper function to prove lemmas. *)
+let lemma (name : string) (mk_stmt : EConstr.t m) (tac : unit Proofview.tactic) :
+    Names.Constant.t =
+  monad_run
+    (let* stmt = mk_stmt in
+     declare_theorem Decls.Lemma name stmt tac)
+
+let true_ : EConstr.t =
+  EConstr.UnsafeMonomorphic.mkInd
+    (Names.MutInd.make1 @@ mk_kername [ "Coq"; "Init"; "Logic" ] "True", 0)
+
+let true_I : EConstr.t =
+  EConstr.UnsafeMonomorphic.mkConstruct
+    ((Names.MutInd.make1 @@ mk_kername [ "Coq"; "Init"; "Logic" ] "True", 0), 1)
+
 let main () =
   let s =
     { ctor_names = [| "App"; "Lam" |]
@@ -225,5 +240,6 @@ let main () =
   let substitute =
     def "substitute" ~kind:Decls.Fixpoint @@ build_substitute s term subst up_subst
   in
+  let _ = lemma "test_lemma" (ret true_) @@ Tactics.exact_check true_I in
   let _scomp = def "scomp" @@ build_scomp term subst substitute in
   ()

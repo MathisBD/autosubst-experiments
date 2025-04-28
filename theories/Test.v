@@ -15,3 +15,5 @@ Print scons.
 Print up_subst.
 Print substitute.
 Print scomp.
+
+About test_lemma.
