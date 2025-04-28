@@ -7,9 +7,12 @@ Export ListNotations.
     so I use Ltac1 for proofs. *)
 #[export] Set Default Proof Mode "Classic".
 
+(** Coercion to view booleans as propositions. *)
 Coercion is_true : bool >-> Sortclass.
 
-(** Convenience tactics. *)
+(*********************************************************************************)
+(** *** Convenience tactics. *)
+(*********************************************************************************)
 
 (** Simplify equations of the form [existT ?a ?b _ = existT ?a ?b _], 
     which are often generates by Rocq's [inversion] tactic. *)
@@ -57,9 +60,9 @@ Ltac unfold_all :=
   | [ x := _ |- _ ] => unfold x in * ; clear x
   end.
 
-(** Pointwise equality for functions. *)
-Definition point_eq {A B} : relation (A -> B) := pointwise_relation _ eq.
-Notation "f =₁ g" := (point_eq f g) (at level 75).
+(*********************************************************************************)
+(** *** Renamings. *)
+(*********************************************************************************)
 
 (** A renaming on terms is a function [nat -> nat] which is applied
     to all free variables. *)
@@ -83,6 +86,26 @@ rcomp r1 r2 i := r2 (r1 i).
 (** Lift a renaming through a binder. *)
 Equations up_ren (r : ren) : ren := 
 up_ren r := rcons 0 (rcomp r rshift).
+
+(*********************************************************************************)
+(** Trivial properties of renamings. *)
+(*********************************************************************************)
+
+(** Pointwise equality for functions. *)
+Definition point_eq {A B} : relation (A -> B) := pointwise_relation _ eq.
+Notation "f =₁ g" := (point_eq f g) (at level 75).
+
+Lemma congr_rcons i {r r'} :
+  r =₁ r' -> rcons i r =₁ rcons i r'.
+Proof. intros H [|i'] ; [reflexivity|]. now simp rcons. Qed.
+
+Lemma congr_rcomp {r1 r1' r2 r2'} :
+  r1 =₁ r1' -> r2 =₁ r2' -> rcomp r1 r2 =₁ rcomp r1' r2'.
+Proof. intros H1 H2 i. simp rcomp. now rewrite H1, H2. Qed.
+
+Lemma congr_up_ren {r r'} :
+  r =₁ r' -> up_ren r =₁ up_ren r'.
+Proof. intros H. simp up_ren. apply congr_rcons. now apply congr_rcomp. Qed.
 
 (*(** [fin n] represents the finite set with [n] elements [0], [1], ..., [n-1]. *)
 Inductive fin : nat -> Type :=

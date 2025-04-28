@@ -2,9 +2,10 @@ From Prototype Require Import Prelude Sig.
 Declare ML Module "autosubst-experiments.plugin".
 From Coq Require Import String.
 
+
 Test.
 
-Print term.
+(*Print term.
 Print rename.
 Print subst.
 Print srcomp.
@@ -14,6 +15,8 @@ Print sshift.
 Print scons.
 Print up_subst.
 Print substitute.
-Print scomp.
+Print scomp.*)
 
-About test_lemma.
+About congr_App.
+About congr_Lam.
+About congr_rename.

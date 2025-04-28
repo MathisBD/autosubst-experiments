@@ -21,7 +21,7 @@ let set_sigma sigma : unit m = fun env _ -> (sigma, ())
 let modify_sigma f : unit m = fun env sigma -> (f sigma, ())
 
 module List = struct
-  include List
+  include Stdlib.List
 
   let rec monad_map (f : 'a -> 'b m) (xs : 'a list) : 'b list m =
     match xs with

@@ -56,45 +56,32 @@ Lemma congr_lam str {t t'} :
   t = t' -> Lam str t = Lam str t'.
 Proof. intros ->. reflexivity. Qed.
 
-Lemma congr_rcons i {r r'} :
-  r =₁ r' -> P.rcons i r =₁ P.rcons i r'.
-Proof. intros H [|i'] ; [reflexivity|]. now simp rcons. Qed.
-
-Lemma congr_rcomp {r1 r1' r2 r2'} :
-  r1 =₁ r1' -> r2 =₁ r2' -> rcomp r1 r2 =₁ rcomp r1' r2'.
-Proof. intros H1 H2 i. simp rcomp. now rewrite H1, H2. Qed.
-
-Lemma congr_up_ren {r r'} :
-  r =₁ r' -> up_ren r =₁ up_ren r'.
-Proof. intros H. simp up_ren. apply congr_rcons. now apply congr_rcomp. Qed.
-
 Lemma congr_rename {t t' r r'} :
   t = t' -> r =₁ r' -> rename t r = rename t' r'.
 Proof. 
-intros <-. revert r r'. induction t ; intros r r' H ; simpl ; auto.
-- now erewrite IHt1, IHt2.
-- rewrite (IHt (up_ren r) (up_ren r')).
-  + reflexivity.
-  + now apply congr_up_ren.
-Qed. 
+intros <-. revert r r'. induction t ; intros r r' H ; cbn.
+- auto.
+- apply congr_app ; auto.
+- apply congr_lam ; auto using congr_up_ren.
+Qed.
 
 Lemma congr_rscomp {r r' s s'} :
   r =₁ r' -> s =₁ s' -> rscomp r s =₁ rscomp r' s'.
-Proof. intros H1 H2 i. cbv [rscomp]. now rewrite H1, H2. Qed.
+Proof. intros H1 H2 i. unfold rscomp. rewrite H1, H2. reflexivity. Qed.
 
 Lemma congr_srcomp {s s' r r'} :
   s =₁ s' -> r =₁ r' -> srcomp s r =₁ srcomp s' r'.
-Proof. intros H1 H2 i. cbv [srcomp]. apply congr_rename ; auto. Qed.
+Proof. intros H1 H2 i. unfold srcomp. apply congr_rename ; auto. Qed.
 
 Lemma congr_scons {t t' s s'} : 
   t = t' -> s =₁ s' -> scons t s =₁ scons t' s'.
-Proof. intros -> H [|i] ; [reflexivity|]. simpl. apply H. Qed.
+Proof. intros -> H [|i] ; simpl ; auto. Qed.
 
 Lemma congr_up_subst {s s'} :
   s =₁ s' -> up_subst s =₁ up_subst s'.
 Proof. 
 intros H. unfold up_subst. apply congr_scons ; auto. 
-now apply congr_srcomp. 
+apply congr_srcomp ; easy.
 Qed.
 
 Lemma congr_substitute {t t' s s'} :
@@ -164,6 +151,21 @@ Section TermInd.
 End TermInd. 
 
 (** Reification/evaluation functions. *)
+
+(**
+
+t -> t', p : eval t' = t
+
+scomp s1 s2 -> scomp' s1' s2'
+
+untyped lambda calculus (concrete)
+
+level one (admissible subst) generic
+
+level two (explicit subst) generic
+
+
+*)
 
 Fixpoint reify (t : term) : O.expr Kt :=
   match t with

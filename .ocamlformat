@@ -2,13 +2,10 @@ profile=default
 
 if-then-else=keyword-first
 exp-grouping=preserve
-
 space-around-lists=true
 space-around-arrays=true
-
 break-separators=before
 dock-collection-brackets=false
 space-around-records=true
-
 doc-comments=before
 margin=90
