@@ -18,6 +18,12 @@ let nat : Names.Ind.t =
 let nat_zero : Names.Construct.t = (nat, 1)
 let nat_succ : Names.Construct.t = (nat, 2)
 
+let list_ : Names.Ind.t =
+  (Names.MutInd.make1 @@ mk_kername [ "Coq"; "Init"; "Datatypes" ] "list", 0)
+
+let list_nil : Names.Construct.t = (list_, 1)
+let list_cons : Names.Construct.t = (list_, 2)
+
 let string : Names.Ind.t =
   (Names.MutInd.make1 @@ mk_kername [ "Coq"; "Strings"; "String" ] "string", 0)
 
@@ -33,12 +39,19 @@ let up_ren : Names.Constant.t =
 let congr_up_ren : Names.Constant.t =
   Names.Constant.make1 @@ mk_kername [ "Prototype"; "Prelude" ] "congr_up_ren"
 
+let arg_ty_ : Names.Ind.t =
+  (Names.MutInd.make1 @@ mk_kername [ "Prototype"; "Sig" ] "arg_ty", 0)
+
+let at_base : Names.Construct.t = (arg_ty_, 1)
+let at_term : Names.Construct.t = (arg_ty_, 2)
+let at_bind : Names.Construct.t = (arg_ty_, 3)
+
 (**************************************************************************************)
 (** *** OCaml representation of a signature. *)
 (**************************************************************************************)
 
-(** Argument type. *)
-type arg_ty = AT_base of EConstr.types | AT_term | AT_bind of arg_ty
+(** Argument type. Base types store the index of the type in the [base_types] array. *)
+type arg_ty = AT_base of int | AT_term | AT_bind of arg_ty
 
 (** An abstract signature:
     - [n_ctors] is the number of _non-variable_ constructors.
@@ -47,17 +60,24 @@ type arg_ty = AT_base of EConstr.types | AT_term | AT_bind of arg_ty
 
     The length of [ctor_names] and [ctor_sig] should be equal to [n_ctors]. *)
 type signature =
-  { n_ctors : int; ctor_names : string array; ctor_types : arg_ty list array }
+  { n_ctors : int
+  ; base_types : Constr.t array
+  ; ctor_names : string array
+  ; ctor_types : arg_ty list array
+  }
 
-(** [arg_ty_constr ty ind] builds the [EConstr.t] corresponding to [ty]. We use [ind] as a
-    placeholder for the inductive type of terms. *)
-let rec arg_ty_constr (ty : arg_ty) (ind : EConstr.t) : EConstr.t =
-  match ty with AT_base b -> b | AT_term -> ind | AT_bind ty -> arg_ty_constr ty ind
+(** [arg_ty_constr sign ty ind] builds the [EConstr.t] corresponding to [ty]. We use [ind]
+    as a placeholder for the inductive type of terms. *)
+let rec arg_ty_constr (sign : signature) (ty : arg_ty) (ind : EConstr.t) : EConstr.t =
+  match ty with
+  | AT_base i -> EConstr.of_constr sign.base_types.(i)
+  | AT_term -> ind
+  | AT_bind ty -> arg_ty_constr sign ty ind
 
-(** [ctor_ty_constr tys ind] build the type of a constructor as a [EConstr.t]. We use
+(** [ctor_ty_constr sign tys ind] build the type of a constructor as a [EConstr.t]. We use
     [ind] as a placeholder for the inductive type of terms. *)
-let ctor_ty_constr (tys : arg_ty list) (ind : EConstr.t) : EConstr.t =
-  arrows (List.map (fun ty -> arg_ty_constr ty ind) tys) ind
+let ctor_ty_constr (sign : signature) (tys : arg_ty list) (ind : EConstr.t) : EConstr.t =
+  arrows (List.map (fun ty -> arg_ty_constr sign ty ind) tys) ind
 
 (**************************************************************************************)
 (** *** Build the term inductive and related operations (renaming, substitution, etc). *)
@@ -70,7 +90,7 @@ let build_term (sign : signature) : Names.Ind.t m =
     (fun ind -> ret @@ arrow (mkind nat) (EConstr.mkVar ind))
     :: Array.to_list
          (Array.map
-            (fun ty ind -> ret @@ ctor_ty_constr ty (EConstr.mkVar ind))
+            (fun ty ind -> ret @@ ctor_ty_constr sign ty (EConstr.mkVar ind))
             sign.ctor_types)
   in
   (* Declare the inductive. *)
@@ -219,8 +239,8 @@ let build_congr_ctor (sign : signature) (ops : operations) (idx : int) : EConstr
     match tys with
     | [] -> k []
     | ty :: tys ->
-        prod "l" (arg_ty_constr ty term) @@ fun t ->
-        prod "r" (arg_ty_constr ty term) @@ fun t' ->
+        prod "l" (arg_ty_constr sign ty term) @@ fun t ->
+        prod "r" (arg_ty_constr sign ty term) @@ fun t' ->
         with_vars tys @@ fun ts -> k ((t, t') :: ts)
   in
   (* Bind the arguments of the constructor. *)
@@ -228,7 +248,8 @@ let build_congr_ctor (sign : signature) (ops : operations) (idx : int) : EConstr
   (* Build the hypotheses. *)
   let hyps =
     List.map2
-      (fun (t, t') ty -> apps (mkind eq) [| arg_ty_constr ty term; mkVar t; mkVar t' |])
+      (fun (t, t') ty ->
+        apps (mkind eq) [| arg_ty_constr sign ty term; mkVar t; mkVar t' |])
       ts sign.ctor_types.(idx)
   in
   (* Build the conclusion. *)
@@ -540,6 +561,55 @@ let prove_congr_scomp (sign : signature) (ops : operations)
   auto ()
 
 (**************************************************************************************)
+(** *** Level one signature. *)
+(**************************************************************************************)
+
+(** Build the inductive [Inductive base := B0 | B1 | ...] which indexes base types. *)
+let build_base (sign : signature) : Names.Ind.t m =
+  let names =
+    List.init (Array.length sign.base_types) @@ fun i -> "B" ^ string_of_int i
+  in
+  let types =
+    List.init (Array.length sign.base_types) @@ fun _ ind -> ret @@ EConstr.mkVar ind
+  in
+  declare_ind "base" EConstr.mkSet names types
+
+(** Build the function [eval_base : base -> Type]. *)
+let build_eval_base (sign : signature) (base : Names.Ind.t) : EConstr.t m =
+  lambda "b" (mkind base) @@ fun b ->
+  case (EConstr.mkVar b) @@ fun i _ -> ret @@ EConstr.of_constr sign.base_types.(i)
+
+(** Build the inductive [Inductive ctor := CApp | CLam | ...] which indexes non-variable
+    constructors. *)
+let build_ctor (sign : signature) : Names.Ind.t m =
+  let names = List.init sign.n_ctors @@ fun i -> "C" ^ sign.ctor_names.(i) in
+  let types = List.init sign.n_ctors @@ fun _ ind -> ret @@ EConstr.mkVar ind in
+  declare_ind "ctor" EConstr.mkSet names types
+
+let rec mklist (ty : EConstr.t) (xs : EConstr.t list) : EConstr.t m =
+  match xs with
+  | [] ->
+      let* lnil = fresh_ctor list_nil in
+      ret @@ app lnil ty
+  | x :: xs ->
+      let* lcons = fresh_ctor list_cons in
+      let* tail = mklist ty xs in
+      ret @@ apps lcons [| ty; x; tail |]
+
+(** Build the function [ctor_type : ctor -> list (@arg_ty base)]. *)
+let build_ctor_type (sign : signature) (ctor : Names.Ind.t) (base : Names.Ind.t) :
+    EConstr.t m =
+  let rec on_arg_ty (ty : arg_ty) : EConstr.t =
+    match ty with
+    | AT_base i -> apps (mkctor at_base) [| mkind base; mkctor (base, i + 1) |]
+    | AT_term -> apps (mkctor at_term) [| mkind base |]
+    | AT_bind ty -> apps (mkctor at_bind) [| mkind base; on_arg_ty ty |]
+  in
+  lambda "c" (mkind ctor) @@ fun c ->
+  case (EConstr.mkVar c) @@ fun i _ ->
+  mklist (app (mkind arg_ty_) (mkind base)) @@ List.map on_arg_ty sign.ctor_types.(i)
+
+(**************************************************************************************)
 (** *** Putting everything together. *)
 (**************************************************************************************)
 
@@ -570,8 +640,9 @@ let lemma (name : string) (mk_stmt : EConstr.t m) (tac : unit Proofview.tactic) 
 let main () =
   let s =
     { n_ctors = 2
+    ; base_types = [| Constr.UnsafeMonomorphic.mkInd string |]
     ; ctor_names = [| "App"; "Lam" |]
-    ; ctor_types = [| [ AT_term; AT_term ]; [ AT_base (mkind string); AT_bind AT_term ] |]
+    ; ctor_types = [| [ AT_term; AT_term ]; [ AT_base 0; AT_bind AT_term ] |]
     }
   in
   (* Define the term inductive. *)
@@ -635,4 +706,9 @@ let main () =
     lemma "congr_scomp" (build_congr_scomp s ops)
     @@ prove_congr_scomp s ops congr_substitute
   in
+  (* Level one signature. *)
+  let base = monad_run @@ build_base s in
+  let _eval_base = def "eval_base" @@ build_eval_base s base in
+  let ctor = monad_run @@ build_ctor s in
+  let _ctor_type = def "ctor_type" @@ build_ctor_type s ctor base in
   ()

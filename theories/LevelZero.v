@@ -100,7 +100,7 @@ Proof. intros H1 H2 i. cbv [scomp]. now apply congr_substitute. Qed.
 (** Signature. *)
 
 Inductive base := BString.
-Definition denote_base (b : base) : Type := 
+Definition eval_base (b : base) : Type := 
   match b with BString => string end.
 
 Inductive ctor := CApp | CLam.
@@ -111,7 +111,7 @@ Definition ctor_type c : list (@arg_ty base) :=
   end.
 
 Module S.
-Definition t := Build_signature base denote_base ctor ctor_type.
+Definition t := Build_signature base eval_base ctor ctor_type.
 End S.
 
 Module T := LevelTwoSimp.Make (S).
@@ -153,21 +153,6 @@ End TermInd.
 
 (** Reification/evaluation functions. *)
 
-(**
-
-t -> t', p : eval t' = t
-
-scomp s1 s2 -> scomp' s1' s2'
-
-untyped lambda calculus (concrete)
-
-level one (admissible subst) generic
-
-level two (explicit subst) generic
-
-
-*)
-
 Fixpoint reify (t : term) : O.expr Kt :=
   match t with
   | Var i => O.E_var i
@@ -188,7 +173,7 @@ Definition sreify (s : subst) : O.subst :=
   
 Fixpoint eval_arg (ty : arg_ty) : Type :=
   match ty with 
-  | AT_base b => denote_base b 
+  | AT_base b => eval_base b 
   | AT_term => term 
   | AT_bind ty => eval_arg ty
   end.
