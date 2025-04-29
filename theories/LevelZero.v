@@ -59,7 +59,7 @@ Proof. intros ->. reflexivity. Qed.
 Lemma congr_rename {t t' r r'} :
   t = t' -> r =₁ r' -> rename t r = rename t' r'.
 Proof. 
-intros <-. revert r r'. induction t ; intros r r' H ; cbn.
+intros <-. revert r r'. induction t ; simpl ; intros r r' H.
 - auto.
 - apply congr_app ; auto.
 - apply congr_lam ; auto using congr_up_ren.
@@ -75,21 +75,22 @@ Proof. intros H1 H2 i. unfold srcomp. apply congr_rename ; auto. Qed.
 
 Lemma congr_scons {t t' s s'} : 
   t = t' -> s =₁ s' -> scons t s =₁ scons t' s'.
-Proof. intros -> H [|i] ; simpl ; auto. Qed.
+Proof. intros -> H [|i] ; unfold scons ; [reflexivity | apply H]. Qed.
 
 Lemma congr_up_subst {s s'} :
   s =₁ s' -> up_subst s =₁ up_subst s'.
 Proof. 
-intros H. unfold up_subst. apply congr_scons ; auto. 
-apply congr_srcomp ; easy.
+intros H. unfold up_subst. apply congr_scons ; [reflexivity|]. 
+apply congr_srcomp ; [assumption | reflexivity].
 Qed.
 
 Lemma congr_substitute {t t' s s'} :
   t = t' -> s =₁ s' -> substitute t s = substitute t' s'.
 Proof. 
-intros <-. revert s s'. induction t ; intros s0 s0' H ; simpl ; auto.
-- now erewrite IHt1, IHt2. 
-- f_equal. apply IHt. now apply congr_up_subst.
+intros <-. revert s s'. induction t ; simpl ; intros s0 s0' H.
+- auto. 
+- apply congr_app ; auto.
+- apply congr_lam ; auto using congr_up_subst.
 Qed.
 
 Lemma congr_scomp {s1 s1' s2 s2'} :

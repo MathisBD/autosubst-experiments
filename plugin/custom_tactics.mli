@@ -22,7 +22,9 @@ end
 val intro_n : int -> unit Proofview.tactic
 
 (** [intro_fresh x] introduces a single variable/hypothesis with a fresh identifier built
-    from [x], and returns the identifier of the variable introduced. *)
+    from [x], and returns the identifier of the variable introduced.
+
+    Assumes exactly one goal is under focus. *)
 val intro_fresh : string -> Names.Id.t Proofview.tactic
 
 (** [intro_rewrite dir] introduces a single equality and rewrites with it. [dir] controls

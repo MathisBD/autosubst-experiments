@@ -41,9 +41,13 @@ let congr_up_ren : Names.Constant.t =
 type arg_ty = AT_base of EConstr.types | AT_term | AT_bind of arg_ty
 
 (** An abstract signature:
+    - [n_ctors] is the number of _non-variable_ constructors.
     - [ctor_names] contains the name of each constructor.
-    - [ctor_sig] contains the argument types of each constructor. *)
-type signature = { ctor_names : string array; ctor_types : arg_ty list array }
+    - [ctor_sig] contains the argument types of each constructor.
+
+    The length of [ctor_names] and [ctor_sig] should be equal to [n_ctors]. *)
+type signature =
+  { n_ctors : int; ctor_names : string array; ctor_types : arg_ty list array }
 
 (** [arg_ty_constr ty ind] builds the [EConstr.t] corresponding to [ty]. We use [ind] as a
     placeholder for the inductive type of terms. *)
@@ -59,15 +63,15 @@ let ctor_ty_constr (tys : arg_ty list) (ind : EConstr.t) : EConstr.t =
 (** *** Build the term inductive and related operations (renaming, substitution, etc). *)
 (**************************************************************************************)
 
-let build_term (s : signature) : Names.Ind.t m =
+let build_term (sign : signature) : Names.Ind.t m =
   (* Constructor names and types. We add an extra constructor for variables. *)
-  let ctor_names = "Var" :: Array.to_list s.ctor_names in
+  let ctor_names = "Var" :: Array.to_list sign.ctor_names in
   let ctor_types =
     (fun ind -> ret @@ arrow (mkind nat) (EConstr.mkVar ind))
     :: Array.to_list
          (Array.map
             (fun ty ind -> ret @@ ctor_ty_constr ty (EConstr.mkVar ind))
-            s.ctor_types)
+            sign.ctor_types)
   in
   (* Declare the inductive. *)
   declare_ind "term" EConstr.mkSet ctor_names ctor_types
@@ -81,7 +85,7 @@ let rec rename_arg (rename : EConstr.t) (r : EConstr.t) (arg : EConstr.t) (ty : 
       let r' = app (mkconst up_ren) r in
       rename_arg rename r' arg ty
 
-let build_rename (s : signature) (term : Names.Ind.t) : EConstr.t m =
+let build_rename (sign : signature) (term : Names.Ind.t) : EConstr.t m =
   let open EConstr in
   (* Bind the input parameters. *)
   fix "rename" 1 (arrows [ mkconst ren; mkind term ] (mkind term)) @@ fun rename ->
@@ -99,7 +103,7 @@ let build_rename (s : signature) (term : Names.Ind.t) : EConstr.t m =
       List.map2
         (rename_arg (mkVar rename) (mkVar r))
         (List.map mkVar args)
-        s.ctor_types.(i - 1)
+        sign.ctor_types.(i - 1)
     in
     ret @@ apps (mkctor (term, i + 1)) @@ Array.of_list args'
 
@@ -201,12 +205,12 @@ type operations =
   }
 
 (**************************************************************************************)
-(** *** Congruence lemmas. *)
+(** *** Build congruence lemmas. *)
 (**************************************************************************************)
 
 (** Build the congruence lemma for the non-variable constructor [idx] (starting at [0]).
 *)
-let build_congr_ctor (s : signature) (ops : operations) (idx : int) : EConstr.t m =
+let build_congr_ctor (sign : signature) (ops : operations) (idx : int) : EConstr.t m =
   let open EConstr in
   let* term = fresh_ind ops.term in
   (* Helper function to bind the arguments of the constructor. *)
@@ -220,12 +224,12 @@ let build_congr_ctor (s : signature) (ops : operations) (idx : int) : EConstr.t 
         with_vars tys @@ fun ts -> k ((t, t') :: ts)
   in
   (* Bind the arguments of the constructor. *)
-  with_vars s.ctor_types.(idx) @@ fun ts ->
+  with_vars sign.ctor_types.(idx) @@ fun ts ->
   (* Build the hypotheses. *)
   let hyps =
     List.map2
       (fun (t, t') ty -> apps (mkind eq) [| arg_ty_constr ty term; mkVar t; mkVar t' |])
-      ts s.ctor_types.(idx)
+      ts sign.ctor_types.(idx)
   in
   (* Build the conclusion. *)
   let* ctor = fresh_ctor (ops.term, idx + 2) in
@@ -235,29 +239,16 @@ let build_congr_ctor (s : signature) (ops : operations) (idx : int) : EConstr.t 
   (* Assemble everything. *)
   ret @@ arrows hyps concl
 
-(** Prove the congruence lemma for the non-variable constructor [idx] (starting at [0]).
-*)
-let prove_congr_ctor (s : signature) (ops : operations) (idx : int) :
-    unit Proofview.tactic =
-  let open PVMonad in
-  let arg_tys = s.ctor_types.(idx) in
-  (* Introduce the constructor arguments. *)
-  let* _ = intro_n (2 * List.length arg_tys) in
-  (* Introduce each hypothesis and rewrite with it from left to right. *)
-  let* _ = Tacticals.tclDO (List.length arg_tys) @@ intro_rewrite ~dir:true in
-  (* Close with reflexivity. *)
-  Tactics.reflexivity
-
-(** Build [forall t t' r r', t = t' -> r =₁ r' -> rename r t = rename r' t']. *)
-let build_congr_rename (s : signature) (ops : operations) : EConstr.t m =
+(** Build [forall r r' t t', r =₁ r' -> t = t' -> rename r t = rename r' t']. *)
+let build_congr_rename (sign : signature) (ops : operations) : EConstr.t m =
   let open EConstr in
   let* term = fresh_ind ops.term in
-  prod "t" term @@ fun t ->
-  prod "t'" term @@ fun t' ->
   prod "r" (mkconst ren) @@ fun r ->
   prod "r'" (mkconst ren) @@ fun r' ->
-  let hyp_t = apps (mkind eq) [| term; mkVar t; mkVar t' |] in
+  prod "t" term @@ fun t ->
+  prod "t'" term @@ fun t' ->
   let hyp_r = apps (mkconst point_eq) [| mkind nat; mkind nat; mkVar r; mkVar r' |] in
+  let hyp_t = apps (mkind eq) [| term; mkVar t; mkVar t' |] in
   let concl =
     apps (mkind eq)
       [| term
@@ -265,42 +256,10 @@ let build_congr_rename (s : signature) (ops : operations) : EConstr.t m =
        ; apps (mkconst ops.rename) [| mkVar r'; mkVar t' |]
       |]
   in
-  ret @@ arrows [ hyp_t; hyp_r ] concl
-
-(** Prove [forall t t' r r', t = t' -> r =₁ r' -> rename r t = rename r' t']. *)
-let prove_congr_rename (s : signature) (ops : operations)
-    (congr_lemmas : Names.Constant.t list) : unit Proofview.tactic =
-  let open PVMonad in
-  (* Introduce the variables. *)
-  let* t = intro_fresh "t" in
-  let* _ = intro_fresh "t'" in
-  let* r = intro_fresh "r" in
-  let* r' = intro_fresh "r'" in
-  (* Rewrite with the first hypothesis. *)
-  let* _ = intro_rewrite ~dir:false in
-  let* _ = Generalize.revert [ r; r' ] in
-  (* Induction on [t]. *)
-  let intro_patt = CAst.make @@ Tactypes.IntroOrPattern [ []; []; [] ] in
-  let* _ = Induction.induction false None (EConstr.mkVar t) (Some intro_patt) None in
-  (* Process each subgoal. *)
-  dispatch @@ fun i ->
-  let* r = intro_fresh "r" in
-  let* r' = intro_fresh "r'" in
-  let* hyp = intro_fresh "H" in
-  let* _ = Tactics.simpl_in_concl in
-  if i = 0
-  then
-    (* Variable constructor. *)
-    auto ()
-  else
-    (* Other constructors. *)
-    let* _ =
-      Tactics.apply @@ EConstr.UnsafeMonomorphic.mkConst @@ List.nth congr_lemmas (i - 1)
-    in
-    auto ~lemmas:[ mkconst congr_up_ren ] ()
+  ret @@ arrows [ hyp_r; hyp_t ] concl
 
 (** Build [forall r r' s s', r =₁ r' -> s =₁ s' -> rscomp r s =₁ rscomp r' s']. *)
-let build_congr_rscomp (s : signature) (ops : operations) : EConstr.t m =
+let build_congr_rscomp (sign : signature) (ops : operations) : EConstr.t m =
   let open EConstr in
   prod "r" (mkconst ren) @@ fun r ->
   prod "r'" (mkconst ren) @@ fun r' ->
@@ -320,20 +279,8 @@ let build_congr_rscomp (s : signature) (ops : operations) : EConstr.t m =
   in
   ret @@ arrows [ hyp_r; hyp_s ] concl
 
-(** Prove [forall r r' s s', r =₁ r' -> s =₁ s' -> rscomp r s =₁ rscomp r' s']. *)
-let prove_congr_rscomp (s : signature) (ops : operations) : unit Proofview.tactic =
-  let open PVMonad in
-  let* _ = intro_n 4 in
-  let* h1 = intro_fresh "H" in
-  let* h2 = intro_fresh "H" in
-  let* _ = intro_fresh "i" in
-  let* _ = Tactics.unfold_constr (Names.GlobRef.ConstRef ops.rscomp) in
-  let* _ = rewrite ~dir:true (Names.GlobRef.VarRef h1) in
-  let* _ = rewrite ~dir:true (Names.GlobRef.VarRef h2) in
-  Tactics.reflexivity
-
 (** Build [forall s s' r r', s =₁ s' -> r =₁ r' -> srcomp s r =₁ srcomp s' r']. *)
-let build_congr_srcomp (s : signature) (ops : operations) : EConstr.t m =
+let build_congr_srcomp (sign : signature) (ops : operations) : EConstr.t m =
   let open EConstr in
   prod "s" (mkconst ops.subst) @@ fun s ->
   prod "s'" (mkconst ops.subst) @@ fun s' ->
@@ -353,8 +300,151 @@ let build_congr_srcomp (s : signature) (ops : operations) : EConstr.t m =
   in
   ret @@ arrows [ hyp_s; hyp_r ] concl
 
+(** Build [forall t t' s s', t = t' -> s =₁ s' -> scons t s =₁ scons t' s']. *)
+let build_congr_scons (sign : signature) (ops : operations) : EConstr.t m =
+  let open EConstr in
+  prod "t" (mkind ops.term) @@ fun t ->
+  prod "t'" (mkind ops.term) @@ fun t' ->
+  prod "s" (mkconst ops.subst) @@ fun s ->
+  prod "s'" (mkconst ops.subst) @@ fun s' ->
+  let hyp_t = apps (mkind eq) [| mkind ops.term; mkVar t; mkVar t' |] in
+  let hyp_s =
+    apps (mkconst point_eq) [| mkind nat; mkind ops.term; mkVar s; mkVar s' |]
+  in
+  let concl =
+    apps (mkconst point_eq)
+      [| mkind nat
+       ; mkind ops.term
+       ; apps (mkconst ops.scons) [| mkVar t; mkVar s |]
+       ; apps (mkconst ops.scons) [| mkVar t'; mkVar s' |]
+      |]
+  in
+  ret @@ arrows [ hyp_t; hyp_s ] concl
+
+(** Build [forall s s', s =₁ s' -> up_subst s =₁ up_subst s']. *)
+let build_congr_up_subst (sign : signature) (ops : operations) : EConstr.t m =
+  let open EConstr in
+  prod "s" (mkconst ops.subst) @@ fun s ->
+  prod "s'" (mkconst ops.subst) @@ fun s' ->
+  let hyp = apps (mkconst point_eq) [| mkind nat; mkind ops.term; mkVar s; mkVar s' |] in
+  let concl =
+    apps (mkconst point_eq)
+      [| mkind nat
+       ; mkind ops.term
+       ; app (mkconst ops.up_subst) (mkVar s)
+       ; app (mkconst ops.up_subst) (mkVar s')
+      |]
+  in
+  ret @@ arrow hyp concl
+
+(** Build [forall s s' t t', s =₁ s' -> t = t' -> substitute s t = substitute s' t']. *)
+let build_congr_substitute (sign : signature) (ops : operations) : EConstr.t m =
+  let open EConstr in
+  prod "s" (mkconst ops.subst) @@ fun s ->
+  prod "s'" (mkconst ops.subst) @@ fun s' ->
+  prod "t" (mkind ops.term) @@ fun t ->
+  prod "t'" (mkind ops.term) @@ fun t' ->
+  let hyp_s =
+    apps (mkconst point_eq) [| mkind nat; mkind ops.term; mkVar s; mkVar s' |]
+  in
+  let hyp_t = apps (mkind eq) [| mkind ops.term; mkVar t; mkVar t' |] in
+  let concl =
+    apps (mkind eq)
+      [| mkind ops.term
+       ; apps (mkconst ops.substitute) [| mkVar s; mkVar t |]
+       ; apps (mkconst ops.substitute) [| mkVar s'; mkVar t' |]
+      |]
+  in
+  ret @@ arrows [ hyp_s; hyp_t ] concl
+
+(** Build [forall s1 s1' s2 s2', s1 =₁ s1' -> s2 =₁ s2' -> scomp s1 s2 =₁ scomp s1' s2'].
+*)
+let build_congr_scomp (sign : signature) (ops : operations) : EConstr.t m =
+  let open EConstr in
+  prod "s1" (mkconst ops.subst) @@ fun s1 ->
+  prod "s1'" (mkconst ops.subst) @@ fun s1' ->
+  prod "s2" (mkconst ops.subst) @@ fun s2 ->
+  prod "s2'" (mkconst ops.subst) @@ fun s2' ->
+  let hyp_s1 =
+    apps (mkconst point_eq) [| mkind nat; mkind ops.term; mkVar s1; mkVar s1' |]
+  in
+  let hyp_s2 =
+    apps (mkconst point_eq) [| mkind nat; mkind ops.term; mkVar s2; mkVar s2' |]
+  in
+  let concl =
+    apps (mkconst point_eq)
+      [| mkind nat
+       ; mkind ops.term
+       ; apps (mkconst ops.scomp) [| mkVar s1; mkVar s2 |]
+       ; apps (mkconst ops.scomp) [| mkVar s1'; mkVar s2' |]
+      |]
+  in
+  ret @@ arrows [ hyp_s1; hyp_s2 ] concl
+
+(**************************************************************************************)
+(** *** Prove congruence lemmas. *)
+(**************************************************************************************)
+
+(** Prove the congruence lemma for the non-variable constructor [idx] (starting at [0]).
+*)
+let prove_congr_ctor (sign : signature) (ops : operations) (idx : int) :
+    unit Proofview.tactic =
+  let open PVMonad in
+  let arg_tys = sign.ctor_types.(idx) in
+  (* Introduce the constructor arguments. *)
+  let* _ = intro_n (2 * List.length arg_tys) in
+  (* Introduce each hypothesis and rewrite with it from left to right. *)
+  let* _ = Tacticals.tclDO (List.length arg_tys) @@ intro_rewrite ~dir:true in
+  (* Close with reflexivity. *)
+  Tactics.reflexivity
+
+(** Prove [forall r r' t t', r =₁ r' -> t = t' -> rename r t = rename r' t']. *)
+let prove_congr_rename (sign : signature) (ops : operations)
+    (congr_lemmas : Names.Constant.t list) : unit Proofview.tactic =
+  let open PVMonad in
+  (* Introduce the variables. *)
+  let* r = intro_fresh "r" in
+  let* r' = intro_fresh "r'" in
+  let* t = intro_fresh "t" in
+  let* _ = intro_fresh "t'" in
+  (* Rewrite with the second hypothesis. *)
+  let* hyp_r = intro_fresh "H" in
+  let* _ = intro_rewrite ~dir:false in
+  (* Induction on [t]. *)
+  let* _ = Generalize.revert [ r; r'; hyp_r ] in
+  let intro_patt = CAst.make @@ Tactypes.IntroOrPattern [ []; []; [] ] in
+  let* _ = Induction.induction false None (EConstr.mkVar t) (Some intro_patt) None in
+  (* Process each subgoal. *)
+  dispatch @@ fun i ->
+  let* r = intro_fresh "r" in
+  let* r' = intro_fresh "r'" in
+  let* hyp = intro_fresh "H" in
+  let* _ = Tactics.simpl_in_concl in
+  if i = 0
+  then
+    (* Variable constructor. *)
+    auto ()
+  else
+    (* Other constructors. *)
+    let* _ =
+      Tactics.apply @@ EConstr.UnsafeMonomorphic.mkConst @@ List.nth congr_lemmas (i - 1)
+    in
+    auto ~lemmas:[ mkconst congr_up_ren ] ()
+
+(** Prove [forall r r' s s', r =₁ r' -> s =₁ s' -> rscomp r s =₁ rscomp r' s']. *)
+let prove_congr_rscomp (sign : signature) (ops : operations) : unit Proofview.tactic =
+  let open PVMonad in
+  let* _ = intro_n 4 in
+  let* h1 = intro_fresh "H" in
+  let* h2 = intro_fresh "H" in
+  let* _ = intro_fresh "i" in
+  let* _ = Tactics.unfold_constr (Names.GlobRef.ConstRef ops.rscomp) in
+  let* _ = rewrite ~dir:true (Names.GlobRef.VarRef h1) in
+  let* _ = rewrite ~dir:true (Names.GlobRef.VarRef h2) in
+  Tactics.reflexivity
+
 (** Prove [forall s s' r r', s =₁ s' -> r =₁ r' -> srcomp s r =₁ srcomp s' r']. *)
-let prove_congr_srcomp (s : signature) (ops : operations)
+let prove_congr_srcomp (sign : signature) (ops : operations)
     (congr_rename : Names.Constant.t) : unit Proofview.tactic =
   let open PVMonad in
   let* _ = intro_n 4 in
@@ -365,26 +455,87 @@ let prove_congr_srcomp (s : signature) (ops : operations)
   let* _ = Tactics.apply (mkconst congr_rename) in
   auto ()
 
-(** Build [forall t t' s s', t = t' -> s =₁ s' -> scons t s =₁ scons t' s']. *)
-let buildcongr_scons (s : signature) (ops : operations) : EConstr.t m =
-  let open EConstr in
-  prod "t" (mkind ops.term) @@ fun t ->
-  prod "t'" (mkind ops.term) @@ fun t' ->
-  prod "s" (mkconst ops.subst) @@ fun s ->
-  prod "s'" (mkconst ops.subst) @@ fun s' ->
-  let hyp_t = apps (mkind eq) [| mkind ops.term; mkVar t; mkVar t' |] in
-  let hyp_s =
-    apps (mkconst point_eq) [| mkind nat; mkconst ops.subst; mkVar s; mkVar s' |]
+(** Prove [forall t t' s s', t = t' -> s =₁ s' -> scons t s =₁ scons t' s']. *)
+let prove_congr_scons (sign : signature) (ops : operations) : unit Proofview.tactic =
+  let open PVMonad in
+  let* _ = intro_n 4 in
+  let* _ = intro_rewrite ~dir:true in
+  let* h = intro_fresh "H" in
+  (* Introduce [i] and immediately destruct it. *)
+  let i_patt =
+    Tactypes.IntroAction (Tactypes.IntroOrAndPattern (Tactypes.IntroOrPattern [ []; [] ]))
   in
-  let concl =
-    apps (mkconst point_eq)
-      [| mkind nat
-       ; mkconst ops.subst
-       ; apps (mkconst ops.scons) [| mkVar t; mkVar s |]
-       ; apps (mkconst ops.scons) [| mkVar t'; mkVar s' |]
-      |]
+  let* _ = Tactics.intro_patterns false [ CAst.make @@ i_patt ] in
+  (* Unfold [scons] and finish with auto. *)
+  let* _ = Tactics.unfold_constr (Names.GlobRef.ConstRef ops.scons) in
+  Proofview.tclDISPATCH [ Tactics.reflexivity; Tactics.apply (EConstr.mkVar h) ]
+
+(** Prove [forall s s', s =₁ s' -> up_subst s =₁ up_subst s']. *)
+let prove_congr_up_subst (sign : signature) (ops : operations)
+    (congr_scons : Names.Constant.t) (congr_srcomp : Names.Constant.t) :
+    unit Proofview.tactic =
+  let open PVMonad in
+  let* _ = intro_n 2 in
+  let* h = intro_fresh "H" in
+  let* _ = Tactics.unfold_constr (Names.GlobRef.ConstRef ops.up_subst) in
+  (* Apply [congr_scons]. *)
+  let* _ = Tactics.apply (mkconst congr_scons) in
+  let* _ = Proofview.tclDISPATCH [ Tactics.reflexivity; ret () ] in
+  (* Apply [congr_srcomp]. *)
+  let* _ = Tactics.apply (mkconst congr_srcomp) in
+  Proofview.tclDISPATCH [ Tactics.assumption; Tactics.reflexivity ]
+
+(** Prove [forall s s' t t', s =₁ s' -> t = t' -> substitute s t =₁ substitute s' t']. *)
+let prove_congr_substitute (sign : signature) (ops : operations)
+    (congr_up_subst : Names.Constant.t) (congr_lemmas : Names.Constant.t list) :
+    unit Proofview.tactic =
+  let open PVMonad in
+  (* Introduce the variables. *)
+  let* s = intro_fresh "s" in
+  let* s' = intro_fresh "s'" in
+  let* t = intro_fresh "t" in
+  let* _ = intro_fresh "t'" in
+  (* Rewrite with the second hypothesis. *)
+  let* hyp_s = intro_fresh "H" in
+  let* _ = intro_rewrite ~dir:false in
+  (* Induction on [t]. *)
+  let* _ = Generalize.revert [ s; s'; hyp_s ] in
+  let intro_patt =
+    CAst.make @@ Tactypes.IntroOrPattern (List.init (1 + sign.n_ctors) @@ fun _ -> [])
   in
-  ret @@ arrows [ hyp_t; hyp_s ] concl
+  let* _ = Induction.induction false None (EConstr.mkVar t) (Some intro_patt) None in
+  (* Process each subgoal. *)
+  dispatch @@ fun i ->
+  let* s = intro_fresh "s" in
+  let* s' = intro_fresh "s'" in
+  let* hyp_s = intro_fresh "H" in
+  let* _ = Tactics.simpl_in_concl in
+  if i = 0
+  then
+    (* Variable constructor. *)
+    auto ()
+  else
+    (* Other constructors. *)
+    let* _ =
+      Tactics.apply @@ EConstr.UnsafeMonomorphic.mkConst @@ List.nth congr_lemmas (i - 1)
+    in
+    auto ~lemmas:[ mkconst congr_up_subst ] ()
+
+(** Prove [forall s1 s1' s2 s2', s1 =₁ s1' -> s2 =₁ s2' -> scomp s1 s2 =₁ scomp s1' s2'].
+*)
+let prove_congr_scomp (sign : signature) (ops : operations)
+    (congr_substitute : Names.Constant.t) : unit Proofview.tactic =
+  let open PVMonad in
+  (* Introduce the variables. *)
+  let* _ = intro_n 4 in
+  let* h1 = intro_fresh "H" in
+  let* h2 = intro_fresh "H" in
+  let* i = intro_fresh "i" in
+  (* Unfold [scomp]. *)
+  let* _ = Tactics.unfold_constr (Names.GlobRef.ConstRef ops.scomp) in
+  (* Apply [congr_substitute]. *)
+  let* _ = Tactics.apply (mkconst congr_substitute) in
+  auto ()
 
 (**************************************************************************************)
 (** *** Putting everything together. *)
@@ -416,7 +567,8 @@ let lemma (name : string) (mk_stmt : EConstr.t m) (tac : unit Proofview.tactic) 
 
 let main () =
   let s =
-    { ctor_names = [| "App"; "Lam" |]
+    { n_ctors = 2
+    ; ctor_names = [| "App"; "Lam" |]
     ; ctor_types = [| [ AT_term; AT_term ]; [ AT_base (mkind string); AT_bind AT_term ] |]
     }
   in
@@ -451,18 +603,34 @@ let main () =
   in
   (* Prove congruence lemmas. *)
   let congr_ctors =
-    List.init (Array.length s.ctor_types) @@ fun i ->
+    List.init s.n_ctors @@ fun i ->
     let name = String.concat "_" [ "congr"; s.ctor_names.(i) ] in
-    lemma name (stmt_congr_ctor s ops i) @@ tac_congr_ctor s ops i
+    lemma name (build_congr_ctor s ops i) @@ prove_congr_ctor s ops i
   in
   let congr_rename =
-    lemma "congr_rename" (stmt_congr_rename s ops) @@ tac_congr_rename s ops congr_ctors
+    lemma "congr_rename" (build_congr_rename s ops)
+    @@ prove_congr_rename s ops congr_ctors
   in
   let _congr_rscomp =
-    lemma "congr_rscomp" (stmt_congr_rscomp s ops) @@ proof_congr_rscomp s ops
+    lemma "congr_rscomp" (build_congr_rscomp s ops) @@ prove_congr_rscomp s ops
   in
-  let _congr_rscomp =
-    lemma "congr_srcomp" (stmt_congr_srcomp s ops)
-    @@ proof_congr_srcomp s ops congr_rename
+  let congr_srcomp =
+    lemma "congr_srcomp" (build_congr_srcomp s ops)
+    @@ prove_congr_srcomp s ops congr_rename
+  in
+  let congr_scons =
+    lemma "congr_scons" (build_congr_scons s ops) @@ prove_congr_scons s ops
+  in
+  let congr_up_subst =
+    lemma "congr_up_subst" (build_congr_up_subst s ops)
+    @@ prove_congr_up_subst s ops congr_scons congr_srcomp
+  in
+  let congr_substitute =
+    lemma "congr_substitute" (build_congr_substitute s ops)
+    @@ prove_congr_substitute s ops congr_up_subst congr_ctors
+  in
+  let _congr_scomp =
+    lemma "congr_scomp" (build_congr_scomp s ops)
+    @@ prove_congr_scomp s ops congr_substitute
   in
   ()

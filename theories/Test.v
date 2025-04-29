@@ -22,3 +22,7 @@ About congr_Lam.
 About congr_rename.
 About congr_rscomp.
 About congr_srcomp.
+About congr_scons.
+About congr_up_subst.
+About congr_substitute.
+About congr_scomp.
