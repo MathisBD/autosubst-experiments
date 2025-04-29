@@ -5,6 +5,11 @@ module PVMonad = struct
   let ( let* ) = Proofview.Monad.( >>= )
 end
 
+let intro_n (n : int) : unit Proofview.tactic =
+  Tactics.intro_patterns false @@ List.init n
+  @@ fun _ ->
+  CAst.make @@ Tactypes.IntroNaming (Namegen.IntroFresh (Names.Id.of_string_soft "x"))
+
 let intro_fresh (x : string) : Names.Id.t Proofview.tactic =
   let open PVMonad in
   Proofview.Goal.enter_one @@ fun g ->
@@ -15,7 +20,7 @@ let intro_fresh (x : string) : Names.Id.t Proofview.tactic =
   let* _ = Tactics.intro_mustbe_force id in
   ret id
 
-let intro_rewrite (dir : bool) : unit Proofview.tactic =
+let intro_rewrite ~(dir : bool) : unit Proofview.tactic =
   let pattern = CAst.make @@ Tactypes.IntroAction (Tactypes.IntroRewrite dir) in
   Tactics.intro_patterns false [ pattern ]
 
@@ -43,3 +48,11 @@ let auto ?(depth : int option) ?(lemmas : EConstr.t list option) () :
     | Some ts -> List.map (fun t env sigma -> (sigma, t)) ts
   in
   Auto.gen_auto depth lemmas (Some [ "core" ])
+
+let rewrite ~(dir : bool) (eq : Names.GlobRef.t) : unit Proofview.tactic =
+  let delayed_eq =
+   fun env sigma ->
+    let sigma, t = Evd.fresh_global env sigma eq in
+    (sigma, (t, Tactypes.NoBindings))
+  in
+  Rewrite.cl_rewrite_clause delayed_eq dir Locus.AllOccurrences None

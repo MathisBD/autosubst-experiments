@@ -7,15 +7,6 @@ open Monad
 (** *** Miscellaneous. *)
 (**************************************************************************************)
 
-(** [mk_kername path label] makes the kernel name with directory path [path] and label
-    [label]. For instance to create the kernel name of [Nat.add] you can use
-    [mk_kername ["Coq"; "Init"; "Nat"] "add"]. *)
-val mk_kername : string list -> string -> Names.KerName.t
-
-(** [fresh_ident base] returns an identifier built from [base], which is guaranteed to be
-    fresh in the current named (local) context. *)
-val fresh_ident : Names.Id.t -> Names.Id.t m
-
 (** [typecheck t] checks that [t] is well-typed and computes the type of [t], using typing
     information to resolve unification variable in [t]. *)
 val typecheck : EConstr.t -> EConstr.types m
@@ -24,8 +15,42 @@ val typecheck : EConstr.t -> EConstr.types m
 val retype : EConstr.t -> EConstr.types m
 
 (**************************************************************************************)
+(** *** Building constants/inductives/constructors. *)
+(**************************************************************************************)
+
+(** [mk_kername path label] makes the kernel name with directory path [path] and label
+    [label]. For instance to create the kernel name of [Nat.add] you can use
+    [mk_kername ["Coq"; "Init"; "Nat"] "add"]. *)
+val mk_kername : string list -> string -> Names.KerName.t
+
+(** [mkconst name] builds the _monomorphic_ constant [name]. *)
+val mkconst : Names.Constant.t -> EConstr.t
+
+(** [mkind cname] builds the _monomorphic_ inductive [name]. *)
+val mkind : Names.Ind.t -> EConstr.t
+
+(** [mkctor cname] builds the _monomorphic_ constructor [name]. *)
+val mkctor : Names.Construct.t -> EConstr.t
+
+(** [fresh_const name] builds the constant [name], instantiated with a fresh universe
+    instance. *)
+val fresh_const : Names.Constant.t -> EConstr.t m
+
+(** [fresh_ind name] builds the inductive [name], instantiated with a fresh universe
+    instance. *)
+val fresh_ind : Names.Ind.t -> EConstr.t m
+
+(** [fresh_ctor name] builds the constructor [name], instantiated with a fresh universe
+    instance. *)
+val fresh_ctor : Names.Construct.t -> EConstr.t m
+
+(**************************************************************************************)
 (** *** Manipulating contexts. *)
 (**************************************************************************************)
+
+(** [fresh_ident base] returns an identifier built from [base], which is guaranteed to be
+    fresh in the current named (local) context. *)
+val fresh_ident : Names.Id.t -> Names.Id.t m
 
 (** [vass x ty] builds the local assumption [x : ty]. *)
 val vass : string -> EConstr.types -> EConstr.rel_declaration
@@ -58,15 +83,6 @@ val arrow : EConstr.types -> EConstr.types -> EConstr.types
 (** [arrows [t1 ; ... , tn] t] constructs the non-dependent product
     [t1 -> ... -> tn -> t]. It takes care of lifting. *)
 val arrows : EConstr.types list -> EConstr.types -> EConstr.types
-
-(** Instantiate an inductive with a fresh universe instance. *)
-val fresh_ind : Names.Ind.t -> EConstr.t m
-
-(** Instantiate a constructor with a fresh universe instance. *)
-val fresh_ctor : Names.Construct.t -> EConstr.t m
-
-(** Instantiate a constant with a fresh universe instance. *)
-val fresh_const : Names.Constant.t -> EConstr.t m
 
 (** [fresh_type] creates a [Type] term with a fresh universe level, and adds the new
     universe level to the evar map. *)
@@ -144,7 +160,3 @@ val declare_theorem :
     It returns the name of the newly created inductive. *)
 val declare_ind :
   string -> EConstr.t -> string list -> (Names.Id.t -> EConstr.t m) list -> Names.Ind.t m
-
-(**************************************************************************************)
-(** *** Destructing terms. *)
-(**************************************************************************************)

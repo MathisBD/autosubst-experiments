@@ -20,3 +20,5 @@ Print scomp.*)
 About congr_App.
 About congr_Lam.
 About congr_rename.
+About congr_rscomp.
+About congr_srcomp.

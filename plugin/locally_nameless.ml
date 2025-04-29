@@ -23,6 +23,31 @@ let retype (t : EConstr.t) : EConstr.types m =
  fun env sigma -> (sigma, Retyping.get_type_of env sigma t)
 
 (**************************************************************************************)
+(** *** Building constants/inductives/constructors. *)
+(**************************************************************************************)
+
+let mkconst (name : Names.Constant.t) : EConstr.t = EConstr.UnsafeMonomorphic.mkConst name
+let mkind (name : Names.Ind.t) : EConstr.t = EConstr.UnsafeMonomorphic.mkInd name
+
+let mkctor (name : Names.Construct.t) : EConstr.t =
+  EConstr.UnsafeMonomorphic.mkConstruct name
+
+let fresh_ind (ind : Names.Ind.t) : EConstr.t m =
+ fun env sigma ->
+  let sigma, (_, uinst) = Evd.fresh_inductive_instance env sigma ind in
+  (sigma, EConstr.mkIndU (ind, EConstr.EInstance.make uinst))
+
+let fresh_ctor (ctor : Names.Construct.t) : EConstr.t m =
+ fun env sigma ->
+  let sigma, (_, uinst) = Evd.fresh_constructor_instance env sigma ctor in
+  (sigma, EConstr.mkConstructU (ctor, EConstr.EInstance.make uinst))
+
+let fresh_const (const : Names.Constant.t) : EConstr.t m =
+ fun env sigma ->
+  let sigma, (_, uinst) = Evd.fresh_constant_instance env sigma const in
+  (sigma, EConstr.mkConstU (const, EConstr.EInstance.make uinst))
+
+(**************************************************************************************)
 (** *** Manipulating contexts. *)
 (**************************************************************************************)
 
@@ -82,21 +107,6 @@ let app f x = EConstr.mkApp (f, [| x |])
 let apps f xs = EConstr.mkApp (f, xs)
 let arrow t1 t2 = EConstr.mkArrowR t1 (EConstr.Vars.lift 1 t2)
 let rec arrows ts t = match ts with [] -> t | t1 :: ts -> arrow t1 (arrows ts t)
-
-let fresh_ind (ind : Names.Ind.t) : EConstr.t m =
- fun env sigma ->
-  let sigma, (_, uinst) = Evd.fresh_inductive_instance env sigma ind in
-  (sigma, EConstr.mkIndU (ind, EConstr.EInstance.make uinst))
-
-let fresh_ctor (ctor : Names.Construct.t) : EConstr.t m =
- fun env sigma ->
-  let sigma, (_, uinst) = Evd.fresh_constructor_instance env sigma ctor in
-  (sigma, EConstr.mkConstructU (ctor, EConstr.EInstance.make uinst))
-
-let fresh_const (const : Names.Constant.t) : EConstr.t m =
- fun env sigma ->
-  let sigma, (_, uinst) = Evd.fresh_constant_instance env sigma const in
-  (sigma, EConstr.mkConstU (const, EConstr.EInstance.make uinst))
 
 let fresh_type : EConstr.t m =
  fun env sigma ->

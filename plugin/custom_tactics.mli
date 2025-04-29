@@ -17,13 +17,18 @@ module PVMonad : sig
   val ( let* ) : 'a Proofview.tactic -> ('a -> 'b Proofview.tactic) -> 'b Proofview.tactic
 end
 
+(** [intro_n n] introduces [n] variables/hypotheses with fresh names, but does not return
+    the generated names to the caller. *)
+val intro_n : int -> unit Proofview.tactic
+
 (** [intro_fresh x] introduces a single variable/hypothesis with a fresh identifier built
     from [x], and returns the identifier of the variable introduced. *)
 val intro_fresh : string -> Names.Id.t Proofview.tactic
 
 (** [intro_rewrite dir] introduces a single equality and rewrites with it. [dir] controls
-    whether to rewrite left-to-right (if [true]) or right-to-left (if [false]). *)
-val intro_rewrite : bool -> unit Proofview.tactic
+    whether to rewrite left-to-right (if [true]) or right-to-left (if [false]). Default is
+    left-to-right. *)
+val intro_rewrite : dir:bool -> unit Proofview.tactic
 
 (** [print_open_goals] prints a debug representation of each open goal. *)
 val print_open_goals : unit Proofview.tactic
@@ -36,3 +41,10 @@ val dispatch : (int -> unit Proofview.tactic) -> unit Proofview.tactic
     - additional lemmas [lemmas].
     - the default hint database [core]. *)
 val auto : ?depth:int -> ?lemmas:EConstr.t list -> unit -> unit Proofview.tactic
+
+(** [rewrite dir eq] rewrites with equality [eq], which can be a global constant or a
+    local variable. [dir] controls whether to rewrite left-to-right (if [true]) or
+    right-to-left (if [false]). Default is left-to-right.
+
+    Under the hood it uses [setoid_rewrite] (instead of [rewrite_strat]). *)
+val rewrite : dir:bool -> Names.GlobRef.t -> unit Proofview.tactic

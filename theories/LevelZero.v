@@ -67,7 +67,7 @@ Qed.
 
 Lemma congr_rscomp {r r' s s'} :
   r =₁ r' -> s =₁ s' -> rscomp r s =₁ rscomp r' s'.
-Proof. intros H1 H2 i. unfold rscomp. rewrite H1, H2. reflexivity. Qed.
+Proof. intros H1 H2 i. unfold rscomp. setoid_rewrite H1. rewrite H2. reflexivity. Qed.
 
 Lemma congr_srcomp {s s' r r'} :
   s =₁ s' -> r =₁ r' -> srcomp s r =₁ srcomp s' r'.
