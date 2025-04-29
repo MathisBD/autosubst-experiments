@@ -412,7 +412,9 @@ let prove_congr_rename (sign : signature) (ops : operations)
   let* _ = intro_rewrite ~dir:false in
   (* Induction on [t]. *)
   let* _ = Generalize.revert [ r; r'; hyp_r ] in
-  let intro_patt = CAst.make @@ Tactypes.IntroOrPattern [ []; []; [] ] in
+  let intro_patt =
+    CAst.make @@ Tactypes.IntroOrPattern (List.init (1 + sign.n_ctors) @@ fun _ -> [])
+  in
   let* _ = Induction.induction false None (EConstr.mkVar t) (Some intro_patt) None in
   (* Process each subgoal. *)
   dispatch @@ fun i ->
@@ -559,9 +561,9 @@ let lemma (name : string) (mk_stmt : EConstr.t m) (tac : unit Proofview.tactic) 
     begin
       let* stmt = mk_stmt in
       let* _ = typecheck stmt in
-      let* env = get_env in
+      (*let* env = get_env in
       let* sigma = get_sigma in
-      Log.printf "\nPROVING LEMMA:\n%s" (Log.show_econstr env sigma stmt);
+      Log.printf "\nPROVING LEMMA:\n%s" (Log.show_econstr env sigma stmt);*)
       declare_theorem Decls.Lemma name stmt tac
     end
 

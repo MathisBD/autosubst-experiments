@@ -3,7 +3,7 @@ Declare ML Module "autosubst-experiments.plugin".
 From Coq Require Import String.
 
 
-Test.
+Time Test.
 
 (*Print term.
 Print rename.
