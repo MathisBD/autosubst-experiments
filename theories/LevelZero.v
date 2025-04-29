@@ -130,6 +130,25 @@ esize (O.E_abase _ _) := 0 ;
 esize (O.E_aterm t) := S (esize t) ;
 esize (O.E_abind a) := S (esize a).
 
+Lemma inv_Kal_nil (al : O.expr (Kal [])) : al = O.E_al_nil.
+Proof. now depelim al. Qed.
+
+Lemma inv_Kal_cons {ty tys} (al : O.expr (Kal (ty :: tys))) : 
+  exists a al', al = O.E_al_cons a al'.
+Proof. depelim al. eauto. Qed.
+
+Lemma inv_Ka_term (a : O.expr (Ka AT_term)) : 
+  exists t, a = O.E_aterm t.
+Proof. depelim a. eauto. Qed.
+
+Lemma inv_Ka_base {b} (a : O.expr (Ka (AT_base b))) :
+  exists x, a = O.E_abase b x.
+Proof. depelim a. eauto. Qed.
+
+Lemma inv_Ka_bind {ty} (a : O.expr (Ka (AT_bind ty))) :
+  exists a', a = O.E_abind a'.
+Proof. depelim a. eauto. Qed.
+
 Section TermInd.
   Context (P : O.expr Kt -> Prop).
   Context (H1 : forall i, P (O.E_var i)).
@@ -141,12 +160,21 @@ Section TermInd.
   Lemma term_ind' : forall t, P t.
   Proof.  
   apply PeanoNat.Nat.measure_induction with (f := esize).
-  intros t IH. depelim t.
-  - now apply H1.
-  - depelim c ; simpl in *.
-    + depelim t. depelim t1. depelim t2. depelim t2_1. depelim t2_2.
+  intros t IH. dependent destruction t.
+  - apply H1.
+  - destruct c ; simpl in *.
+    + destruct (inv_Kal_cons t) as (t1 & t2 & ->). 
+      destruct (inv_Kal_cons t2) as (t3 & t4 & ->).
+      rewrite (inv_Kal_nil t4).
+      destruct (inv_Ka_term t1) as (t1' & ->).
+      destruct (inv_Ka_term t3) as (t3' & ->).
       apply H2 ; apply IH ; repeat (simp esize ; simpl) ; lia.
-    + depelim t. depelim t1. depelim t2. depelim t2_1. depelim t2_2. depelim t2_1.
+    + destruct (inv_Kal_cons t) as (t1 & t2 & ->). 
+      destruct (inv_Kal_cons t2) as (t3 & t4 & ->).
+      rewrite (inv_Kal_nil t4).
+      destruct (inv_Ka_base t1) as (x1 & ->).
+      destruct (inv_Ka_bind t3) as (t3' & ->).
+      destruct (inv_Ka_term t3') as (t3'' & ->). 
       apply H3. apply IH. repeat (simp esize ; simpl). lia.
   Qed.
 End TermInd. 
