@@ -118,13 +118,11 @@ val let_in :
     [fix "add" 1 '(nat -> nat -> nat) (fun add -> ...)]. *)
 val fix : string -> int -> EConstr.types -> (Names.Id.t -> EConstr.t m) -> EConstr.t m
 
-(** [case scrutinee ?return branches] build a case expression on [scrutinee]. It assumes
-    the type of [scrutinee] is and inductive without any parameters or indices.
-    - [return] is the case return type. If not provided, an evar will be used instead.
+(** [case scrutinee branches] build a case expression on [scrutinee].
+    - The type of [scrutinee] must be an inductive without any parameters or indices.
     - [branches] is a function which builds the [i]-th branch (starting at [0]) of the
       case expression, with the arguments of the constructor in context. *)
-val case :
-  EConstr.t -> ?return:EConstr.t -> (int -> Names.Id.t list -> EConstr.t m) -> EConstr.t m
+val case : EConstr.t -> (int -> Names.Id.t list -> EConstr.t m) -> EConstr.t m
 
 (**************************************************************************************)
 (** *** Declaring definitions/inductives. *)

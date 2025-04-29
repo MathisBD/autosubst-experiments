@@ -176,8 +176,8 @@ let rec lambda_vars (vars : Names.Id.t list) (body : EConstr.t) : EConstr.t m =
            (EConstr.of_constr @@ Context.Named.Declaration.get_type v_decl)
            body
 
-let case (scrutinee : EConstr.t) ?(return : EConstr.t option)
-    (branches : int -> Names.Id.t list -> EConstr.t m) : EConstr.t m =
+let case (scrutinee : EConstr.t) (branches : int -> Names.Id.t list -> EConstr.t m) :
+    EConstr.t m =
   let* env = get_env in
   (* Get the inductive we are matching over. *)
   let* ty = retype scrutinee in
@@ -186,11 +186,8 @@ let case (scrutinee : EConstr.t) ?(return : EConstr.t option)
   let ind_fam = Inductiveops.make_ind_family ((ind, uinst), []) in
   (* Get the return type. *)
   let* return =
-    match return with
-    | Some return -> ret return
-    | None ->
-        let* ind' = fresh_ind ind in
-        lambda "_" ind' @@ fun _ -> fresh_evar None
+    let* ind' = fresh_ind ind in
+    lambda "_" ind' @@ fun _ -> fresh_evar None
   in
   (* Build the branches. *)
   let ctor_summaries = Inductiveops.get_constructors env ind_fam in
