@@ -1,4 +1,5 @@
 From Prototype Require Import Prelude Sig.
+From Prototype Require Constants LevelOne LevelTwo LevelTwoIrred LevelTwoSimp.
 Declare ML Module "autosubst-experiments.plugin".
 From Coq Require Import String.
 
@@ -31,3 +32,5 @@ Print base.
 Print eval_base.
 Print ctor.
 Print ctor_type.
+Print S.t.
+About T.

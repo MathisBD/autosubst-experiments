@@ -121,14 +121,16 @@ Module O := T.O.
 
 (** Size of a level one expression. This is needed to prove a custom 
     induction principle for level one terms. *)
-Equations esize {k} : O.expr k -> nat :=
-esize (O.E_var _) := 0 ;
-esize (O.E_ctor c al) := S (esize al) ;
-esize O.E_al_nil := 0 ;
-esize (O.E_al_cons a al) := S (esize a + esize al) ;
-esize (O.E_abase _ _) := 0 ;
-esize (O.E_aterm t) := S (esize t) ;
-esize (O.E_abind a) := S (esize a).
+Fixpoint esize {k} (t : O.expr k) : nat :=
+  match t with 
+  | O.E_var _ => 0
+  | O.E_ctor c al => S (esize al)
+  | O.E_al_nil => 0
+  | O.E_al_cons a al => S (esize a + esize al)
+  | O.E_abase _ _ => 0
+  | O.E_aterm t => S (esize t)
+  | O.E_abind a => S (esize a)
+  end.
 
 Lemma inv_Kal_nil (al : O.expr (Kal [])) : al = O.E_al_nil.
 Proof. now depelim al. Qed.
@@ -168,14 +170,14 @@ Section TermInd.
       rewrite (inv_Kal_nil t4).
       destruct (inv_Ka_term t1) as (t1' & ->).
       destruct (inv_Ka_term t3) as (t3' & ->).
-      apply H2 ; apply IH ; repeat (simp esize ; simpl) ; lia.
+      apply H2 ; apply IH ; simpl ; lia.
     + destruct (inv_Kal_cons t) as (t1 & t2 & ->). 
       destruct (inv_Kal_cons t2) as (t3 & t4 & ->).
       rewrite (inv_Kal_nil t4).
       destruct (inv_Ka_base t1) as (x1 & ->).
       destruct (inv_Ka_bind t3) as (t3' & ->).
       destruct (inv_Ka_term t3') as (t3'' & ->). 
-      apply H3. apply IH. repeat (simp esize ; simpl). lia.
+      apply H3 ; apply IH ; simpl ; lia.
   Qed.
 End TermInd. 
 
