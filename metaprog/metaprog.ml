@@ -1,3 +1,3 @@
 include Monad
-include Locally_nameless
+include Term_utils
 include Custom_tactics
