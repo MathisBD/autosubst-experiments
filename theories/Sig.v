@@ -33,7 +33,10 @@ Record signature :=
 ; (** The number and types of the arguments of each constructor. *)
   ctor_type : ctor -> list (@arg_ty base) }.
 
+(** We package a signature in a module. This way we can 
+    use parametric modules (i.e. ML functors) to make LevelOne 
+    and LevelTwo depend on an arbitrary signature. *)
 Module Type Sig.
   Parameter t : signature.
 End Sig.
-    
+  

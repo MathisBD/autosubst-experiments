@@ -1,0 +1,6 @@
+(library
+ (name metaprog)
+ (public_name autosubst-experiments.metaprog)
+ (flags
+  (:standard -warn-error +A -w -27-32-69 -rectypes))
+ (libraries coq-core.vernac coq-core.tactics))

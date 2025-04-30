@@ -117,6 +117,66 @@ End S.
 Module T := LevelTwoSimp.Make (S).
 Module O := T.O.
 
+(** Reification/evaluation functions. *)
+
+Fixpoint reify (t : term) : O.expr Kt :=
+  match t with
+  | Var i => O.E_var i
+  | App t1 t2 =>
+    O.E_ctor CApp 
+      (O.E_al_cons (O.E_aterm (reify t1))
+      (O.E_al_cons (O.E_aterm (reify t2))
+       O.E_al_nil))
+  | Lam str t =>
+    O.E_ctor CLam 
+      (O.E_al_cons (O.E_abase BString str)
+      (O.E_al_cons (O.E_abind (O.E_aterm (reify t)))
+       O.E_al_nil))
+  end.
+
+Definition sreify (s : subst) : O.subst :=
+  fun i => reify (s i).
+  
+Fixpoint eval_arg (ty : arg_ty) : Type :=
+  match ty with 
+  | AT_base b => eval_base b 
+  | AT_term => term 
+  | AT_bind ty => eval_arg ty
+  end.
+
+Fixpoint eval_args (tys : list arg_ty) : Type :=
+  match tys with 
+  | [] => unit
+  | ty :: tys => eval_arg ty * eval_args tys
+  end. 
+
+Definition eval_kind (k : kind) : Type :=
+  match k with 
+  | Kt => term
+  | Ka ty => eval_arg ty
+  | Kal tys => eval_args tys
+  end.
+
+Definition eval_ctor (c : ctor) : eval_args (ctor_type c) -> term :=
+  match c return eval_args (ctor_type c) -> term with 
+  | CApp => fun args => let '(t1, (t2, _)) := args in App t1 t2 
+  | CLam => fun args => let '(str, (t, _)) := args in Lam str t
+  end.
+  
+Fixpoint eval {k} (t : O.expr k) : eval_kind k :=
+  match t in O.expr k0 return eval_kind k0 with 
+  | O.E_var i => Var i 
+  | O.E_ctor c al => eval_ctor c (eval al)
+  | O.E_al_nil => tt
+  | O.E_al_cons a al => (eval a, eval al)
+  | O.E_abase b x => x 
+  | O.E_aterm t => eval t 
+  | O.E_abind a => eval a
+  end. 
+
+Definition seval (s : O.subst) : subst :=
+  fun i => eval (s i).
+
 (** Custom induction principle on level one terms. *)
 
 (** Size of a level one expression. This is needed to prove a custom 
@@ -180,66 +240,6 @@ Section TermInd.
       apply H3 ; apply IH ; simpl ; lia.
   Qed.
 End TermInd. 
-
-(** Reification/evaluation functions. *)
-
-Fixpoint reify (t : term) : O.expr Kt :=
-  match t with
-  | Var i => O.E_var i
-  | App t1 t2 =>
-    O.E_ctor CApp 
-      (O.E_al_cons (O.E_aterm (reify t1))
-      (O.E_al_cons (O.E_aterm (reify t2))
-       O.E_al_nil))
-  | Lam str t =>
-    O.E_ctor CLam 
-      (O.E_al_cons (O.E_abase BString str)
-      (O.E_al_cons (O.E_abind (O.E_aterm (reify t)))
-       O.E_al_nil))
-  end.
-
-Definition sreify (s : subst) : O.subst :=
-  fun i => reify (s i).
-  
-Fixpoint eval_arg (ty : arg_ty) : Type :=
-  match ty with 
-  | AT_base b => eval_base b 
-  | AT_term => term 
-  | AT_bind ty => eval_arg ty
-  end.
-
-Fixpoint eval_args (tys : list arg_ty) : Type :=
-  match tys with 
-  | [] => unit
-  | ty :: tys => eval_arg ty * eval_args tys
-  end. 
-
-Definition eval_kind (k : kind) : Type :=
-  match k with 
-  | Kt => term
-  | Ka ty => eval_arg ty
-  | Kal tys => eval_args tys
-  end.
-
-Definition eval_ctor (c : ctor) : eval_args (ctor_type c) -> term :=
-  match c return eval_args (ctor_type c) -> term with 
-  | CApp => fun '(t1, (t2, _)) => App t1 t2 
-  | CLam => fun '(str, (t, _)) => Lam str t
-  end.
-
-Fixpoint eval {k} (t : O.expr k) : eval_kind k :=
-  match t in O.expr k0 return eval_kind k0 with 
-  | O.E_var i => Var i 
-  | O.E_ctor c al => eval_ctor c (eval al)
-  | O.E_al_nil => tt
-  | O.E_al_cons a al => (eval a, eval al)
-  | O.E_abase b x => x 
-  | O.E_aterm t => eval t 
-  | O.E_abind a => eval a
-  end. 
-
-Definition seval (s : O.subst) : subst :=
-  fun i => eval (s i).
 
 (** Push [eval] inside terms. *)
 

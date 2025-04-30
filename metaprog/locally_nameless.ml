@@ -4,6 +4,11 @@ open Monad
 (** *** Miscellaneous. *)
 (**************************************************************************************)
 
+let mk_qualid (dir : string list) (label : string) : Libnames.qualid =
+  let dir = Names.DirPath.make @@ List.rev_map Names.Id.of_string_soft dir in
+  let label = Names.Id.of_string_soft label in
+  Libnames.make_qualid dir label
+
 let mk_kername (dir : string list) (label : string) : Names.KerName.t =
   let dir =
     Names.ModPath.MPfile (Names.DirPath.make @@ List.rev_map Names.Id.of_string_soft dir)
@@ -79,12 +84,12 @@ let with_local_decl (decl : EConstr.rel_declaration) (k : Names.Id.t -> 'a m) : 
     | LocalAssum (_, ty) ->
         Context.Named.Declaration.LocalAssum
           ( { binder_name = id; binder_relevance = Sorts.Relevant }
-          , EConstr.to_constr sigma ty )
+          , EConstr.to_constr ~abort_on_undefined_evars:false sigma ty )
     | LocalDef (_, def, ty) ->
         Context.Named.Declaration.LocalDef
           ( { binder_name = id; binder_relevance = Sorts.Relevant }
-          , EConstr.to_constr sigma def
-          , EConstr.to_constr sigma ty )
+          , EConstr.to_constr ~abort_on_undefined_evars:false sigma def
+          , EConstr.to_constr ~abort_on_undefined_evars:false sigma ty )
   in
   with_env' (Environ.push_named named_decl) @@ k id
 
@@ -162,6 +167,7 @@ let fix (name : string) (rec_arg_idx : int) (ty : EConstr.t)
          , [| ty |]
          , [| EConstr.Vars.subst_var sigma id body |] ) )
 
+(** [lambda_vars vars body] builds the lambda abstraction [fun vars => body]. *)
 let rec lambda_vars (vars : Names.Id.t list) (body : EConstr.t) : EConstr.t m =
   match vars with
   | [] -> ret body
@@ -176,28 +182,60 @@ let rec lambda_vars (vars : Names.Id.t list) (body : EConstr.t) : EConstr.t m =
            (EConstr.of_constr @@ Context.Named.Declaration.get_type v_decl)
            body
 
-let case (scrutinee : EConstr.t) (branches : int -> Names.Id.t list -> EConstr.t m) :
+(** Smashes [ctx] (i.e. inlines all letins in [ctx]). *)
+let lambda_ctx (ctx : EConstr.rel_context) (mk_body : Names.Id.t list -> EConstr.t m) :
     EConstr.t m =
-  let* env = get_env in
+  with_local_ctx (EConstr.Vars.smash_rel_context ctx) @@ fun vars ->
+  let* body = mk_body vars in
+  lambda_vars vars body
+
+(** [split_list n xs] splits [xs] into its [n] first elements, and the rest. Does _not_
+    crash if [xs] has less than [n] elements. *)
+let split_list (n : int) (xs : 'a list) : 'a list * 'a list =
+  let rec loop n acc xs =
+    if n <= 0
+    then (List.rev acc, xs)
+    else match xs with [] -> (List.rev acc, []) | x :: xs -> loop (n - 1) (x :: acc) xs
+  in
+  loop n [] xs
+
+(** [dest_ind ty] destructs [ty] into an inductive applied to a (possibly empty) list of
+    parameters and a (possibly empty) list of indices. *)
+let dest_ind (ty : EConstr.t) :
+    (Names.Ind.t * EConstr.EInstance.t * EConstr.t list * EConstr.t list) m =
+ fun env sigma ->
+  (* Weak-head reduce [ty] before decomposing it. 
+     Maybe we don't need all reduction rules here, perhaps a subset is still enough 
+     (and would be more efficient). *)
+  let ind, args = Reductionops.whd_all_stack env sigma ty in
+  let ind, uinst = EConstr.destInd sigma ind in
+  let params, indices = split_list (Inductiveops.inductive_nparams env ind) args in
+  (sigma, (ind, uinst, params, indices))
+
+let case (scrutinee : EConstr.t)
+    ?(return : (Names.Id.t list -> Names.Id.t -> EConstr.t m) option)
+    (branches : int -> Names.Id.t list -> EConstr.t m) : EConstr.t m =
   (* Get the inductive we are matching over. *)
   let* ty = retype scrutinee in
-  let* sigma = get_sigma in
-  let ind, uinst = EConstr.destInd sigma ty in
-  let ind_fam = Inductiveops.make_ind_family ((ind, uinst), []) in
+  let* ind, uinst, params, indices = dest_ind ty in
+  let ind_fam = Inductiveops.make_ind_family ((ind, uinst), params) in
   (* Get the return type. *)
   let* return =
+    let* env = get_env in
+    let indices_ctx = Inductiveops.get_arity env ind_fam in
     let* ind' = fresh_ind ind in
-    lambda "_" ind' @@ fun _ -> fresh_evar None
+    lambda_ctx indices_ctx @@ fun indices ->
+    let x_ty = apps ind' @@ Array.of_list @@ params @ List.map EConstr.mkVar indices in
+    lambda "x" x_ty @@ fun x ->
+    match return with Some return -> return indices x | None -> fresh_evar None
   in
   (* Build the branches. *)
+  let* env = get_env in
   let ctor_summaries = Inductiveops.get_constructors env ind_fam in
   let* branch_list =
     List.monad_mapi
       begin
-        fun i ctor ->
-          with_local_ctx ctor.Inductiveops.cs_args @@ fun args ->
-          let* body = branches i args in
-          lambda_vars args body
+        fun i ctor -> lambda_ctx ctor.Inductiveops.cs_args @@ branches i
       end
     @@ Array.to_list ctor_summaries
   in
@@ -231,7 +269,7 @@ let declare_def (kind : Decls.definition_object_kind) (name : string)
   (* Check the returned global reference is indeed a constant name. *)
   match ref with
   | Names.GlobRef.ConstRef cname -> ret cname
-  | _ -> Log.error "declare_def: expected a [ConstRef]."
+  | _ -> failwith "declare_def: expected a [ConstRef]."
 
 let declare_theorem (kind : Decls.theorem_kind) (name : string) (stmt : EConstr.t)
     (tac : unit Proofview.tactic) : Names.Constant.t m =
@@ -249,7 +287,7 @@ let declare_theorem (kind : Decls.theorem_kind) (name : string) (stmt : EConstr.
   (* Get the name of the declared lemma. *)
   match refs with
   | [ Names.GlobRef.ConstRef cname ] -> ret cname
-  | _ -> Log.error "While defining lemma %s: expected a single constant name" name
+  | _ -> failwith "declare_theorem: expected a single constant [ConstRef]."
 
 let declare_ind (name : string) (arity : EConstr.t) (ctor_names : string list)
     (ctor_types : (Names.Id.t -> EConstr.t m) list) : Names.Ind.t m =

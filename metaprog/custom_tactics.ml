@@ -28,9 +28,10 @@ let print_open_goals : unit Proofview.tactic =
   Proofview.Goal.enter @@ fun goal ->
   let env = Proofview.Goal.env goal in
   let sigma = Proofview.Goal.sigma goal in
-  (*let hyps = Proofview.Goal.hyps goal in*)
   let concl = Proofview.Goal.concl goal in
-  Log.printf "UNSOLVED GOAL:\n%s |- %s"
+  Format.ksprintf
+    (fun res -> Feedback.msg_notice (Pp.str res))
+    "open goal: \n%s |- %s"
     (Pp.string_of_ppcmds @@ Printer.pr_named_context_of env sigma)
     (Pp.string_of_ppcmds @@ Printer.pr_econstr_env env sigma concl);
   Proofview.tclUNIT ()

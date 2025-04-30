@@ -3,7 +3,6 @@ From Prototype Require Constants LevelOne LevelTwo LevelTwoIrred LevelTwoSimp.
 Declare ML Module "autosubst-experiments.plugin".
 From Coq Require Import String.
 
-
 Test.
 
 (*Print term.
@@ -28,9 +27,17 @@ About congr_up_subst.
 About congr_substitute.
 About congr_scomp.*)
 
-Print base.
+(*Print base.
 Print eval_base.
 Print ctor.
 Print ctor_type.
 Print S.t.
-About T.
+About T.*)
+
+(*Print reify.
+Print sreify.
+Print eval_arg.
+Print eval_args.
+Print eval_kind.
+Print eval_ctor.*)
+Print eval.

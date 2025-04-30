@@ -8,15 +8,21 @@ open Monad
 (**************************************************************************************)
 
 (** [typecheck t] checks that [t] is well-typed and computes the type of [t], using typing
-    information to resolve unification variable in [t]. *)
+    information to resolve evars in [t]. *)
 val typecheck : EConstr.t -> EConstr.types m
 
-(** [retype t] computes the type of [t], assuming [t] is already well-typed. *)
+(** [retype t] computes the type of [t], assuming [t] is already well-typed. [retype] is
+    much more efficient than [typecheck]. *)
 val retype : EConstr.t -> EConstr.types m
 
 (**************************************************************************************)
 (** *** Building constants/inductives/constructors. *)
 (**************************************************************************************)
+
+(** [mk_qualid path label] makes the qualified identifier with directory path [path] and
+    label [label]. For instance to create the qualid of [Nat.add] you can use
+    [mk_qualid ["Coq"; "Init"; "Nat"] "add"]. *)
+val mk_qualid : string list -> string -> Libnames.qualid
 
 (** [mk_kername path label] makes the kernel name with directory path [path] and label
     [label]. For instance to create the kernel name of [Nat.add] you can use
@@ -118,15 +124,26 @@ val let_in :
     [fix "add" 1 '(nat -> nat -> nat) (fun add -> ...)]. *)
 val fix : string -> int -> EConstr.types -> (Names.Id.t -> EConstr.t m) -> EConstr.t m
 
-(** [case scrutinee branches] build a case expression on [scrutinee].
-    - The type of [scrutinee] must be an inductive without any parameters or indices.
+(** [case scrutinee ?return branches] build a case expression on [scrutinee].
+    - The type of [scrutinee] must be an inductive applied to all of its parameters and
+      indices.
+    - [return] (if provided) gives the return type of the case expression, which can
+      depend on the indices of the inductive and on the scrutinee.
     - [branches] is a function which builds the [i]-th branch (starting at [0]) of the
-      case expression, with the arguments of the constructor in context. *)
-val case : EConstr.t -> (int -> Names.Id.t list -> EConstr.t m) -> EConstr.t m
+      case expression, wich can depend on the arguments of the [i]-th constructor. *)
+val case :
+     EConstr.t
+  -> ?return:(Names.Id.t list -> Names.Id.t -> EConstr.t m)
+  -> (int -> Names.Id.t list -> EConstr.t m)
+  -> EConstr.t m
 
 (**************************************************************************************)
 (** *** Declaring definitions/inductives. *)
 (**************************************************************************************)
+
+(** The functions below modify the global environment, but the new global entry is not
+    visible until you reset the state of the monad, e.g. using [Global.env ()] or
+    [monad_run]. *)
 
 (** [declare_def kind name ?ty body] adds a new definition [name : ty := body] to the
     global environment. Does not handle universe polymorphism.
