@@ -20,6 +20,10 @@ let get_sigma : Evd.evar_map m = fun env sigma -> (sigma, sigma)
 let set_sigma sigma : unit m = fun env _ -> (sigma, ())
 let modify_sigma f : unit m = fun env sigma -> (f sigma, ())
 
+let monad_ignore (mx : 'a m) : unit m =
+  let* _ = mx in
+  ret ()
+
 module List = struct
   include Stdlib.List
 

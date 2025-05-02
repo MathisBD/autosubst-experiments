@@ -125,13 +125,88 @@ let prove_seval_sreify (re : ops_reify_eval) (eval_reify : Names.Constant.t) :
   let* _ = Tactics.unfold_constr (Names.GlobRef.ConstRef re.sreify) in
   Tactics.apply (mkconst eval_reify)
 
+let lia : unit Proofview.tactic =
+  let open Ltac_plugin in
+  let kname = mk_kername [ "Coq"; "micromega"; "Lia" ] "lia" in
+  Tacinterp.eval_tactic (Tacenv.interp_ltac kname)
+
+(** Helper function for [prove_ind] which takes care of the [i]-th non-variable
+    constructor (starting at [0]). *)
+let prove_ind_ctor (s : signature) (ops1 : ops_one) (ctor_hyps : Names.Id.t list)
+    (idx : int) : unit Proofview.tactic =
+  let open EConstr in
+  let open PVMonad in
+  (* Invert an argument. *)
+  let rec inv_arg (ty : arg_ty) (arg : Names.Id.t) : unit Proofview.tactic =
+    let* _ = pattern (mkVar arg) in
+    match ty with
+    | AT_base _ ->
+        let* _ = Tactics.apply (mkconst ops1.inv_Ka_base) in
+        let* _ = intro_fresh "b" in
+        ret ()
+    | AT_term ->
+        let* _ = Tactics.apply (mkconst ops1.inv_Ka_term) in
+        let* _ = intro_fresh "t" in
+        ret ()
+    | AT_bind ty' ->
+        let* _ = Tactics.apply (mkconst ops1.inv_Ka_bind) in
+        let* arg' = intro_fresh "a" in
+        inv_arg ty' arg'
+  in
+  (* Invert an argument list. *)
+  let rec inv_args (tys : arg_ty list) (args : Names.Id.t) : unit Proofview.tactic =
+    let* _ = pattern (mkVar args) in
+    match tys with
+    | [] -> Tactics.apply (mkconst ops1.inv_Kal_nil)
+    | ty :: tys ->
+        let* _ = Tactics.apply (mkconst ops1.inv_Kal_cons) in
+        let* arg = intro_fresh "a" in
+        let* args = intro_fresh "al" in
+        inv_arg ty arg >> inv_args tys args
+  in
+  (* Invert everything (_before_ introducing [IH]). *)
+  let* al = intro_fresh "al" in
+  let* _ = inv_args s.ctor_types.(idx) al in
+  (* Apply the induction hypothesis and finish with [lia]. *)
+  let* ind_hyp = intro_fresh "IH" in
+  let* _ = Tactics.apply (mkVar @@ List.nth ctor_hyps idx) in
+  let* _ = Tactics.apply (mkVar ind_hyp) in
+  let* _ = Tactics.simpl_in_concl in
+  (*print_open_goals >>*) lia
+
 (** Prove the custom induction principle on level one terms. *)
 let prove_ind (s : signature) (ops1 : ops_one) : unit Proofview.tactic =
+  let open EConstr in
   let open PVMonad in
+  (* Introduce the hypotheses. *)
   let* pred = intro_fresh "P" in
   let* var_hyp = intro_fresh "H" in
   let* ctor_hyps = repeat_n s.n_ctors (intro_fresh "H") in
-  print_open_goals
+  (* Apply the well founded induction principle. *)
+  let term1 = app (mkind ops1.expr) @@ app (Lazy.force Consts.k_t) @@ mkind ops1.base in
+  let esize =
+    app (mkconst ops1.esize) @@ app (Lazy.force Consts.k_t) @@ mkind ops1.base
+  in
+  let* _ =
+    Tactics.apply
+    @@ apps (Lazy.force Consts.measure_induction) [| term1; esize; mkVar pred |]
+  in
+  (* Invert [t]. *)
+  let* t = intro_fresh "t" in
+  let* _ = pattern (mkVar t) >> Tactics.apply (mkconst ops1.inv_Kt) in
+  Proofview.tclDISPATCH
+    [ (* Solve the [E_var] case. *)
+      begin
+        intro_n 2 >> Tactics.apply (mkVar var_hyp)
+      end
+    ; (* Start the [E_ctor] case. *)
+      begin
+        let* c = intro_fresh "c" in
+        let* _ = Induction.destruct false None (mkVar c) None None in
+        dispatch @@ prove_ind_ctor s ops1 ctor_hyps
+      end
+    ]
+  >> print_open_goals
 
 (**************************************************************************************)
 (** *** Put everything together. *)

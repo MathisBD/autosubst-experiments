@@ -179,37 +179,6 @@ Definition seval (s : O.subst) : subst :=
 
 (** Custom induction principle on level one terms. *)
 
-(** Size of a level one expression. This is needed to prove a custom 
-    induction principle for level one terms. *)
-Fixpoint esize {k} (t : O.expr k) : nat :=
-  match t with 
-  | O.E_var _ => 0
-  | O.E_ctor c al => S (esize al)
-  | O.E_al_nil => 0
-  | O.E_al_cons a al => S (esize a + esize al)
-  | O.E_abase _ _ => 0
-  | O.E_aterm t => S (esize t)
-  | O.E_abind a => S (esize a)
-  end.
-
-Lemma inv_Kal_nil (al : O.expr (Kal [])) : al = O.E_al_nil.
-Proof. now depelim al. Qed.
-
-Lemma inv_Kal_cons {ty tys} (al : O.expr (Kal (ty :: tys))) : 
-  exists a al', al = O.E_al_cons a al'.
-Proof. depelim al. eauto. Qed.
-
-Lemma inv_Ka_term (a : O.expr (Ka AT_term)) : 
-  exists t, a = O.E_aterm t.
-Proof. depelim a. eauto. Qed.
-
-Lemma inv_Ka_base {b} (a : O.expr (Ka (AT_base b))) :
-  exists x, a = O.E_abase b x.
-Proof. depelim a. eauto. Qed.
-
-Lemma inv_Ka_bind {ty} (a : O.expr (Ka (AT_bind ty))) :
-  exists a', a = O.E_abind a'.
-Proof. depelim a. eauto. Qed.
 
 Section TermInd.
   Context (P : O.expr Kt -> Prop).
@@ -220,24 +189,24 @@ Section TermInd.
       P (O.E_ctor CLam (O.E_al_cons (O.E_abase BString str) (O.E_al_cons (O.E_abind (O.E_aterm t)) O.E_al_nil)))).
 
   Lemma term_ind' : forall t, P t.
-  Proof.  
-  apply PeanoNat.Nat.measure_induction with (f := esize).
-  intros t IH. dependent destruction t.
-  - apply H1.
-  - destruct c ; simpl in *.
-    + destruct (inv_Kal_cons t) as (t1 & t2 & ->). 
-      destruct (inv_Kal_cons t2) as (t3 & t4 & ->).
-      rewrite (inv_Kal_nil t4).
-      destruct (inv_Ka_term t1) as (t1' & ->).
-      destruct (inv_Ka_term t3) as (t3' & ->).
-      apply H2 ; apply IH ; simpl ; lia.
-    + destruct (inv_Kal_cons t) as (t1 & t2 & ->). 
-      destruct (inv_Kal_cons t2) as (t3 & t4 & ->).
-      rewrite (inv_Kal_nil t4).
-      destruct (inv_Ka_base t1) as (x1 & ->).
-      destruct (inv_Ka_bind t3) as (t3' & ->).
-      destruct (inv_Ka_term t3') as (t3'' & ->). 
-      apply H3 ; apply IH ; simpl ; lia.
+  Proof.
+  apply (@PeanoNat.Nat.measure_induction (O.expr Kt) (@O.esize Kt) P).
+  intros t. pattern t ; apply O.inv_Kt. 
+  - intros i IH. apply H1.
+  - intros c al. destruct c ; simpl.
+    + pattern al ; apply O.inv_Kal_cons ; intros a al0. 
+      pattern a ; apply O.inv_Ka_term ; intros t0.
+      pattern al0 ; apply O.inv_Kal_cons ; intros a0 al1.
+      pattern a0 ; apply O.inv_Ka_term ; intros t1.
+      pattern al1 ; apply O.inv_Kal_nil.
+      intros IH. apply H2 ; apply IH ; simpl ; lia.
+    + pattern al ; apply O.inv_Kal_cons ; intros a al0. 
+      pattern a ; apply O.inv_Ka_base ; intros b.
+      pattern al0 ; apply O.inv_Kal_cons ; intros a0 al1.
+      pattern a0 ; apply O.inv_Ka_bind ; intros a1.
+      pattern a1 ; apply O.inv_Ka_term ; intros t1.
+      pattern al1 ; apply O.inv_Kal_nil.
+      intros IH. apply H3 ; apply IH ; simpl ; lia.
   Qed.
 End TermInd. 
 

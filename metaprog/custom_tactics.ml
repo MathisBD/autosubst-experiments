@@ -66,3 +66,6 @@ let rec repeat_n (n : int) (tac : 'a Proofview.tactic) : 'a list Proofview.tacti
     let* x = tac in
     let* xs = repeat_n (n - 1) tac in
     ret (x :: xs)
+
+let pattern (t : EConstr.t) : unit Proofview.tactic =
+  Tactics.pattern_option [ (Locus.AllOccurrences, t) ] None

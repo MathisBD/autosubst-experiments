@@ -24,6 +24,8 @@ Register string as autosubst.string.type.
 Register eq as autosubst.eq.type.
 Register point_eq as autosubst.point_eq.type.
 
+Register PeanoNat.Nat.measure_induction as autosubst.measure_induction.
+
 (** *** Renamings. *)
 
 Register ren as autosubst.ren.type.

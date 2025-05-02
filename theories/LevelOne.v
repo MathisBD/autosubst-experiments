@@ -43,6 +43,50 @@ where "'term'" := (expr Kt)
 
 Derive Signature NoConfusion NoConfusionHom for expr.
 
+(** Size of an expression. This is used in the plugin to prove a custom 
+    induction principle for level one terms instantiated to a specific
+    signature. We deliberately use a fixpoint here so that [simpl] works. *)
+Fixpoint esize {k} (t : expr k) : nat :=
+  match t with 
+  | E_var _ => 0
+  | E_ctor c al => S (esize al)
+  | E_al_nil => 0
+  | E_al_cons a al => S (esize a + esize al)
+  | E_abase _ _ => 0
+  | E_aterm t => S (esize t)
+  | E_abind a => S (esize a)
+  end.
+
+(** In order to avoid using [depelim] in the plugin (which would require that
+    the plugin depends on Equations), we prove simple inversion lemmas
+    which we then use in the plugin when generating the custom 
+    induction principle on level one terms. *)
+
+Section InvLemmas.
+  Lemma inv_Kt (P : term -> Prop) (t : term) :
+    (forall i, P (E_var i)) -> (forall c al, P (E_ctor c al)) -> P t.
+  Proof. depelim t ; eauto. Qed.
+  
+  Lemma inv_Kal_nil (P : args [] -> Prop) (al : args []) : P E_al_nil -> P al.
+  Proof. depelim al ; eauto. Qed.
+
+  Lemma inv_Kal_cons {ty tys} (P : args (ty :: tys) -> Prop) (al : args (ty :: tys)) : 
+    (forall a al', P (E_al_cons a al')) -> P al.
+  Proof. depelim al ; eauto. Qed.
+  
+  Lemma inv_Ka_term (P : arg AT_term -> Prop) (a : arg AT_term) : 
+    (forall t, P (E_aterm t)) -> P a.
+  Proof. depelim a ; eauto. Qed.
+  
+  Lemma inv_Ka_base {b} (P : arg (AT_base b) -> Prop) (a : arg (AT_base b)) :
+    (forall x, P (E_abase b x)) -> P a.
+  Proof. depelim a ; eauto. Qed.
+  
+  Lemma inv_Ka_bind {ty} (P : arg (AT_bind ty) -> Prop) (a : arg (AT_bind ty)) :
+    (forall a', P (E_abind a')) -> P a.
+  Proof. depelim a ; eauto. Qed.
+End InvLemmas.
+
 (*********************************************************************************)
 (** *** Renamings. *)
 (*********************************************************************************)

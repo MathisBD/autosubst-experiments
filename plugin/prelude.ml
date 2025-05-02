@@ -60,7 +60,7 @@ type ops_one =
   ; ctor : Names.Ind.t
   ; ctor_type : Names.Constant.t
   ; sign : Names.Constant.t
-  ; (* Expressions. *)
+  ; (* Expressions and substitutions. *)
     expr : Names.Ind.t
   ; e_var : Names.Construct.t
   ; e_ctor : Names.Construct.t
@@ -69,8 +69,15 @@ type ops_one =
   ; e_abase : Names.Construct.t
   ; e_aterm : Names.Construct.t
   ; e_abind : Names.Construct.t
-  ; (* Substitutions. *)
-    subst : Names.Constant.t
+  ; subst : Names.Constant.t
+  ; (* Other constants. *)
+    esize : Names.Constant.t
+  ; inv_Kt : Names.Constant.t
+  ; inv_Kal_nil : Names.Constant.t
+  ; inv_Kal_cons : Names.Constant.t
+  ; inv_Ka_base : Names.Constant.t
+  ; inv_Ka_term : Names.Constant.t
+  ; inv_Ka_bind : Names.Constant.t
   }
 
 (** Congruence lemmas. [congr_ctor] contains congruence lemmas for all non-variable

@@ -36,6 +36,9 @@ val set_sigma : Evd.evar_map -> unit m
 (** Modify the current evar map. *)
 val modify_sigma : (Evd.evar_map -> Evd.evar_map) -> unit m
 
+(** Discard the result of a monadic computation, keeping only the effects. *)
+val monad_ignore : 'a m -> unit m
+
 (** Additional functions on lists. *)
 module List : sig
   include module type of Stdlib.List

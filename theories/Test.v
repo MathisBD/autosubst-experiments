@@ -1,7 +1,9 @@
+From Coq Require Import Lia.
+From Coq Require Import String.
 From Prototype Require Import Prelude Sig.
 From Prototype Require Constants LevelOne LevelTwo LevelTwoIrred LevelTwoSimp.
+
 Declare ML Module "autosubst-experiments.plugin".
-From Coq Require Import String.
 
 Test.
 
@@ -44,3 +46,5 @@ Print eval.*)
 
 (*About eval_reify_inv.
 About seval_sreify_inv.*)
+
+About term_ind'.

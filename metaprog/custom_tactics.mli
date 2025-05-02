@@ -53,3 +53,6 @@ val rewrite : dir:bool -> Names.GlobRef.t -> unit Proofview.tactic
 
 (** [repeat_n n tac] applies [tac] exactly [n] times and returns the list of results. *)
 val repeat_n : int -> 'a Proofview.tactic -> 'a list Proofview.tactic
+
+(** [pattern t] abstracts the conclusion over all occurences of [t]. *)
+val pattern : EConstr.t -> unit Proofview.tactic

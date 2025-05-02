@@ -254,6 +254,9 @@ let case (scrutinee : EConstr.t)
 
 let declare_def (kind : Decls.definition_object_kind) (name : string)
     ?(ty : EConstr.t option) (body : EConstr.t) : Names.Constant.t m =
+  (* Typecheck to resolve evars. *)
+  let* _ = typecheck body in
+  let* _ = match ty with None -> ret () | Some ty -> monad_ignore @@ typecheck ty in
   (* Constant info. *)
   let info =
     Declare.Info.make ~kind:(Decls.IsDefinition kind)
@@ -271,31 +274,53 @@ let declare_def (kind : Decls.definition_object_kind) (name : string)
   | Names.GlobRef.ConstRef cname -> ret cname
   | _ -> failwith "declare_def: expected a [ConstRef]."
 
+(* I had issues with the API in [Declare.Proof]: universe constraints introduced by [tac]
+   where not handled properly. Instead I now use the API from [Proof]: this allows 
+   me to get a hold on the final proof term, which I can manually typecheck to gather 
+   universe constraints and solve any remaining evars using typing information. *)
 let declare_theorem (kind : Decls.theorem_kind) (name : string) (stmt : EConstr.t)
     (tac : unit Proofview.tactic) : Names.Constant.t m =
+  (* Typecheck to solve evars. *)
+  let* _ = typecheck stmt in
+  (* Build the proof. *)
+  let* env = get_env in
+  let* sigma = get_sigma in
+  let proof =
+    Proof.start
+      ~name:(Names.Id.of_string_soft "term_ind'")
+      ~poly:false sigma
+      [ (env, stmt) ]
+  in
+  let proof, _, _ = Proof.run_tactic env tac proof in
+  let body = List.hd @@ Proof.partial_proof proof in
+  (* Typecheck to solve evars and get universe constraints. *)
+  let* _ = typecheck body in
   (* Constant info. *)
   let info =
     Declare.Info.make ~kind:(Decls.IsProof kind)
       ~scope:(Locality.Global Locality.ImportDefaultBehavior) ()
   in
-  let cinfo = Declare.CInfo.make ~name:(Names.Id.of_string_soft name) ~typ:stmt () in
+  let cinfo =
+    Declare.CInfo.make ~name:(Names.Id.of_string_soft name) ~typ:(Some stmt) ()
+  in
   (* Declare the lemma. *)
   let* sigma = get_sigma in
-  let proof = Declare.Proof.start ~info ~cinfo sigma in
-  let proof, _ = Declare.Proof.by tac proof in
-  let refs = Declare.Proof.save_regular ~proof ~opaque:Vernacexpr.Opaque ~idopt:None in
+  let ref = Declare.declare_definition ~info ~cinfo ~opaque:true ~body sigma in
   (* Get the name of the declared lemma. *)
-  match refs with
-  | [ Names.GlobRef.ConstRef cname ] -> ret cname
-  | _ -> failwith "declare_theorem: expected a single constant [ConstRef]."
+  match ref with
+  | Names.GlobRef.ConstRef cname -> ret cname
+  | _ -> failwith "declare_theorem: expected a [ConstRef]."
 
 let declare_ind (name : string) (arity : EConstr.t) (ctor_names : string list)
     (ctor_types : (Names.Id.t -> EConstr.t m) list) : Names.Ind.t m =
   let open Entries in
+  (* Typecheck to solve evars. *)
+  let* _ = typecheck arity in
   (* Build the constructor types. *)
   let build_ctor_type (mk_ty : Names.Id.t -> EConstr.t m) : Constr.t m =
     with_local_decl (vass name arity) @@ fun ind ->
     let* ty = mk_ty ind in
+    let* _ = typecheck ty in
     let* sigma = get_sigma in
     ret @@ EConstr.to_constr sigma @@ EConstr.Vars.subst_var sigma ind ty
   in
@@ -324,37 +349,3 @@ let declare_ind (name : string) (arity : EConstr.t) (ctor_names : string list)
       []
   in
   ret (mind_name, 0)
-
-(** Generalizes [namedLambda] to multiple variables in a [EConstr.rel_context].
-
-    The body receives the variables in the same order they are stored in the context, i.e.
-    the most recent (= inner-most) variable first. *)
-(*let namedLambdaContext env sigma (ctx : EConstr.rel_context)
-    (body : Environ.env -> Evd.evar_map -> Names.Id.t list -> Evd.evar_map * EConstr.t) :
-    Evd.evar_map * EConstr.t =
-  let open EConstr in
-  let open Context in
-  let open Rel in
-  (* Get the names and types of the variables in the context. *)
-  let names =
-    ctx
-    |> List.map @@ fun decl ->
-       match Declaration.get_name decl with
-       | Name n -> Names.Id.to_string n
-       | Anonymous -> "x"
-  in
-  let tys = List.map Declaration.get_type ctx in
-  with_fresh_vars env sigma names tys @@ fun env sigma ids ->
-  (* Build the body. *)
-  let sigma, body = body env sigma ids in
-  (* Add lambda abstractions. *)
-  ( sigma
-  , List.fold_left
-      (fun body decl ->
-        mkLambda
-          ( { binder_name = Declaration.get_name decl
-            ; binder_relevance = Declaration.get_relevance decl
-            }
-          , Declaration.get_type decl
-          , Vars.subst_vars sigma ids body ))
-      body ctx )*)

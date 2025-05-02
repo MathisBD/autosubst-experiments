@@ -141,12 +141,15 @@ val case :
 (** *** Declaring definitions/inductives. *)
 (**************************************************************************************)
 
+(** The functions below typecheck all their arguments: we do this to solve any remaining
+    evars and to collect universe constraints which are not already in the evar-map. *)
+
 (** The functions below modify the global environment, but the new global entry is not
     visible until you reset the state of the monad, e.g. using [Global.env ()] or
     [monad_run]. *)
 
-(** [declare_def kind name ?ty body] adds a new definition [name : ty := body] to the
-    global environment. Does not handle universe polymorphism.
+(** [declare_def kind name ?ty body] adds a new (transparent) definition
+    [name : ty := body] to the global environment. Does not handle universe polymorphism.
 
     It returns the name of the newly created constant. *)
 val declare_def :
@@ -156,8 +159,8 @@ val declare_def :
   -> EConstr.t
   -> Names.Constant.t m
 
-(** [declare_theorem kind name stmt tac] adds a new theorem [name : ty] to the global
-    environment, proved with tactic [tac]. Does not handle universe polymorphism.
+(** [declare_theorem kind name stmt tac] adds a new (opaque) theorem [name : ty] to the
+    global environment, proved with tactic [tac]. Does not handle universe polymorphism.
 
     It returns the name of the newly created constant. *)
 val declare_theorem :
