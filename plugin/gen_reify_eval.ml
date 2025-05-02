@@ -165,12 +165,19 @@ let build_eval (sign : signature) (ops0 : ops_zero) (ops1 : ops_one)
       ret @@ apps (mkVar eval) [| ka; mkVar a |]
   | _ -> Log.error "build_eval: %i" i
 
+(** Build [seval : O.subst -> subst]. *)
+let build_seval (ops1 : ops_one) (eval : Names.Constant.t) : EConstr.t m =
+  lambda "s" (mkconst ops1.subst) @@ fun s ->
+  lambda "i" (Lazy.force Consts.nat) @@ fun i ->
+  let si = app (EConstr.mkVar s) (EConstr.mkVar i) in
+  ret @@ apps (mkconst eval) [| app (Lazy.force Consts.k_t) @@ mkind ops1.base; si |]
+
 (**************************************************************************************)
 (** *** Put everything together. *)
 (**************************************************************************************)
 
 (** Generate the reification and evaluation functions. *)
-let generate (s : signature) (ops0 : ops_zero) (ops1 : ops_one) : reify_eval_ops =
+let generate (s : signature) (ops0 : ops_zero) (ops1 : ops_one) : ops_reify_eval =
   let reify = def "reify" ~kind:Decls.Fixpoint @@ build_reify s ops0 ops1 in
   let sreify = def "sreify" @@ build_sreify ops0 ops1 reify in
   let eval_arg = def "eval_arg" ~kind:Decls.Fixpoint @@ build_eval_arg ops0 ops1 in
@@ -180,4 +187,5 @@ let generate (s : signature) (ops0 : ops_zero) (ops1 : ops_one) : reify_eval_ops
   let eval_kind = def "eval_kind" @@ build_eval_kind ops0 ops1 eval_arg eval_args in
   let eval_ctor = def "eval_ctor" @@ build_eval_ctor s ops0 ops1 eval_args in
   let eval = def "eval" @@ build_eval s ops0 ops1 eval_kind eval_ctor in
-  { reify; sreify; eval_arg; eval_args; eval_kind; eval_ctor; eval }
+  let seval = def "seval" @@ build_seval ops1 eval in
+  { reify; sreify; eval_arg; eval_args; eval_kind; eval_ctor; eval; seval }

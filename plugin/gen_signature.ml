@@ -96,4 +96,5 @@ let generate (s : signature) (ops : ops_zero) : ops_one =
   ; e_abase = (expr, 5)
   ; e_aterm = (expr, 6)
   ; e_abind = (expr, 7)
+  ; subst = Names.Constant.make1 @@ Names.KerName.make mod_O @@ Names.Label.make "subst"
   }

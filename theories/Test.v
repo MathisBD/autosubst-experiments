@@ -39,5 +39,8 @@ Print sreify.
 Print eval_arg.
 Print eval_args.
 Print eval_kind.
-Print eval_ctor.*)
-Print eval.
+Print eval_ctor.
+Print eval.*)
+
+(*About eval_reify_inv.
+About seval_sreify_inv.*)

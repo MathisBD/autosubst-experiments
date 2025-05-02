@@ -1,7 +1,7 @@
-open Monad
-
 (** This module provides functions to build and destruct terms, in the locally nameless
     style. *)
+
+open Monad
 
 (**************************************************************************************)
 (** *** Miscellaneous. *)

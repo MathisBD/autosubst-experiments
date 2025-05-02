@@ -50,3 +50,6 @@ val auto : ?depth:int -> ?lemmas:EConstr.t list -> unit -> unit Proofview.tactic
 
     Under the hood it uses [setoid_rewrite] (instead of [rewrite_strat]). *)
 val rewrite : dir:bool -> Names.GlobRef.t -> unit Proofview.tactic
+
+(** [repeat_n n tac] applies [tac] exactly [n] times and returns the list of results. *)
+val repeat_n : int -> 'a Proofview.tactic -> 'a list Proofview.tactic

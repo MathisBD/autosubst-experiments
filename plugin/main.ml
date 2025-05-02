@@ -1,5 +1,6 @@
 open Prelude
 
+(** Main entry point for the plugin. *)
 let main () =
   let s =
     { n_ctors = 2
@@ -9,7 +10,8 @@ let main () =
     }
   in
   let ops0 = Gen_operations.generate s in
-  let _ = Gen_congr_lemmas.generate s ops0 in
+  let congr = Gen_congr_lemmas.generate s ops0 in
   let ops1 = Gen_signature.generate s ops0 in
-  let _ = Gen_reify_eval.generate s ops0 ops1 in
+  let re = Gen_reify_eval.generate s ops0 ops1 in
+  let _ = Gen_bijection.generate s ops0 ops1 congr re in
   ()

@@ -355,7 +355,7 @@ let prove_congr_scomp (sign : signature) (ops : ops_zero)
 (**************************************************************************************)
 
 (** Generate all the congruence lemmas. *)
-let generate (s : signature) (ops : ops_zero) : congr_lemmas =
+let generate (s : signature) (ops : ops_zero) : ops_congr =
   let congr_ctors =
     Array.init s.n_ctors @@ fun i ->
     let name = String.concat "_" [ "congr"; s.ctor_names.(i) ] in

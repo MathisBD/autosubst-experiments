@@ -57,3 +57,12 @@ let rewrite ~(dir : bool) (eq : Names.GlobRef.t) : unit Proofview.tactic =
     (sigma, (t, Tactypes.NoBindings))
   in
   Rewrite.cl_rewrite_clause delayed_eq dir Locus.AllOccurrences None
+
+let rec repeat_n (n : int) (tac : 'a Proofview.tactic) : 'a list Proofview.tactic =
+  let open PVMonad in
+  if n <= 0
+  then ret []
+  else
+    let* x = tac in
+    let* xs = repeat_n (n - 1) tac in
+    ret (x :: xs)

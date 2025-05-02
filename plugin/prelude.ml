@@ -69,11 +69,13 @@ type ops_one =
   ; e_abase : Names.Construct.t
   ; e_aterm : Names.Construct.t
   ; e_abind : Names.Construct.t
+  ; (* Substitutions. *)
+    subst : Names.Constant.t
   }
 
 (** Congruence lemmas. [congr_ctor] contains congruence lemmas for all non-variable
     constructors. *)
-type congr_lemmas =
+type ops_congr =
   { congr_ctors : Names.Constant.t array
   ; congr_rename : Names.Constant.t
   ; congr_substitute : Names.Constant.t
@@ -86,7 +88,7 @@ type congr_lemmas =
 
 (** Reification functions (level zero -> level one) and evaluation functions (level one ->
     level zero). *)
-type reify_eval_ops =
+type ops_reify_eval =
   { reify : Names.Constant.t
   ; sreify : Names.Constant.t
   ; eval_arg : Names.Constant.t
@@ -94,6 +96,7 @@ type reify_eval_ops =
   ; eval_kind : Names.Constant.t
   ; eval_ctor : Names.Constant.t
   ; eval : Names.Constant.t
+  ; seval : Names.Constant.t
   }
 
 (**************************************************************************************)

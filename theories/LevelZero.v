@@ -249,7 +249,7 @@ Proof. induction t ; simpl ; f_equal ; auto. Qed.
 
 Lemma seval_sreify_inv (s : LevelZero.subst) :
   seval (sreify s) =₁ s.
-Proof. intros i ; cbv [seval sreify]. now rewrite eval_reify_inv. Qed.
+Proof. intros i. unfold seval. unfold sreify. apply eval_reify_inv. Qed.
 
 Lemma eval_rename (t : O.expr Kt) (r : ren) :
   eval (O.rename t r) = rename (eval t) r.
