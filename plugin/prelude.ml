@@ -111,14 +111,11 @@ type ops_reify_eval =
 (**************************************************************************************)
 
 (** Helper function to declare a definition. *)
-let def (name : string) ?(kind : Decls.definition_object_kind option)
-    (mk_body : EConstr.t m) : Names.Constant.t =
-  let kind = match kind with None -> Decls.Definition | Some k -> k in
+let def (name : string) ?(kind = Decls.Definition) (mk_body : EConstr.t m) :
+    Names.Constant.t =
   monad_run
     begin
       let* body = mk_body in
-      (* Typecheck to resolve evars. *)
-      let* _ = typecheck body in
       declare_def kind name body
     end
 
@@ -128,7 +125,5 @@ let lemma (name : string) (mk_stmt : EConstr.t m) (tac : unit Proofview.tactic) 
   monad_run
     begin
       let* stmt = mk_stmt in
-      (* Typecheck to resolve evars. *)
-      let* _ = typecheck stmt in
       declare_theorem Decls.Lemma name stmt tac
     end
