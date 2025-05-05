@@ -59,7 +59,6 @@ type ops_one =
   ; eval_base : Names.Constant.t
   ; ctor : Names.Ind.t
   ; ctor_type : Names.Constant.t
-  ; sign : Names.Constant.t
   ; (* Expressions and substitutions. *)
     expr : Names.Ind.t
   ; e_var : Names.Construct.t
@@ -70,6 +69,14 @@ type ops_one =
   ; e_aterm : Names.Construct.t
   ; e_abind : Names.Construct.t
   ; subst : Names.Constant.t
+  ; (* Operations on expressions and substitutions. *)
+    rscomp : Names.Constant.t
+  ; srcomp : Names.Constant.t
+  ; scomp : Names.Constant.t
+  ; rename : Names.Constant.t
+  ; substitute : Names.Constant.t
+  ; scons : Names.Constant.t
+  ; up_subst : Names.Constant.t
   ; (* Other constants. *)
     esize : Names.Constant.t
   ; inv_Kt : Names.Constant.t
@@ -79,6 +86,12 @@ type ops_one =
   ; inv_Ka_term : Names.Constant.t
   ; inv_Ka_bind : Names.Constant.t
   }
+
+(** Helper function to build the kind of level one terms [Kt]. *)
+let kt (ops1 : ops_one) : EConstr.t = app (Lazy.force Consts.k_t) @@ mkind ops1.base
+
+(** Helper function to build the type of level one terms [O.expr Kt]. *)
+let term1 (ops1 : ops_one) : EConstr.t = app (mkind ops1.expr) @@ kt ops1
 
 (** Congruence lemmas. [congr_ctor] contains congruence lemmas for all non-variable
     constructors. *)
@@ -104,6 +117,14 @@ type ops_reify_eval =
   ; eval_ctor : Names.Constant.t
   ; eval : Names.Constant.t
   ; seval : Names.Constant.t
+  }
+
+(** Bijection between level zero and level one, and custom induction principle on level
+    one terms. *)
+type ops_bijection =
+  { eval_reify_inv : Names.Constant.t
+  ; seval_sreify_inv : Names.Constant.t
+  ; term_ind : Names.Constant.t
   }
 
 (**************************************************************************************)

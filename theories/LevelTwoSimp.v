@@ -186,7 +186,7 @@ Equations sapply_aux : subst -> qnat -> term :=
 sapply_aux S_id i := E_tvar i ;
 sapply_aux (S_cons t _) Q_zero := t ;
 sapply_aux (S_ren r) i := E_tvar (rapply r i) ;
-sapply_aux s i := E_subst (E_tvar i) s.
+sapply_aux s i := E_subst s (E_tvar i).
 
 Lemma sapply_aux_sound e s i : 
   eeval e (sapply_aux s i) = seval e s (qeval e i).
@@ -195,7 +195,7 @@ Proof. funelim (sapply_aux s i) ; simp qeval eeval ; triv. Qed.
 
 Lemma sapply_aux_irred s i :
   sirred s -> qirred i ->
-  (s <> S_id -> ~is_sren s -> ~(is_scons s /\ i = Q_zero) -> eirred (E_subst (E_tvar i) s)) ->
+  (s <> S_id -> ~is_sren s -> ~(is_scons s /\ i = Q_zero) -> eirred (E_subst s (E_tvar i))) ->
   eirred (sapply_aux s i).
 Proof.
 intros H1 H2 H3. funelim (sapply_aux s i).
@@ -365,22 +365,22 @@ Qed.
 (*********************************************************************************)
 
 (** Helper function for [rename] which takes care of trivial cases. *)
-Equations rename_aux {k} (t : expr k) (r : ren) : expr k :=
-rename_aux t R_id := t ;
-rename_aux t r := E_ren t r.
+Equations rename_aux {k} (r : ren) (t : expr k) : expr k :=
+rename_aux R_id t := t ;
+rename_aux r t := E_ren r t.
 
-Lemma rename_aux_sound e {k} (t : expr k) r :
-  eeval e (rename_aux t r) = O.rename (eeval e t) (reval e r).
+Lemma rename_aux_sound e {k} r (t : expr k) :
+  eeval e (rename_aux r t) = O.rename (reval e r) (eeval e t).
 Proof.
-funelim (rename_aux t r) ; simp reval ; triv. now rewrite O.ren_rid.
+funelim (rename_aux r t) ; simp reval ; triv. now rewrite O.ren_rid.
 Qed.
 #[global] Hint Rewrite rename_aux_sound : eeval seval.
 
-Lemma rename_aux_irred {k} (t : expr k) r :
-  eirred t -> rirred r -> (r <> R_id -> eirred (E_ren t r)) ->
-  eirred (rename_aux t r).
+Lemma rename_aux_irred {k} r (t : expr k) :
+  rirred r -> eirred t -> (r <> R_id -> eirred (E_ren r t)) ->
+  eirred (rename_aux r t).
 Proof.
-intros H1 H2 H3. funelim (rename_aux t r) ; triv.
+intros H1 H2 H3. funelim (rename_aux r t) ; triv.
 all: solve [ apply H3 ; triv ].
 Qed.
 
@@ -389,29 +389,29 @@ Qed.
 (*********************************************************************************)
 
 (** Helper function for [rename] which takes care of trivial cases. *)
-Equations substitute_aux {k} (t : expr k) (s : subst) : expr k :=
-substitute_aux t S_id := t ;
-substitute_aux (E_tvar i) (S_ren r) := E_tvar (rapply r i) ;
-substitute_aux t (S_ren r) := E_ren t r ;
-substitute_aux (E_tvar Q_zero) (S_cons t _) := t ;
-substitute_aux t s := E_subst t s.
+Equations substitute_aux {k} (s : subst) (t : expr k) : expr k :=
+substitute_aux S_id t := t ;
+substitute_aux (S_ren r) (E_tvar i) := E_tvar (rapply r i) ;
+substitute_aux (S_ren r) t := E_ren r t ;
+substitute_aux (S_cons t _) (E_tvar Q_zero) := t ;
+substitute_aux s t := E_subst s t.
 
-Lemma substitute_aux_sound e {k} (t : expr k) s :
-  eeval e (substitute_aux t s) = O.substitute (eeval e t) (seval e s).
+Lemma substitute_aux_sound e {k} s (t : expr k) :
+  eeval e (substitute_aux s t) = O.substitute (seval e s) (eeval e t).
 Proof.
-funelim (substitute_aux t s) ; simp seval eeval qeval ; triv.
+funelim (substitute_aux s t) ; simp seval eeval qeval ; triv.
 all: try solve [ now rewrite O.ren_is_subst ].
 now rewrite O.subst_sid.
 Qed.
 #[global] Hint Rewrite substitute_aux_sound : eeval seval.
 
-Lemma substitute_aux_irred {k} (t : expr k) s :
+Lemma substitute_aux_irred {k} s (t : expr k) :
   eirred t -> sirred s -> 
-  (match s with S_ren r => ~is_tvar t -> eirred (E_ren t r) | _ => True end) ->
-  (s <> S_id -> ~is_sren s -> ~(is_tvar_zero t /\ is_scons s) -> eirred (E_subst t s)) ->
-  eirred (substitute_aux t s).
+  (match s with S_ren r => ~is_tvar t -> eirred (E_ren r t) | _ => True end) ->
+  (s <> S_id -> ~is_sren s -> ~(is_tvar_zero t /\ is_scons s) -> eirred (E_subst s t)) ->
+  eirred (substitute_aux s t).
 Proof.
-intros H1 H2 H3 H4. funelim (substitute_aux t s) ; triv.
+intros H1 H2 H3 H4. funelim (substitute_aux s t) ; triv.
 all: try solve [ apply H3 ; triv ].
 all: try solve [ apply H4 ; triv ].
 - now rewrite sirred_cons in H2.
@@ -424,31 +424,31 @@ Qed.
 (*********************************************************************************)
 
 (** Apply an irreducible renaming to an irreducible expression. *)
-Equations rename {k} (t : expr k) (r : ren) : expr k by struct t :=
-rename (E_tvar i) r := E_tvar (rapply r i) ;
-rename (E_tctor c al) r := E_tctor c (rename al r) ;
-rename E_al_nil _ := E_al_nil ;
-rename (E_al_cons a al) r := E_al_cons (rename a r) (rename al r) ;
-rename (E_abase b x) _ := E_abase b x ;
-rename (E_aterm t) r := E_aterm (rename t r) ;
-rename (E_abind a) r := E_abind (rename a (rup r)) ;
-rename (E_ren e r1) r2 := rename_aux e (rcomp r1 r2) ;
-rename (E_subst e s) r := substitute_aux e (srcomp s r) ;
-rename e r := rename_aux e r 
+Equations rename {k} (r : ren) (t : expr k) : expr k by struct t :=
+rename r (E_tvar i) := E_tvar (rapply r i) ;
+rename r (E_tctor c al) := E_tctor c (rename r al) ;
+rename r E_al_nil := E_al_nil ;
+rename r (E_al_cons a al) := E_al_cons (rename r a) (rename r al) ;
+rename _ (E_abase b x) := E_abase b x ;
+rename r (E_aterm t) := E_aterm (rename r t) ;
+rename r (E_abind a) := E_abind (rename (rup r) a) ;
+rename r2 (E_ren r1 e) := rename_aux (rcomp r1 r2) e ;
+rename r (E_subst s e) := substitute_aux (srcomp s r) e ;
+rename r e := rename_aux r e 
 
 (** Compose an irreducible substitution with an irreducible renaming. *)
 with srcomp (s : subst) (r : ren) : subst by struct s :=
 srcomp S_id r := sren r ;
-srcomp (S_cons t s) r := S_cons (rename t r) (srcomp s r) ;
+srcomp (S_cons t s) r := S_cons (rename r t) (srcomp s r) ;
 srcomp (S_comp s1 s2) r := scomp_aux s1 (srcomp s2 r) ;
 srcomp s r := scomp_aux s (sren r). 
 
 Lemma rename_srcomp_sound e : 
-  (forall {k} (t : expr k) r, eeval e (rename t r) = O.rename (eeval e t) (reval e r)) *
+  (forall {k} r (t : expr k), eeval e (rename r t) = O.rename (reval e r) (eeval e t)) *
   (forall s r, seval e (srcomp s r) =₁ O.srcomp (seval e s) (reval e r)).
 Proof.
 apply rename_elim with 
-  (P := fun {k} (t : expr k) r res => eeval e res = O.rename (eeval e t) (reval e r))
+  (P := fun {k} r (t : expr k) res => eeval e res = O.rename (reval e r) (eeval e t))
   (P0 := fun s r res => seval e res =₁ O.srcomp (seval e s) (reval e r)).
 all: intros ; simp eeval seval qeval reval ; triv.
 - now rewrite H.
@@ -462,8 +462,8 @@ all: intros ; simp eeval seval qeval reval ; triv.
 - intros i. cbv [O.scomp O.srcomp]. now rewrite O.ren_is_subst.
 Qed.
 
-Lemma rename_sound {k} e (t : expr k) r :
-  eeval e (rename t r) = O.rename (eeval e t) (reval e r).
+Lemma rename_sound {k} e r (t : expr k) :
+  eeval e (rename r t) = O.rename (reval e r) (eeval e t).
 Proof. now apply rename_srcomp_sound. Qed.
 #[global] Hint Rewrite @rename_sound : eeval seval.
 
@@ -473,11 +473,11 @@ Proof. now apply rename_srcomp_sound. Qed.
 #[global] Hint Rewrite srcomp_sound : eeval seval.
 
 Lemma rename_srcomp_irred :
-  (forall {k} (t : expr k) r, eirred t -> rirred r -> eirred (rename t r)) *
+  (forall {k} r (t : expr k), rirred r -> eirred t -> eirred (rename r t)) *
   (forall s r, sirred s -> rirred r -> sirred (srcomp s r)).
 Proof.
 apply rename_elim with 
-  (P := fun {k} (t : expr k) r res => eirred t -> rirred r -> eirred res)
+  (P := fun {k} r (t : expr k) res => rirred r -> eirred t -> eirred res)
   (P0 := fun s r res => sirred s -> rirred r -> sirred res).
 all: intros ; triv.
 - rewrite eirred_tvar in *. apply rapply_rcomp_irred ; triv.
@@ -487,17 +487,17 @@ all: intros ; triv.
 - rewrite eirred_al_cons in *. split ; [apply H | apply H0] ; triv.
 - rewrite eirred_aterm in *. now apply H.
 - rewrite eirred_abind in *. apply H ; triv. now apply rup_irred.
-- rewrite eirred_ren in H. apply rename_aux_irred ; triv.
-  + destruct e ; triv.
+- rewrite eirred_ren in H0. apply rename_aux_irred ; triv.
   + apply rapply_rcomp_irred ; triv.
+  + destruct e ; triv.
   + intros H2. rewrite eirred_ren. split3 ; triv.
     apply rapply_rcomp_irred ; triv.
-- rewrite eirred_subst in H0. feed2 H ; triv. 
+- rewrite eirred_subst in H1. feed2 H ; triv. 
   apply substitute_aux_irred ; triv.
   + destruct (srcomp s r) ; triv. intros H4. rewrite sirred_ren in H. 
     destruct r0 ; try discriminate. rewrite eirred_ren. split3 ; triv.
-    destruct H0 as (_ & _ & H0 & _). destruct e ; triv.
-    all: exfalso ; apply H0 ; triv.
+    destruct H1 as (_ & _ & H1 & _). destruct e ; triv.
+    all: exfalso ; apply H1 ; triv.
   + intros H4 H5 H6. rewrite eirred_subst. split7 ; triv.
 - now apply sren_irred.
 - apply scomp_aux_irred ; triv. 
@@ -541,31 +541,31 @@ Qed.
 (*********************************************************************************)
 
 (** Apply an irreducible substitution to an irreducible expression. *)
-Equations substitute {k} (t : expr k) (s : subst) : expr k by struct t :=
-substitute (E_tvar i) s := sapply s i ;
-substitute (E_tctor c al) s := E_tctor c (substitute al s) ;
-substitute E_al_nil _ := E_al_nil ;
-substitute (E_al_cons a al) s := E_al_cons (substitute a s) (substitute al s) ;
-substitute (E_abase b x) _ := E_abase b x ;
-substitute (E_aterm t) s := E_aterm (substitute t s) ;
-substitute (E_abind a) s := E_abind (substitute a (sup s)) ;
-substitute (E_ren e r) s := substitute_aux e (rscomp r s) ;
-substitute (E_subst e s1) s2 := substitute_aux e (scomp s1 s2) ;
-substitute e s := substitute_aux e s 
+Equations substitute {k} (s : subst) (t : expr k) : expr k by struct t :=
+substitute s (E_tvar i) := sapply s i ;
+substitute s (E_tctor c al) := E_tctor c (substitute s al) ;
+substitute _ E_al_nil := E_al_nil ;
+substitute s (E_al_cons a al) := E_al_cons (substitute s a) (substitute s al) ;
+substitute _ (E_abase b x) := E_abase b x ;
+substitute s (E_aterm t) := E_aterm (substitute s t) ;
+substitute s (E_abind a) := E_abind (substitute (sup s) a) ;
+substitute s (E_ren r e) := substitute_aux (rscomp r s) e ;
+substitute s2 (E_subst s1 e) := substitute_aux (scomp s1 s2) e ;
+substitute s e := substitute_aux s e 
 
 (** Compose two irreducible substitutions. *)
 with scomp (s1 s2 : subst) : subst by struct s1 :=
 scomp S_id s := s ;
-scomp (S_cons t s1) s2 := S_cons (substitute t s2) (scomp s1 s2) ;
+scomp (S_cons t s1) s2 := S_cons (substitute s2 t) (scomp s1 s2) ;
 scomp (S_comp s1 s2) s3 := scomp_aux s1 (scomp s2 s3) ;
 scomp s1 s2 := scomp_aux s1 s2. 
 
 Lemma substitute_scomp_sound e : 
-  (forall {k} (t : expr k) s, eeval e (substitute t s) = O.substitute (eeval e t) (seval e s)) *
+  (forall {k} s (t : expr k), eeval e (substitute s t) = O.substitute (seval e s) (eeval e t)) *
   (forall s1 s2, seval e (scomp s1 s2) =₁ O.scomp (seval e s1) (seval e s2)).
 Proof.
 apply substitute_elim with
-  (P := fun {k} (t : expr k) s res => eeval e res = O.substitute (eeval e t) (seval e s))
+  (P := fun {k} s (t : expr k) res => eeval e res = O.substitute (seval e s) (eeval e t))
   (P0 := fun s1 s2 res => seval e res =₁ O.scomp (seval e s1) (seval e s2)).
 all: intros ; simp eeval seval ; triv.
 - now rewrite H.
@@ -578,8 +578,8 @@ all: intros ; simp eeval seval ; triv.
 - rewrite H. now rewrite O.scomp_assoc.
 Qed.
 
-Lemma substitute_sound e {k} (t : expr k) s :
-  eeval e (substitute t s) = O.substitute (eeval e t) (seval e s).
+Lemma substitute_sound e {k} s (t : expr k) :
+  eeval e (substitute s t) = O.substitute (seval e s) (eeval e t).
 Proof. now apply substitute_scomp_sound. Qed.
 #[global] Hint Rewrite substitute_sound : eeval seval.
 
@@ -589,33 +589,33 @@ Proof. now apply substitute_scomp_sound. Qed.
 #[global] Hint Rewrite scomp_sound : eeval seval.
 
 Lemma substitute_scomp_irred : 
-  (forall {k} (t : expr k) s, eirred t -> sirred s -> eirred (substitute t s)) *
+  (forall {k} s (t : expr k), sirred s -> eirred t -> eirred (substitute s t)) *
   (forall s1 s2, sirred s1 -> sirred s2 -> sirred (scomp s1 s2)).
 Proof.
 apply substitute_elim with   
-  (P := fun {k} (t : expr k) s res => eirred t -> sirred s -> eirred res)
+  (P := fun {k} s (t : expr k) res => sirred s -> eirred t -> eirred res)
   (P0 := fun s1 s2 res => sirred s1 -> sirred s2 -> sirred res).
 all: intros ; triv.
-- rewrite eirred_tvar in H. now apply sapply_rscomp_irred.
+- rewrite eirred_tvar in H0. now apply sapply_rscomp_irred.
 - rewrite eirred_tctor in *. now apply H.
 - apply substitute_aux_irred ; triv.
   + destruct s ; triv. intros _. rewrite eirred_ren. 
-    rewrite sirred_ren in H0. destruct r ; try discriminate. 
+    rewrite sirred_ren in H. destruct r ; try discriminate. 
     split3 ; triv.
   + intros H1 H2 H3. rewrite eirred_subst. split7 ; triv. 
 - rewrite eirred_al_cons in *. feed2 H ; triv. feed2 H0 ; triv.
 - rewrite eirred_aterm in *. now apply H.
 - rewrite eirred_abind in *. apply H ; triv. apply sup_irred ; triv.
-- rewrite eirred_ren in H. destruct e ; triv. apply substitute_aux_irred ; triv. 
+- rewrite eirred_ren in H0. destruct e ; triv. apply substitute_aux_irred ; triv. 
   + apply sapply_rscomp_irred ; triv.
   + assert (H1 : sirred (rscomp r s)) by now apply sapply_rscomp_irred.
     destruct (rscomp r s) ; triv. intros _. rewrite sirred_ren in H1. 
     destruct r0 ; try discriminate. rewrite eirred_ren. split3 ; triv.
   + intros H1 H2 H3. rewrite eirred_subst. split7 ; triv.
     apply sapply_rscomp_irred ; triv. 
-- rewrite eirred_subst in H0. feed2 H ; triv. apply substitute_aux_irred ; triv.
+- rewrite eirred_subst in H1. feed2 H ; triv. apply substitute_aux_irred ; triv.
   + destruct (scomp s1 s2) ; triv. intros H4. rewrite eirred_ren.
-    destruct H0 as (H5 & H6 & H7 & H8 & H9 & H10 & H11). 
+    destruct H1 as (H5 & H6 & H7 & H8 & H9 & H10 & H11). 
     rewrite sirred_ren in H. destruct r ; triv. destruct e ; triv.
     all: solve [ exfalso ; apply H7 ; triv ].
   + intros H4 H5 H6. rewrite eirred_subst. split7 ; triv.
@@ -642,8 +642,8 @@ esimp (E_al_cons a al) := E_al_cons (esimp a) (esimp al) ;
 esimp (E_abase b x) := E_abase b x ;
 esimp (E_aterm t) := E_aterm (esimp t) ;
 esimp (E_abind a) := E_abind (esimp a) ;
-esimp (E_ren t r) := rename (esimp t) (rsimp r) ;
-esimp (E_subst t s) := substitute (esimp t) (ssimp s) ;
+esimp (E_ren r t) := rename (rsimp r) (esimp t) ;
+esimp (E_subst s t) := substitute (ssimp s) (esimp t) ;
 esimp (E_mvar m) := E_mvar m 
 
 (** Simplify a substitution. *)

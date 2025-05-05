@@ -5,6 +5,8 @@ module PVMonad = struct
   let ( let* ) = Proofview.Monad.( >>= )
 end
 
+type rewrite_direction = LeftToRight | RightToLeft
+
 let intro_n (n : int) : unit Proofview.tactic =
   Tactics.intro_patterns false @@ List.init n
   @@ fun _ ->
@@ -20,11 +22,12 @@ let intro_fresh (x : string) : Names.Id.t Proofview.tactic =
   let* _ = Tactics.intro_mustbe_force id in
   ret id
 
-let intro_rewrite ~(dir : bool) : unit Proofview.tactic =
-  let pattern = CAst.make @@ Tactypes.IntroAction (Tactypes.IntroRewrite dir) in
+let intro_rewrite (dir : rewrite_direction) : unit Proofview.tactic =
+  let bdir = match dir with LeftToRight -> true | RightToLeft -> false in
+  let pattern = CAst.make @@ Tactypes.IntroAction (Tactypes.IntroRewrite bdir) in
   Tactics.intro_patterns false [ pattern ]
 
-let print_open_goals : unit Proofview.tactic =
+let print_open_goals () : unit Proofview.tactic =
   Proofview.Goal.enter @@ fun goal ->
   let env = Proofview.Goal.env goal in
   let sigma = Proofview.Goal.sigma goal in
@@ -50,13 +53,14 @@ let auto ?(depth : int option) ?(lemmas : EConstr.t list option) () :
   in
   Auto.gen_auto depth lemmas (Some [ "core" ])
 
-let rewrite ~(dir : bool) (eq : Names.GlobRef.t) : unit Proofview.tactic =
+let rewrite (dir : rewrite_direction) (eq : Names.GlobRef.t) : unit Proofview.tactic =
   let delayed_eq =
    fun env sigma ->
     let sigma, t = Evd.fresh_global env sigma eq in
     (sigma, (t, Tactypes.NoBindings))
   in
-  Rewrite.cl_rewrite_clause delayed_eq dir Locus.AllOccurrences None
+  let bdir = match dir with LeftToRight -> true | RightToLeft -> false in
+  Rewrite.cl_rewrite_clause delayed_eq bdir Locus.AllOccurrences None
 
 let rec repeat_n (n : int) (tac : 'a Proofview.tactic) : 'a list Proofview.tactic =
   let open PVMonad in
@@ -69,3 +73,9 @@ let rec repeat_n (n : int) (tac : 'a Proofview.tactic) : 'a list Proofview.tacti
 
 let pattern (t : EConstr.t) : unit Proofview.tactic =
   Tactics.pattern_option [ (Locus.AllOccurrences, t) ] None
+
+let induction (t : EConstr.t) : unit Proofview.tactic =
+  Induction.induction false None t None None
+
+let destruct (t : EConstr.t) : unit Proofview.tactic =
+  Induction.destruct false None t None None

@@ -209,7 +209,7 @@ let prove_congr_ctor (sign : signature) (ops : ops_zero) (idx : int) :
   (* Introduce the constructor arguments. *)
   let* _ = intro_n (2 * List.length arg_tys) in
   (* Introduce each hypothesis and rewrite with it from left to right. *)
-  let* _ = Tacticals.tclDO (List.length arg_tys) @@ intro_rewrite ~dir:true in
+  let* _ = Tacticals.tclDO (List.length arg_tys) @@ intro_rewrite LeftToRight in
   (* Close with reflexivity. *)
   Tactics.reflexivity
 
@@ -224,13 +224,10 @@ let prove_congr_rename (sign : signature) (ops : ops_zero)
   let* _ = intro_fresh "t'" in
   (* Rewrite with the second hypothesis. *)
   let* hyp_r = intro_fresh "H" in
-  let* _ = intro_rewrite ~dir:false in
+  let* _ = intro_rewrite RightToLeft in
   (* Induction on [t]. *)
   let* _ = Generalize.revert [ r; r'; hyp_r ] in
-  let intro_patt =
-    CAst.make @@ Tactypes.IntroOrPattern (List.init (1 + sign.n_ctors) @@ fun _ -> [])
-  in
-  let* _ = Induction.induction false None (EConstr.mkVar t) (Some intro_patt) None in
+  let* _ = induction @@ EConstr.mkVar t in
   (* Process each subgoal. *)
   dispatch @@ fun i ->
   let* r = intro_fresh "r" in
@@ -254,8 +251,8 @@ let prove_congr_rscomp (sign : signature) (ops : ops_zero) : unit Proofview.tact
   let* h2 = intro_fresh "H" in
   let* _ = intro_fresh "i" in
   let* _ = Tactics.unfold_constr (Names.GlobRef.ConstRef ops.rscomp) in
-  let* _ = rewrite ~dir:true (Names.GlobRef.VarRef h1) in
-  let* _ = rewrite ~dir:true (Names.GlobRef.VarRef h2) in
+  let* _ = rewrite LeftToRight (Names.GlobRef.VarRef h1) in
+  let* _ = rewrite LeftToRight (Names.GlobRef.VarRef h2) in
   Tactics.reflexivity
 
 (** Prove [forall s s' r r', s =₁ s' -> r =₁ r' -> srcomp s r =₁ srcomp s' r']. *)
@@ -274,7 +271,7 @@ let prove_congr_srcomp (sign : signature) (ops : ops_zero)
 let prove_congr_scons (sign : signature) (ops : ops_zero) : unit Proofview.tactic =
   let open PVMonad in
   let* _ = intro_n 4 in
-  let* _ = intro_rewrite ~dir:true in
+  let* _ = intro_rewrite LeftToRight in
   let* h = intro_fresh "H" in
   (* Introduce [i] and immediately destruct it. *)
   let i_patt =
@@ -312,13 +309,10 @@ let prove_congr_substitute (sign : signature) (ops : ops_zero)
   let* _ = intro_fresh "t'" in
   (* Rewrite with the second hypothesis. *)
   let* hyp_s = intro_fresh "H" in
-  let* _ = intro_rewrite ~dir:false in
+  let* _ = intro_rewrite RightToLeft in
   (* Induction on [t]. *)
   let* _ = Generalize.revert [ s; s'; hyp_s ] in
-  let intro_patt =
-    CAst.make @@ Tactypes.IntroOrPattern (List.init (1 + sign.n_ctors) @@ fun _ -> [])
-  in
-  let* _ = Induction.induction false None (EConstr.mkVar t) (Some intro_patt) None in
+  let* _ = induction @@ EConstr.mkVar t in
   (* Process each subgoal. *)
   dispatch @@ fun i ->
   let* s = intro_fresh "s" in

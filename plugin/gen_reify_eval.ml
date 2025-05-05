@@ -8,8 +8,7 @@ open Prelude
 let build_reify (sign : signature) (ops0 : ops_zero) (ops1 : ops_one) : EConstr.t m =
   let open EConstr in
   (* Build the fixpoint. *)
-  let term1 = app (mkind ops1.expr) @@ app (Lazy.force Consts.k_t) @@ mkind ops1.base in
-  fix "reify" 0 (arrow (mkind ops0.term) term1) @@ fun reify ->
+  fix "reify" 0 (arrow (mkind ops0.term) (term1 ops1)) @@ fun reify ->
   lambda "t" (mkind ops0.term) @@ fun t ->
   case (EConstr.mkVar t) @@ fun i args ->
   (* Reify an argument. *)

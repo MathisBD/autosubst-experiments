@@ -50,6 +50,27 @@ let build_ctor_type (sign : signature) (ctor : Names.Ind.t) (base : Names.Ind.t)
 (** *** Put everything together. *)
 (**************************************************************************************)
 
+(** Declare module [S] which contains the signature. *)
+let build_module_S (base : Names.Ind.t) (eval_base : Names.Constant.t)
+    (ctor : Names.Ind.t) (ctor_type : Names.Constant.t) :
+    Names.ModPath.t * Libnames.qualid =
+  let mod_S =
+    Declaremods.start_module None (Names.Id.of_string_soft "S") [] (Declaremods.Check [])
+  in
+  let _ =
+    def "t" @@ ret
+    @@ apps
+         (Lazy.force Consts.build_signature)
+         [| mkind base; mkconst eval_base; mkind ctor; mkconst ctor_type |]
+  in
+  let _ = Declaremods.end_module () in
+  let qualid_S =
+    match mod_S with
+    | MPdot (MPfile path, lab) -> Libnames.make_qualid path @@ Names.Label.to_id lab
+    | _ -> Log.error "gen_signature: unexpected module path for [S]."
+  in
+  (mod_S, qualid_S)
+
 (** Generate the level one signature. *)
 let generate (s : signature) (ops : ops_zero) : ops_one =
   (* Build the signature. *)
@@ -57,19 +78,8 @@ let generate (s : signature) (ops : ops_zero) : ops_one =
   let eval_base = def "eval_base" @@ build_eval_base s base in
   let ctor = monad_run @@ build_ctor s in
   let ctor_type = def "ctor_type" @@ build_ctor_type s ctor base in
-  (* Declare module [S] which contains the signature. *)
-  let _ =
-    Declaremods.start_module None (Names.Id.of_string_soft "S") [] (Declaremods.Check [])
-  in
-  let sign =
-    def "t" @@ ret
-    @@ apps
-         (Lazy.force Consts.build_signature)
-         [| mkind base; mkconst eval_base; mkind ctor; mkconst ctor_type |]
-  in
-  let _ = Declaremods.end_module () in
-  (* Declare [Module T := LevelTwoSimp.Make (S)] and the shorthand [O := T.O]. *)
-  let qualid_S = mk_qualid [ "Prototype"; "Test" ] "S" in
+  let mod_S, qualid_S = build_module_S base eval_base ctor ctor_type in
+  (* Declare [Module T := LevelTwoSimp.Make (S)]. *)
   let qualid_Make = mk_qualid [ "Prototype"; "LevelTwoSimp" ] "Make" in
   let mod_T =
     Declaremods.declare_module (Names.Id.of_string_soft "T") [] (Declaremods.Check [])
@@ -86,8 +96,7 @@ let generate (s : signature) (ops : ops_zero) : ops_one =
   let expr =
     (Names.MutInd.make1 @@ Names.KerName.make mod_O @@ Names.Label.make "expr", 0)
   in
-  { sign
-  ; base
+  { base
   ; eval_base
   ; ctor
   ; ctor_type
@@ -107,4 +116,11 @@ let generate (s : signature) (ops : ops_zero) : ops_one =
   ; inv_Ka_base = const "inv_Ka_base"
   ; inv_Ka_term = const "inv_Ka_term"
   ; inv_Ka_bind = const "inv_Ka_bind"
+  ; rename = const "rename"
+  ; rscomp = const "rscomp"
+  ; srcomp = const "srcomp"
+  ; scons = const "scons"
+  ; up_subst = const "up_subst"
+  ; substitute = const "substitute"
+  ; scomp = const "scomp"
   }

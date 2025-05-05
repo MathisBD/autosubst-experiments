@@ -9,17 +9,17 @@ Inductive term :=
 | App : term -> term -> term 
 | Lam : string -> term -> term.
 
-Fixpoint rename (t : term) (r : nat -> nat) : term :=
+Fixpoint rename (r : ren) (t : term) : term :=
   match t with 
   | Var i => Var (r i)
-  | App t1 t2 => App (rename t1 r) (rename t2 r)
-  | Lam str t => Lam str (rename t (up_ren r))
+  | App t1 t2 => App (rename r t1) (rename r t2)
+  | Lam str t => Lam str (rename (up_ren r) t)
   end.
 
 Definition subst := nat -> term.
 
 Definition srcomp (s : subst) (r : ren) : subst :=
-  fun i => rename (s i) r.
+  fun i => rename r (s i).
   
 Definition rscomp (r : ren) (s : subst) : subst :=
   fun i => s (r i).
@@ -57,7 +57,7 @@ Lemma congr_lam str {t t'} :
 Proof. intros ->. reflexivity. Qed.
 
 Lemma congr_rename {t t' r r'} :
-  t = t' -> r =₁ r' -> rename t r = rename t' r'.
+  t = t' -> r =₁ r' -> rename r t = rename r' t'.
 Proof. 
 intros <-. revert r r'. induction t ; simpl ; intros r r' H.
 - auto.
@@ -179,7 +179,6 @@ Definition seval (s : O.subst) : subst :=
 
 (** Custom induction principle on level one terms. *)
 
-
 Section TermInd.
   Context (P : O.expr Kt -> Prop).
   Context (H1 : forall i, P (O.E_var i)).
@@ -210,7 +209,7 @@ Section TermInd.
   Qed.
 End TermInd. 
 
-(** Push [eval] inside terms. *)
+(** [reify] and [eval] are inverses. *)
 
 Lemma eval_reify_inv (t : term) : 
   eval (reify t) = t.
@@ -220,8 +219,10 @@ Lemma seval_sreify_inv (s : LevelZero.subst) :
   seval (sreify s) =₁ s.
 Proof. intros i. unfold seval. unfold sreify. apply eval_reify_inv. Qed.
 
-Lemma eval_rename (t : O.expr Kt) (r : ren) :
-  eval (O.rename t r) = rename (eval t) r.
+(** Push [eval] inside terms. *)
+
+Lemma eval_rename (r : ren) (t : O.expr Kt) :
+  eval (O.rename r t) = rename r (eval t).
 Proof.
 revert r ; induction t using term_ind' ; intros r.
 - reflexivity.
@@ -229,13 +230,13 @@ revert r ; induction t using term_ind' ; intros r.
 - repeat (simp rename ; simpl). now rewrite IHt.
 Qed.   
 
-Lemma eval_scons t s : 
-  seval (O.scons t s) =₁ scons (eval t) (seval s).
-Proof. intros [|i] ; reflexivity. Qed.
-
 Lemma eval_srcomp s r : 
   seval (O.srcomp s r) =₁ srcomp (seval s) r.
 Proof. intros i. cbv [seval srcomp O.srcomp]. now rewrite eval_rename. Qed. 
+
+Lemma eval_scons t s : 
+  seval (O.scons t s) =₁ scons (eval t) (seval s).
+Proof. intros [|i] ; reflexivity. Qed.
 
 Lemma eval_up_subst s : 
   seval (O.up_subst s) =₁ up_subst (seval s).

@@ -57,8 +57,7 @@ Fixpoint esize {k} (t : expr k) : nat :=
   | E_abind a => S (esize a)
   end.
 
-(** In order to avoid using [depelim] in the plugin (which would require that
-    the plugin depends on Equations), we prove simple inversion lemmas
+(** In order to avoid using [depelim] in the plugin, we prove simple inversion lemmas
     which we then use in the plugin when generating the custom 
     induction principle on level one terms. *)
 
@@ -92,14 +91,14 @@ End InvLemmas.
 (*********************************************************************************)
  
 (** Rename a term. *)
-Equations rename {k} (t : expr k) (r : ren) : expr k :=
-rename (E_var i) r := E_var (r i) ;
-rename (E_ctor c al) r := E_ctor c (rename al r) ;
-rename E_al_nil r := E_al_nil ;
-rename (E_al_cons a al) r := E_al_cons (rename a r) (rename al r) ;
-rename (E_abase b x) r := E_abase b x ;
-rename (E_aterm t) r := E_aterm (rename t r) ;
-rename (E_abind a) r := E_abind (rename a (up_ren r)).
+Equations rename {k} (r : ren) (t : expr k) : expr k :=
+rename r (E_var i) := E_var (r i) ;
+rename r (E_ctor c al) := E_ctor c (rename r al) ;
+rename r E_al_nil := E_al_nil ;
+rename r (E_al_cons a al) := E_al_cons (rename r a) (rename r al) ;
+rename r (E_abase b x) := E_abase b x ;
+rename r (E_aterm t) := E_aterm (rename r t) ;
+rename r (E_abind a) := E_abind (rename (up_ren r) a).
 
 (*********************************************************************************)
 (** *** Substitutions. *)
@@ -123,7 +122,7 @@ scons t s (S i) := s i.
 
 (** Left to right composition of a substitution with a renaming. *)
 Definition srcomp (s : subst) (r : ren) := 
-  fun i => rename (s i) r.
+  fun i => rename r (s i).
 
 (** Left to right composition of a renaming with a substitution. *)
 Definition rscomp (r : ren) (s : subst) := 
@@ -134,18 +133,18 @@ Definition up_subst (s : subst) : subst :=
   scons (E_var 0) (srcomp s rshift).
 
 (** Apply a substitution to a expr. *)
-Equations substitute {k} (t : expr k) (s : subst) : expr k :=
-substitute (E_var i) s := s i ;
-substitute (E_ctor c al) s := E_ctor c (substitute al s) ;
-substitute E_al_nil s := E_al_nil ;
-substitute (E_al_cons a al) s := E_al_cons (substitute a s) (substitute al s) ;
-substitute (E_abase b x) s := E_abase b x ;
-substitute (E_aterm t) s := E_aterm (substitute t s) ;
-substitute (E_abind a) s := E_abind (substitute a (up_subst s)).
+Equations substitute {k} (s : subst) (t : expr k) : expr k :=
+substitute s (E_var i) := s i ;
+substitute s (E_ctor c al) := E_ctor c (substitute s al) ;
+substitute s E_al_nil := E_al_nil ;
+substitute s (E_al_cons a al) := E_al_cons (substitute s a) (substitute s al) ;
+substitute s (E_abase b x) := E_abase b x ;
+substitute s (E_aterm t) := E_aterm (substitute s t) ;
+substitute s (E_abind a) := E_abind (substitute (up_subst s) a).
 
 (** Left to right composition of substitutions. *)
 Definition scomp (s1 s2 : subst) : subst :=
-  fun i => substitute (s1 i) s2.
+  fun i => substitute s2 (s1 i).
 
 (*********************************************************************************)
 (** *** Setoid Rewrite Support. *)
@@ -169,9 +168,9 @@ intros s1 s2 Hs r1 r2 Hr i. destruct i ; cbv [rcomp].
 Qed.
 
 #[global] Instance rename_proper k :
-  Proper (eq ==> point_eq ==> eq) (@rename k).
+  Proper (point_eq ==> eq ==> eq) (@rename k).
 Proof.
-intros t _ <- r1 r2 Hr. funelim (rename t _) ; simp rename in * ; auto.
+intros r1 r2 Hr t _ <-. funelim (rename _ _) ; simp rename in * ; auto.
 f_equal. apply H. now rewrite Hr.
 Qed.
 
@@ -191,9 +190,9 @@ Qed.
 Proof. intros s1 s2 Hs. cbv [up_subst]. now rewrite Hs. Qed.
 
 #[global] Instance substitute_proper k : 
-  Proper (eq ==> point_eq ==> eq) (@substitute k).
+  Proper (point_eq ==> eq ==> eq) (@substitute k).
 Proof. 
-intros t ? <- s1 s2 Hs. funelim (substitute t _) ; simp substitute in * ; auto.
+intros s1 s2 Hs t ? <-. funelim (substitute _ _) ; simp substitute in * ; auto.
 f_equal. apply H. now rewrite Hs.
 Qed. 
 
@@ -237,7 +236,7 @@ Lemma rcomp_rcons_distrib i (r1 r2 : ren) :
 Proof. intros [|i'] ; reflexivity. Qed.
 
 Lemma scomp_scons_distrib (t : term) (s1 s2 : subst) :
-  scomp (scons t s1) s2 =₁ scons (substitute t s2) (scomp s1 s2).
+  scomp (scons t s1) s2 =₁ scons (substitute s2 t) (scomp s1 s2).
 Proof. intros [|i] ; reflexivity. Qed.
 
 Lemma rshift_rcons i (r : ren) : rcomp rshift (rcons i r) =₁ r.
@@ -263,20 +262,20 @@ Lemma up_ren_comp (r1 r2 : ren) :
   rcomp (up_ren r1) (up_ren r2) =₁ up_ren (rcomp r1 r2).
 Proof. intros [|i] ; reflexivity. Qed.
 
-Lemma ren_rid {k} (t : expr k) : rename t rid = t.
+Lemma ren_rid {k} (t : expr k) : rename rid t = t.
 Proof. induction t ; simp rename ; triv. now rewrite up_ren_rid, IHt. Qed.
 
 Lemma ren_ren {k} (t : expr k) (r1 r2 : ren) : 
-  rename (rename t r1) r2 = rename t (rcomp r1 r2).
+  rename r2 (rename r1 t) = rename (rcomp r1 r2) t.
 Proof.
-funelim (rename t _) ; simp rename in * ; auto.
+funelim (rename _ t) ; simp rename in * ; auto.
 now rewrite H, up_ren_comp.
 Qed.
 
 Lemma ren_subst {k} (t : expr k) (s : subst) (r : ren) : 
-  rename (substitute t s) r = substitute t (srcomp s r).
+  rename r (substitute s t) = substitute (srcomp s r) t.
 Proof.
-funelim (substitute t _) ; simp rename substitute in * ; auto.
+funelim (substitute _ t) ; simp rename substitute in * ; auto.
 f_equal. rewrite H. apply substitute_proper ; auto.
 intros [|i] ; auto. cbv [up_subst scons srcomp].
 rewrite ren_ren, ren_ren. apply rename_proper ; auto.
@@ -284,9 +283,9 @@ reflexivity.
 Qed.
 
 Lemma subst_ren {k} (t : expr k) (r : ren) (s : subst) : 
-  substitute (rename t r) s = substitute t (rscomp r s).
+  substitute s (rename r t) = substitute (rscomp r s) t.
 Proof.
-funelim (rename t r) ; simp rename substitute in * ; auto.
+funelim (rename r t) ; simp rename substitute in * ; auto.
 f_equal. rewrite H. apply substitute_proper ; auto.
 intros [|i] ; reflexivity.
 Qed.
@@ -299,16 +298,16 @@ rewrite ren_subst, subst_ren. now apply substitute_proper.
 Qed.
 
 Lemma subst_subst {k} (t : expr k) (s1 s2 : subst) : 
-  substitute (substitute t s1) s2 = substitute t (scomp s1 s2).
+  substitute s2 (substitute s1 t) = substitute (scomp s1 s2) t.
 Proof.
-funelim (substitute t _) ; simp substitute ; auto.
+funelim (substitute _ t) ; simp substitute ; auto.
 rewrite H. now rewrite up_subst_comp.
 Qed.
 
 Lemma up_subst_sid : up_subst sid =₁ sid.
 Proof. intros [|i] ; reflexivity. Qed.
 
-Lemma subst_sid {k} (t : expr k) : substitute t sid = t.
+Lemma subst_sid {k} (t : expr k) : substitute sid t = t.
 Proof.
 induction t ; simp substitute in * ; auto.
 rewrite up_subst_sid. auto.
@@ -325,15 +324,15 @@ Lemma scomp_assoc (s1 s2 s3 : subst) :
 Proof. intros i. cbv [scomp]. now rewrite subst_subst. Qed.
 
 Lemma ren_is_subst {k} (t : expr k) (r : ren) : 
-  rename t r = substitute t (fun i => E_var (r i)).
+  rename r t = substitute (rscomp r E_var) t.
 Proof.
-funelim (rename t r) ; simp rename substitute ; auto.
+funelim (rename r t) ; simp rename substitute ; auto.
 f_equal. rewrite H. apply substitute_proper ; auto.
 intros [|i] ; reflexivity.
 Qed.
 
 Lemma rshift_sshift {k} (t : expr k) : 
-  rename t rshift = substitute t sshift.
+  rename rshift t = substitute sshift t.
 Proof. rewrite ren_is_subst. reflexivity. Qed.
     
 Lemma up_subst_alt (s : subst) :

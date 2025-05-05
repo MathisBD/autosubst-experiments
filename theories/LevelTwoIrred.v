@@ -239,25 +239,25 @@ Inductive ered : forall {k}, expr k -> Prop :=
     ered a \/ ered al -> ered (E_al_cons a al)
 | ER_aterm t : ered t -> ered (E_aterm t)
 | ER_abind {ty} (a : arg ty) : ered a -> ered (E_abind a) 
-| ER_ren {k} r (e : expr k) : rred r \/ ered e -> ered (E_ren e r)
-| ER_subst {k} s (e : expr k) : sred s \/ ered e -> ered (E_subst e s)
+| ER_ren {k} r (e : expr k) : rred r \/ ered e -> ered (E_ren r e)
+| ER_subst {k} s (e : expr k) : sred s \/ ered e -> ered (E_subst s e)
 
 (** Push renamings/substitutions inside expressions. *)
-| ER_push_ren {k} r (e : expr k) : is_push_ren e -> ered (E_ren e r)
-| ER_push_subst {k} s (e : expr k) : is_push_subst e -> ered (E_subst e s)
+| ER_push_ren {k} r (e : expr k) : is_push_ren e -> ered (E_ren r e)
+| ER_push_subst {k} s (e : expr k) : is_push_subst e -> ered (E_subst s e)
 
 (** Identity renaming/substitution. *)
-| ER_ren_rid {k} (e : expr k) : ered (E_ren e R_id)
-| ER_subst_sid {k} (e : expr k) : ered (E_subst e S_id)
+| ER_ren_rid {k} (e : expr k) : ered (E_ren R_id e)
+| ER_subst_sid {k} (e : expr k) : ered (E_subst S_id e)
 
 (** Apply a substitution/renaming to a variable. *)
 | ER_scons_zero s : 
-    is_scons s \/ is_scons_l s -> ered (E_subst (E_tvar Q_zero) s)
+    is_scons s \/ is_scons_l s -> ered (E_subst s (E_tvar Q_zero))
 | ER_sren_var s r i : 
-    ered (E_subst (E_tvar (Q_rapply r i)) s)
+    ered (E_subst s (E_tvar (Q_rapply r i)))
 
 (** Substitute with a renaming. *)
-| ER_subst_ren {k} (e : expr k) r : ered (E_subst e (S_ren r))
+| ER_subst_ren {k} (e : expr k) r : ered (E_subst (S_ren r) e)
 
 (** Reducible substitutions. *)
 with sred : subst -> Prop :=
@@ -319,7 +319,7 @@ Lemma eirred_abind {ty} (a : arg ty) :
 Proof. split ; intros H H' ; apply H ; triv. now inv H'. Qed.
 
 Lemma eirred_ren {k} (e : expr k) r :
-  eirred (E_ren e r) <-> is_tmvar e /\ rirred r /\ r <> R_id.
+  eirred (E_ren r e) <-> is_tmvar e /\ rirred r /\ r <> R_id.
 Proof.
 split ; intros H.
 - split3.
@@ -334,7 +334,7 @@ split ; intros H.
 Qed.
 
 Lemma eirred_subst_var s i :
-  eirred (E_subst (E_tvar i) s) <->
+  eirred (E_subst s (E_tvar i)) <->
     qirred i /\ sirred s /\ ~(i = Q_zero /\ is_scons s) /\ s <> S_id /\ 
     ~is_sren s /\ ~is_qrapply i.
 Proof.
@@ -355,7 +355,7 @@ Definition is_tvar_rapply {k} (e : expr k) :=
   end.
 
 Lemma eirred_subst {k} (e : expr k) s :
-  eirred (E_subst e s) <->
+  eirred (E_subst s e) <->
     eirred e /\ sirred s /\ ~is_push_subst e /\ ~is_tvar_rapply e /\
     ~(is_tvar_zero e /\ is_scons s) /\ s <> S_id /\ ~is_sren s.
 Proof.

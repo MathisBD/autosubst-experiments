@@ -34,7 +34,6 @@ let build_seval_sreify (ops0 : ops_zero) (ops1 : ops_one) (re : ops_reify_eval) 
 let build_ind_hyp (s : signature) (ops1 : ops_one) (pred : Names.Id.t) (idx : int)
     (tys : arg_ty list) : EConstr.t m =
   let open EConstr in
-  let term1 = app (mkind ops1.expr) @@ app (Lazy.force Consts.k_t) @@ mkind ops1.base in
   (* Re-build an argument. *)
   let rec build_arg (ty : arg_ty) (arg : Names.Id.t) : EConstr.t m =
     match ty with
@@ -73,7 +72,7 @@ let build_ind_hyp (s : signature) (ops1 : ops_one) (pred : Names.Id.t) (idx : in
     match tys with
     | [] -> k []
     | ty :: tys ->
-        prod "x" (arg_ty_constr s ty term1) @@ fun x ->
+        prod "x" (arg_ty_constr s ty @@ term1 ops1) @@ fun x ->
         rec_hyp x ty @@ loop tys @@ fun xs -> k (x :: xs)
   in
   loop tys @@ fun args ->
@@ -86,8 +85,7 @@ let build_ind_hyp (s : signature) (ops1 : ops_one) (pred : Names.Id.t) (idx : in
 (** Build the custom induction principle on level one terms. *)
 let build_ind (s : signature) (ops1 : ops_one) : EConstr.t m =
   let open EConstr in
-  let term1 = app (mkind ops1.expr) @@ app (Lazy.force Consts.k_t) @@ mkind ops1.base in
-  prod "P" (arrow term1 mkProp) @@ fun pred ->
+  prod "P" (arrow (term1 ops1) mkProp) @@ fun pred ->
   let* var_hyp =
     prod "i" (Lazy.force Consts.nat) @@ fun i ->
     ret @@ app (mkVar pred) @@ app (mkctor ops1.e_var) @@ mkVar i
@@ -95,8 +93,30 @@ let build_ind (s : signature) (ops1 : ops_one) : EConstr.t m =
   let* ctor_hyps =
     List.monad_mapi (build_ind_hyp s ops1 pred) @@ Array.to_list s.ctor_types
   in
-  let* concl = prod "t" term1 @@ fun t -> ret @@ app (mkVar pred) (mkVar t) in
+  let* concl = prod "t" (term1 ops1) @@ fun t -> ret @@ app (mkVar pred) (mkVar t) in
   ret @@ arrows (var_hyp :: ctor_hyps) concl
+
+(** Build [forall t, reify (eval t) = t]. *)
+(*let build_reify_eval (ops0 : ops_zero) (ops1 : ops_one) (re : ops_reify_eval) :
+    EConstr.t m =
+  let term1 = app (mkind ops1.expr) @@ app (Lazy.force Consts.k_t) @@ mkind ops1.base in
+  prod "t" term1 @@ fun t ->
+  let t' =
+    app (mkconst re.reify)
+    @@ apps (mkconst re.eval)
+         [| app (Lazy.force Consts.k_t) @@ mkind ops1.base; EConstr.mkVar t |]
+  in
+  ret @@ apps (Lazy.force Consts.eq) [| term1; t'; EConstr.mkVar t |]
+
+(** Build [forall t, sreify (seval s) =₁ s]. *)
+let build_sreify_seval (ops0 : ops_zero) (ops1 : ops_one) (re : ops_reify_eval) :
+    EConstr.t m =
+  let term1 = app (mkind ops1.expr) @@ app (Lazy.force Consts.k_t) @@ mkind ops1.base in
+  prod "s" (mkconst ops1.subst) @@ fun s ->
+  let s' = app (mkconst re.sreify) @@ app (mkconst re.seval) @@ EConstr.mkVar s in
+  ret
+  @@ apps (Lazy.force Consts.point_eq)
+       [| Lazy.force Consts.nat; term1; s'; EConstr.mkVar s |]*)
 
 (**************************************************************************************)
 (** *** Prove the lemmas. *)
@@ -106,7 +126,7 @@ let build_ind (s : signature) (ops1 : ops_one) : EConstr.t m =
 let prove_eval_reify (congr : ops_congr) : unit Proofview.tactic =
   let open PVMonad in
   let* t = intro_fresh "t" in
-  let* _ = Induction.induction false None (EConstr.mkVar t) None None in
+  let* _ = induction @@ EConstr.mkVar t in
   let* _ = Tactics.simpl_in_concl in
   dispatch @@ function
   (* Solve the variable constructor with [reflexivity]. *)
@@ -125,7 +145,8 @@ let prove_seval_sreify (re : ops_reify_eval) (eval_reify : Names.Constant.t) :
   let* _ = Tactics.unfold_constr (Names.GlobRef.ConstRef re.sreify) in
   Tactics.apply (mkconst eval_reify)
 
-let lia : unit Proofview.tactic =
+(** Call the tactic [lia]. *)
+let lia () : unit Proofview.tactic =
   let open Ltac_plugin in
   let kname = mk_kername [ "Coq"; "micromega"; "Lia" ] "lia" in
   Tacinterp.eval_tactic (Tacenv.interp_ltac kname)
@@ -172,7 +193,7 @@ let prove_ind_ctor (s : signature) (ops1 : ops_one) (ctor_hyps : Names.Id.t list
   let* _ = Tactics.apply (mkVar @@ List.nth ctor_hyps idx) in
   let* _ = Tactics.apply (mkVar ind_hyp) in
   let* _ = Tactics.simpl_in_concl in
-  (*print_open_goals >>*) lia
+  lia ()
 
 (** Prove the custom induction principle on level one terms. *)
 let prove_ind (s : signature) (ops1 : ops_one) : unit Proofview.tactic =
@@ -202,11 +223,11 @@ let prove_ind (s : signature) (ops1 : ops_one) : unit Proofview.tactic =
     ; (* Start the [E_ctor] case. *)
       begin
         let* c = intro_fresh "c" in
-        let* _ = Induction.destruct false None (mkVar c) None None in
+        let* _ = destruct @@ mkVar c in
         dispatch @@ prove_ind_ctor s ops1 ctor_hyps
       end
     ]
-  >> print_open_goals
+  >> print_open_goals ()
 
 (**************************************************************************************)
 (** *** Put everything together. *)
@@ -214,13 +235,13 @@ let prove_ind (s : signature) (ops1 : ops_one) : unit Proofview.tactic =
 
 (** Generate the bijection proof and the custom induction principle. *)
 let generate (s : signature) (ops0 : ops_zero) (ops1 : ops_one) (congr : ops_congr)
-    (re : ops_reify_eval) : unit =
-  let eval_reify =
+    (re : ops_reify_eval) : ops_bijection =
+  let eval_reify_inv =
     lemma "eval_reify_inv" (build_eval_reify ops0 ops1 re) @@ prove_eval_reify congr
   in
-  let _seval_sreify =
+  let seval_sreify_inv =
     lemma "seval_sreify_inv" (build_seval_sreify ops0 ops1 re)
-    @@ prove_seval_sreify re eval_reify
+    @@ prove_seval_sreify re eval_reify_inv
   in
-  let _ind = lemma "term_ind'" (build_ind s ops1) @@ prove_ind s ops1 in
-  ()
+  let term_ind = lemma "term_ind'" (build_ind s ops1) @@ prove_ind s ops1 in
+  { eval_reify_inv; seval_sreify_inv; term_ind }

@@ -75,9 +75,9 @@ Inductive expr : kind -> Type :=
 | E_abind {ty} : arg ty -> arg (AT_bind ty)
 
 (** Instantiate an expressions with a renaming. *)
-| E_ren {k} : expr k -> ren -> expr k
+| E_ren {k} : ren -> expr k -> expr k
 (** Instantiate an expressions with a substitution. *)
-| E_subst {k} : expr k -> subst -> expr k
+| E_subst {k} : subst -> expr k -> expr k
 
 with subst :=
 (** Identity substitution. *)
@@ -131,8 +131,8 @@ Section Evaluation.
   eeval (E_abase b x) := O.E_abase b x ;
   eeval (E_aterm t) := O.E_aterm (eeval t) ;
   eeval (E_abind a) := O.E_abind (eeval a) ;
-  eeval (E_ren e r) := O.rename (eeval e) (reval r) ;
-  eeval (E_subst e s) := O.substitute (eeval e) (seval s) ;
+  eeval (E_ren r e) := O.rename (reval r) (eeval e) ;
+  eeval (E_subst s e) := O.substitute (seval s) (eeval e) ;
   eeval (E_mvar x) := e.(assign_term) x
   
   with seval : subst -> O.subst :=
@@ -240,13 +240,9 @@ Ltac2 add_subst_mvar (t : constr) (e : env) : int * env :=
      ; term_mvars := e.(term_mvars)
      ; subst_mvars := subst_mvars }.
 
-(* TODO: handle renamings directly applied to naturals. *)
 Ltac2 rec reify_nat (e : env) (t : constr) : env * constr := 
   lazy_match! t with 
   | 0 => e, constr:(Q_zero)
-  | S ?i =>
-    let (e, i) := reify_nat e i in 
-    e, constr:(Q_rapply R_shift $i)
   | ?r ?i =>
     let (e, r) := reify_ren e r in
     let (e, i) := reify_nat e i in
@@ -260,6 +256,7 @@ Ltac2 rec reify_nat (e : env) (t : constr) : env * constr :=
 with reify_ren (e : env) (t : constr) : env * constr :=
   lazy_match! t with 
   | rid => e, constr:(R_id)
+  | S => e, constr:(R_shift)
   | rshift => e, constr:(R_shift) 
   | rcons ?i ?r =>
     let (e, i) := reify_nat e i in 
@@ -295,14 +292,14 @@ Ltac2 rec reify_expr (e : env) (t : constr) : env * constr :=
   | O.E_abind ?a =>
     let (e, a) := reify_expr e a in
     e, constr:(E_abind $a)
-  | O.rename ?t ?r =>
-    let (e, t) := reify_expr e t in
+  | O.rename ?r ?t =>
     let (e, r) := reify_ren e r in
-    e, constr:(E_ren $t $r)
-  | O.substitute ?t ?s =>
     let (e, t) := reify_expr e t in
+    e, constr:(E_ren $r $t)
+  | O.substitute ?s ?t =>
     let (e, s) := reify_subst e s in
-    e, constr:(E_subst $t $s)
+    let (e, t) := reify_expr e t in
+    e, constr:(E_subst $s $t)
   | ?t => 
     let (idx, e) := add_term_mvar t e in
     let idx := nat_of_int idx in
