@@ -48,11 +48,13 @@ Print eval.*)
 About seval_sreify_inv.
 About term_ind'.*)
 
-(*About eval_rename.
+About eval_rename.
 About seval_rscomp.
 About seval_srcomp.
 About seval_scons.
-About seval_up_subst.*)
+About seval_up_subst.
+About eval_substitute.
+About seval_scomp.
 
 (*Lemma eval_substitute (s : T.O.subst) (t : T.O.expr Kt) : 
   eval Kt (T.O.substitute s t) = substitute (seval s) (eval Kt t).
