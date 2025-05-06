@@ -6,7 +6,10 @@ let main () =
     { n_ctors = 2
     ; base_types = [| EConstr.to_constr Evd.empty @@ Lazy.force Consts.string |]
     ; ctor_names = [| "App"; "Lam" |]
-    ; ctor_types = [| [ AT_term; AT_term ]; [ AT_base 0; AT_bind (AT_bind AT_term) ] |]
+    ; ctor_types =
+        [| [ AT_term; AT_term ]
+         ; [ AT_base 0; AT_bind (AT_base 0); AT_bind AT_term; AT_bind (AT_bind AT_term) ]
+        |]
     }
   in
   let ops0 = Gen_operations.generate s in
