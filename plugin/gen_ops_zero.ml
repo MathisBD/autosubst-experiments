@@ -145,36 +145,28 @@ struct
     lambda "s2" (mkconst subst) @@ fun s2 ->
     lambda "i" (Lazy.force Consts.nat) @@ fun i ->
     ret @@ apps (mkconst substitute) [| mkVar s2; app (mkVar s1) (mkVar i) |]
-
-  (**************************************************************************************)
-  (** *** Put everything together. *)
-  (**************************************************************************************)
-
-  (** Generate the term inductive, along with renaming and substitution functions. *)
-  let generate () : ops_zero =
-    let term = monad_run @@ build_term () in
-    let rename = def "rename" ~kind:Decls.Fixpoint @@ build_rename term in
-    let subst = def "subst" @@ build_subst term in
-    let srcomp = def "srcomp" @@ build_srcomp term subst rename in
-    let rscomp = def "rscomp" @@ build_rscomp term subst in
-    let sid = def "sid" @@ build_sid term subst in
-    let sshift = def "sshift" @@ build_sshift term subst in
-    let scons = def "scons" @@ build_scons term subst in
-    let up_subst = def "up_subst" @@ build_up_subst term subst scons srcomp in
-    let substitute =
-      def "substitute" ~kind:Decls.Fixpoint @@ build_substitute term subst up_subst
-    in
-    let scomp = def "scomp" @@ build_scomp term subst substitute in
-    { term
-    ; rename
-    ; subst
-    ; srcomp
-    ; rscomp
-    ; sid
-    ; sshift
-    ; scons
-    ; up_subst
-    ; substitute
-    ; scomp
-    }
 end
+
+(**************************************************************************************)
+(** *** Put everything together. *)
+(**************************************************************************************)
+
+(** Generate the term inductive, along with renaming and substitution functions. *)
+let generate (s : signature) : ops_zero =
+  let module M = Make (struct
+    let sign = s
+  end) in
+  let term = monad_run @@ M.build_term () in
+  let rename = def "rename" ~kind:Decls.Fixpoint @@ M.build_rename term in
+  let subst = def "subst" @@ M.build_subst term in
+  let srcomp = def "srcomp" @@ M.build_srcomp term subst rename in
+  let rscomp = def "rscomp" @@ M.build_rscomp term subst in
+  let sid = def "sid" @@ M.build_sid term subst in
+  let sshift = def "sshift" @@ M.build_sshift term subst in
+  let scons = def "scons" @@ M.build_scons term subst in
+  let up_subst = def "up_subst" @@ M.build_up_subst term subst scons srcomp in
+  let substitute =
+    def "substitute" ~kind:Decls.Fixpoint @@ M.build_substitute term subst up_subst
+  in
+  let scomp = def "scomp" @@ M.build_scomp term subst substitute in
+  { term; rename; subst; srcomp; rscomp; sid; sshift; scons; up_subst; substitute; scomp }

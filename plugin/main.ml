@@ -1,60 +1,5 @@
 open Prelude
 
-(** Given a signature, generate all relevant definitions and lemmas (i.e. add them to the
-    global environment), and return the names of the generated operations. *)
-let generate_operations (s : signature) : ops_all =
-  (* Level zero operations. *)
-  let module Ops_zero = Gen_ops_zero.Make (struct
-    let sign = s
-  end) in
-  let ops0 = Ops_zero.generate () in
-  (* Level one operations. *)
-  let module Ops_one = Gen_ops_one.Make (struct
-    let sign = s
-    let ops0 = ops0
-  end) in
-  let ops1 = Ops_one.generate () in
-  (* Reification and evaluation functions. *)
-  let module Ops_reify_eval = Gen_ops_reify_eval.Make (struct
-    let sign = s
-    let ops0 = ops0
-    let ops1 = ops1
-  end) in
-  let re = Ops_reify_eval.generate () in
-  (* Congruence lemmas. *)
-  let module Ops_congr = Gen_ops_congr.Make (struct
-    let sign = s
-    let ops0 = ops0
-  end) in
-  let congr = Ops_congr.generate () in
-  (* Bijection lemmas. *)
-  let module Ops_bijection = Gen_ops_bijection.Make (struct
-    let sign = s
-    let ops0 = ops0
-    let ops1 = ops1
-    let congr = congr
-    let re = re
-  end) in
-  let bij = Ops_bijection.generate () in
-  (* Push-eval lemmas. *)
-  let module Ops_push_eval = Gen_ops_push_eval.Make (struct
-    let sign = s
-    let ops0 = ops0
-    let ops1 = ops1
-    let congr = congr
-    let re = re
-    let bij = bij
-  end) in
-  (* Gather all constant & inductive names. *)
-  let pe = Ops_push_eval.generate () in
-  { ops_ops0 = ops0
-  ; ops_ops1 = ops1
-  ; ops_re = re
-  ; ops_congr = congr
-  ; ops_bij = bij
-  ; ops_pe = pe
-  }
-
 (** A testing signature.*)
 let build_signature () : signature =
   { n_ctors = 2
@@ -126,8 +71,26 @@ let update_saved_ops : ops_all option -> Libobject.obj =
     ; classify_function = (fun _ -> Keep)
     }
 
+(** Given a signature, generate all relevant definitions and lemmas (i.e. add them to the
+    global environment), and return the names of the generated operations. *)
+let generate_operations (s : signature) : ops_all =
+  let ops0 = Gen_ops_zero.generate s in
+  let ops1 = Gen_ops_one.generate s ops0 in
+  let re = Gen_ops_reify_eval.generate s ops0 ops1 in
+  let congr = Gen_ops_congr.generate s ops0 in
+  let bij = Gen_ops_bijection.generate s ops0 ops1 re congr in
+  let pe = Gen_ops_push_eval.generate s ops0 ops1 re congr bij in
+  { ops_ops0 = ops0
+  ; ops_ops1 = ops1
+  ; ops_re = re
+  ; ops_congr = congr
+  ; ops_bij = bij
+  ; ops_pe = pe
+  }
+
 (** Main entry point for the plugin. *)
 let main () =
+  (* We use a testing signature (for the moment). *)
   let s = build_signature () in
   (* Generate the operations. *)
   let ops = generate_operations s in

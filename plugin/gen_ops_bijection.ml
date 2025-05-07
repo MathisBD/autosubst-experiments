@@ -233,20 +233,28 @@ let build_sreify_seval (ops0 : ops_zero) (ops1 : ops_one) (re : ops_reify_eval) 
         end
       ]
     >> print_open_goals ()
-
-  (**************************************************************************************)
-  (** *** Put everything together. *)
-  (**************************************************************************************)
-
-  (** Generate the bijection proof and the custom induction principle. *)
-  let generate () : ops_bijection =
-    let eval_reify_inv =
-      lemma "eval_reify_inv" (build_eval_reify ()) @@ prove_eval_reify ()
-    in
-    let seval_sreify_inv =
-      lemma "seval_sreify_inv" (build_seval_sreify ())
-      @@ prove_seval_sreify eval_reify_inv
-    in
-    let term_ind = lemma "term_ind'" (build_ind ()) @@ prove_ind () in
-    { eval_reify_inv; seval_sreify_inv; term_ind }
 end
+
+(**************************************************************************************)
+(** *** Put everything together. *)
+(**************************************************************************************)
+
+(** Generate the bijection proof and the custom induction principle. *)
+let generate (s : signature) (ops0 : ops_zero) (ops1 : ops_one) (re : ops_reify_eval)
+    (congr : ops_congr) : ops_bijection =
+  let module M = Make (struct
+    let sign = s
+    let ops0 = ops0
+    let ops1 = ops1
+    let re = re
+    let congr = congr
+  end) in
+  let eval_reify_inv =
+    lemma "eval_reify_inv" (M.build_eval_reify ()) @@ M.prove_eval_reify ()
+  in
+  let seval_sreify_inv =
+    lemma "seval_sreify_inv" (M.build_seval_sreify ())
+    @@ M.prove_seval_sreify eval_reify_inv
+  in
+  let term_ind = lemma "term_ind'" (M.build_ind ()) @@ M.prove_ind () in
+  { eval_reify_inv; seval_sreify_inv; term_ind }

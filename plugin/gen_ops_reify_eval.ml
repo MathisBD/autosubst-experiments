@@ -179,20 +179,25 @@ struct
     lambda "i" (Lazy.force Consts.nat) @@ fun i ->
     let si = app (EConstr.mkVar s) (EConstr.mkVar i) in
     ret @@ apps (mkconst eval) [| app (Lazy.force Consts.k_t) @@ mkind P.ops1.base; si |]
-
-  (**************************************************************************************)
-  (** *** Put everything together. *)
-  (**************************************************************************************)
-
-  (** Generate the reification and evaluation functions. *)
-  let generate () : ops_reify_eval =
-    let reify = def "reify" ~kind:Decls.Fixpoint @@ build_reify () in
-    let sreify = def "sreify" @@ build_sreify reify in
-    let eval_arg = def "eval_arg" ~kind:Decls.Fixpoint @@ build_eval_arg () in
-    let eval_args = def "eval_args" ~kind:Decls.Fixpoint @@ build_eval_args eval_arg in
-    let eval_kind = def "eval_kind" @@ build_eval_kind eval_arg eval_args in
-    let eval_ctor = def "eval_ctor" @@ build_eval_ctor eval_args in
-    let eval = def "eval" @@ build_eval eval_kind eval_ctor in
-    let seval = def "seval" @@ build_seval eval in
-    { reify; sreify; eval_arg; eval_args; eval_kind; eval_ctor; eval; seval }
 end
+
+(**************************************************************************************)
+(** *** Put everything together. *)
+(**************************************************************************************)
+
+(** Generate the reification and evaluation functions. *)
+let generate (s : signature) (ops0 : ops_zero) (ops1 : ops_one) : ops_reify_eval =
+  let module M = Make (struct
+    let sign = s
+    let ops0 = ops0
+    let ops1 = ops1
+  end) in
+  let reify = def "reify" ~kind:Decls.Fixpoint @@ M.build_reify () in
+  let sreify = def "sreify" @@ M.build_sreify reify in
+  let eval_arg = def "eval_arg" ~kind:Decls.Fixpoint @@ M.build_eval_arg () in
+  let eval_args = def "eval_args" ~kind:Decls.Fixpoint @@ M.build_eval_args eval_arg in
+  let eval_kind = def "eval_kind" @@ M.build_eval_kind eval_arg eval_args in
+  let eval_ctor = def "eval_ctor" @@ M.build_eval_ctor eval_args in
+  let eval = def "eval" @@ M.build_eval eval_kind eval_ctor in
+  let seval = def "seval" @@ M.build_seval eval in
+  { reify; sreify; eval_arg; eval_args; eval_kind; eval_ctor; eval; seval }

@@ -78,58 +78,62 @@ struct
       | _ -> Log.error "gen_signature: unexpected module path for [S]."
     in
     (mod_S, qualid_S)
-
-  (** Generate the level one signature. *)
-  let generate () : ops_one =
-    (* Build the signature. *)
-    let base = monad_run @@ build_base () in
-    let eval_base = def "eval_base" @@ build_eval_base base in
-    let ctor = monad_run @@ build_ctor () in
-    let ctor_type = def "ctor_type" @@ build_ctor_type ctor base in
-    let mod_S, qualid_S = build_module_S base eval_base ctor ctor_type in
-    (* Declare [Module T := LevelTwoSimp.Make (S)]. *)
-    let qualid_Make = mk_qualid [ "Prototype"; "LevelTwoSimp" ] "Make" in
-    let mod_T =
-      Declaremods.declare_module (Names.Id.of_string_soft "T") [] (Declaremods.Check [])
-        [ ( CAst.make
-            @@ Constrexpr.CMapply (CAst.make @@ Constrexpr.CMident qualid_Make, qualid_S)
-          , Declaremods.DefaultInline )
-        ]
-    in
-    let mod_O = Names.ModPath.MPdot (mod_T, Names.Label.make "O") in
-    (* Build the names of level one constants. *)
-    let const name =
-      Names.Constant.make1 @@ Names.KerName.make mod_O @@ Names.Label.make name
-    in
-    let expr =
-      (Names.MutInd.make1 @@ Names.KerName.make mod_O @@ Names.Label.make "expr", 0)
-    in
-    { base
-    ; eval_base
-    ; ctor
-    ; ctor_type
-    ; expr
-    ; e_var = (expr, 1)
-    ; e_ctor = (expr, 2)
-    ; e_al_nil = (expr, 3)
-    ; e_al_cons = (expr, 4)
-    ; e_abase = (expr, 5)
-    ; e_aterm = (expr, 6)
-    ; e_abind = (expr, 7)
-    ; subst = const "subst"
-    ; esize = const "esize"
-    ; inv_Kt = const "inv_Kt"
-    ; inv_Kal_nil = const "inv_Kal_nil"
-    ; inv_Kal_cons = const "inv_Kal_cons"
-    ; inv_Ka_base = const "inv_Ka_base"
-    ; inv_Ka_term = const "inv_Ka_term"
-    ; inv_Ka_bind = const "inv_Ka_bind"
-    ; rename = const "rename"
-    ; rscomp = const "rscomp"
-    ; srcomp = const "srcomp"
-    ; scons = const "scons"
-    ; up_subst = const "up_subst"
-    ; substitute = const "substitute"
-    ; scomp = const "scomp"
-    }
 end
+
+(** Generate the level one signature. *)
+let generate (s : signature) (ops0 : ops_zero) : ops_one =
+  let module M = Make (struct
+    let sign = s
+    let ops0 = ops0
+  end) in
+  (* Build the signature. *)
+  let base = monad_run @@ M.build_base () in
+  let eval_base = def "eval_base" @@ M.build_eval_base base in
+  let ctor = monad_run @@ M.build_ctor () in
+  let ctor_type = def "ctor_type" @@ M.build_ctor_type ctor base in
+  let mod_S, qualid_S = M.build_module_S base eval_base ctor ctor_type in
+  (* Declare [Module T := LevelTwoSimp.Make (S)]. *)
+  let qualid_Make = mk_qualid [ "Prototype"; "LevelTwoSimp" ] "Make" in
+  let mod_T =
+    Declaremods.declare_module (Names.Id.of_string_soft "T") [] (Declaremods.Check [])
+      [ ( CAst.make
+          @@ Constrexpr.CMapply (CAst.make @@ Constrexpr.CMident qualid_Make, qualid_S)
+        , Declaremods.DefaultInline )
+      ]
+  in
+  let mod_O = Names.ModPath.MPdot (mod_T, Names.Label.make "O") in
+  (* Build the names of level one constants. *)
+  let const name =
+    Names.Constant.make1 @@ Names.KerName.make mod_O @@ Names.Label.make name
+  in
+  let expr =
+    (Names.MutInd.make1 @@ Names.KerName.make mod_O @@ Names.Label.make "expr", 0)
+  in
+  { base
+  ; eval_base
+  ; ctor
+  ; ctor_type
+  ; expr
+  ; e_var = (expr, 1)
+  ; e_ctor = (expr, 2)
+  ; e_al_nil = (expr, 3)
+  ; e_al_cons = (expr, 4)
+  ; e_abase = (expr, 5)
+  ; e_aterm = (expr, 6)
+  ; e_abind = (expr, 7)
+  ; subst = const "subst"
+  ; esize = const "esize"
+  ; inv_Kt = const "inv_Kt"
+  ; inv_Kal_nil = const "inv_Kal_nil"
+  ; inv_Kal_cons = const "inv_Kal_cons"
+  ; inv_Ka_base = const "inv_Ka_base"
+  ; inv_Ka_term = const "inv_Ka_term"
+  ; inv_Ka_bind = const "inv_Ka_bind"
+  ; rename = const "rename"
+  ; rscomp = const "rscomp"
+  ; srcomp = const "srcomp"
+  ; scons = const "scons"
+  ; up_subst = const "up_subst"
+  ; substitute = const "substitute"
+  ; scomp = const "scomp"
+  }

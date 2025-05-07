@@ -289,41 +289,50 @@ struct
     (* Rewrite with [eval_substitute]. *)
     let* _ = rewrite LeftToRight @@ Names.GlobRef.ConstRef eval_substitute in
     Tactics.reflexivity
-
-  (**************************************************************************************)
-  (** *** Put everything together. *)
-  (**************************************************************************************)
-
-  let generate () : ops_push_eval =
-    let eval_rename =
-      lemma "eval_rename" (build_eval_rename ()) @@ prove_eval_rename ()
-    in
-    let seval_rscomp =
-      lemma "seval_rscomp" (build_seval_rscomp ()) @@ prove_seval_rscomp ()
-    in
-    let seval_srcomp =
-      lemma "seval_srcomp" (build_seval_srcomp ()) @@ prove_seval_srcomp eval_rename
-    in
-    let seval_scons =
-      lemma "seval_scons" (build_seval_scons ()) @@ prove_seval_scons ()
-    in
-    let seval_up_subst =
-      lemma "seval_up_subst" (build_seval_up_subst ())
-      @@ prove_seval_up_subst seval_srcomp seval_scons
-    in
-    let eval_substitute =
-      lemma "eval_substitute" (build_eval_substitute ())
-      @@ prove_eval_substitute seval_up_subst
-    in
-    let seval_scomp =
-      lemma "seval_scomp" (build_seval_scomp ()) @@ prove_seval_scomp eval_substitute
-    in
-    { eval_rename
-    ; eval_substitute
-    ; seval_rscomp
-    ; seval_srcomp
-    ; seval_scomp
-    ; seval_scons
-    ; seval_up_subst
-    }
 end
+
+(**************************************************************************************)
+(** *** Put everything together. *)
+(**************************************************************************************)
+
+let generate (s : signature) (ops0 : ops_zero) (ops1 : ops_one) (re : ops_reify_eval)
+    (congr : ops_congr) (bij : ops_bijection) : ops_push_eval =
+  let module M = Make (struct
+    let sign = s
+    let ops0 = ops0
+    let ops1 = ops1
+    let re = re
+    let congr = congr
+    let bij = bij
+  end) in
+  let eval_rename =
+    lemma "eval_rename" (M.build_eval_rename ()) @@ M.prove_eval_rename ()
+  in
+  let seval_rscomp =
+    lemma "seval_rscomp" (M.build_seval_rscomp ()) @@ M.prove_seval_rscomp ()
+  in
+  let seval_srcomp =
+    lemma "seval_srcomp" (M.build_seval_srcomp ()) @@ M.prove_seval_srcomp eval_rename
+  in
+  let seval_scons =
+    lemma "seval_scons" (M.build_seval_scons ()) @@ M.prove_seval_scons ()
+  in
+  let seval_up_subst =
+    lemma "seval_up_subst" (M.build_seval_up_subst ())
+    @@ M.prove_seval_up_subst seval_srcomp seval_scons
+  in
+  let eval_substitute =
+    lemma "eval_substitute" (M.build_eval_substitute ())
+    @@ M.prove_eval_substitute seval_up_subst
+  in
+  let seval_scomp =
+    lemma "seval_scomp" (M.build_seval_scomp ()) @@ M.prove_seval_scomp eval_substitute
+  in
+  { eval_rename
+  ; eval_substitute
+  ; seval_rscomp
+  ; seval_srcomp
+  ; seval_scomp
+  ; seval_scons
+  ; seval_up_subst
+  }

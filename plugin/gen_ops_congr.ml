@@ -343,48 +343,52 @@ struct
     (* Apply [congr_substitute]. *)
     let* _ = Tactics.apply (mkconst congr_substitute) in
     auto ()
-
-  (**************************************************************************************)
-  (** *** Put everything together. *)
-  (**************************************************************************************)
-
-  (** Generate all the congruence lemmas. *)
-  let generate () : ops_congr =
-    let congr_ctors =
-      Array.init P.sign.n_ctors @@ fun i ->
-      let name = String.concat "_" [ "congr"; P.sign.ctor_names.(i) ] in
-      lemma name (build_congr_ctor i) @@ prove_congr_ctor i
-    in
-    let congr_rename =
-      lemma "congr_rename" (build_congr_rename ()) @@ prove_congr_rename congr_ctors
-    in
-    let congr_rscomp =
-      lemma "congr_rscomp" (build_congr_rscomp ()) @@ prove_congr_rscomp ()
-    in
-    let congr_srcomp =
-      lemma "congr_srcomp" (build_congr_srcomp ()) @@ prove_congr_srcomp congr_rename
-    in
-    let congr_scons =
-      lemma "congr_scons" (build_congr_scons ()) @@ prove_congr_scons ()
-    in
-    let congr_up_subst =
-      lemma "congr_up_subst" (build_congr_up_subst ())
-      @@ prove_congr_up_subst congr_scons congr_srcomp
-    in
-    let congr_substitute =
-      lemma "congr_substitute" (build_congr_substitute ())
-      @@ prove_congr_substitute congr_up_subst congr_ctors
-    in
-    let congr_scomp =
-      lemma "congr_scomp" (build_congr_scomp ()) @@ prove_congr_scomp congr_substitute
-    in
-    { congr_ctors
-    ; congr_rename
-    ; congr_substitute
-    ; congr_rscomp
-    ; congr_srcomp
-    ; congr_scomp
-    ; congr_scons
-    ; congr_up_subst
-    }
 end
+
+(**************************************************************************************)
+(** *** Put everything together. *)
+(**************************************************************************************)
+
+(** Generate all the congruence lemmas. *)
+let generate (s : signature) (ops0 : ops_zero) : ops_congr =
+  let module M = Make (struct
+    let sign = s
+    let ops0 = ops0
+  end) in
+  let congr_ctors =
+    Array.init s.n_ctors @@ fun i ->
+    let name = String.concat "_" [ "congr"; s.ctor_names.(i) ] in
+    lemma name (M.build_congr_ctor i) @@ M.prove_congr_ctor i
+  in
+  let congr_rename =
+    lemma "congr_rename" (M.build_congr_rename ()) @@ M.prove_congr_rename congr_ctors
+  in
+  let congr_rscomp =
+    lemma "congr_rscomp" (M.build_congr_rscomp ()) @@ M.prove_congr_rscomp ()
+  in
+  let congr_srcomp =
+    lemma "congr_srcomp" (M.build_congr_srcomp ()) @@ M.prove_congr_srcomp congr_rename
+  in
+  let congr_scons =
+    lemma "congr_scons" (M.build_congr_scons ()) @@ M.prove_congr_scons ()
+  in
+  let congr_up_subst =
+    lemma "congr_up_subst" (M.build_congr_up_subst ())
+    @@ M.prove_congr_up_subst congr_scons congr_srcomp
+  in
+  let congr_substitute =
+    lemma "congr_substitute" (M.build_congr_substitute ())
+    @@ M.prove_congr_substitute congr_up_subst congr_ctors
+  in
+  let congr_scomp =
+    lemma "congr_scomp" (M.build_congr_scomp ()) @@ M.prove_congr_scomp congr_substitute
+  in
+  { congr_ctors
+  ; congr_rename
+  ; congr_substitute
+  ; congr_rscomp
+  ; congr_srcomp
+  ; congr_scomp
+  ; congr_scons
+  ; congr_up_subst
+  }
