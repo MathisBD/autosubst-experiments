@@ -5,7 +5,8 @@ From Prototype Require Constants LevelOne LevelTwo LevelTwoIrred LevelTwoSimp.
 
 Declare ML Module "autosubst-experiments.plugin".
 
-Time Test.
+Test.
+Reify (substitute sshift (Var 0)).
 
 (*Print term.
 Print rename.
@@ -48,37 +49,10 @@ Print eval.*)
 About seval_sreify_inv.
 About term_ind'.*)
 
-About eval_rename.
+(*About eval_rename.
 About seval_rscomp.
 About seval_srcomp.
 About seval_scons.
 About seval_up_subst.
 About eval_substitute.
-About seval_scomp.
-
-(*Lemma eval_substitute (s : T.O.subst) (t : T.O.expr Kt) : 
-  eval Kt (T.O.substitute s t) = substitute (seval s) (eval Kt t).
-Proof.
-revert s. pattern t. apply term_ind' ; clear t.
-- intros i s. reflexivity.
-- intros t1 IH1 t2 IH2 s. repeat (simp substitute ; simpl). 
-  apply congr_App.
-  + auto.
-  + auto. 
-- intros str t IH s. repeat (simp substitute ; simpl). 
-  apply congr_Lam.
-  + reflexivity.
-  + rewrite IH. apply congr_substitute ; [|reflexivity].
-    repeat (rewrite seval_up_subst ; apply congr_up_subst).
-    reflexivity.
-Qed.*)
-
-
-(*Lemma eval_rename (r : ren) (t : T.O.expr Kt) :
-  eval Kt (T.O.rename r t) = rename r (eval Kt t).
-Proof.
-revert r. pattern t. apply term_ind'.
-- intros i r. reflexivity.
-- intros t1 IH1 t2 IH2 r. apply congr_App ; auto. 
-- intros str t1 IH1 r. apply congr_Lam ; auto. 
-Qed.*)
+About seval_scomp.*)

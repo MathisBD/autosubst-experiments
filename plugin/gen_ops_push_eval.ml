@@ -294,11 +294,11 @@ struct
   (** *** Put everything together. *)
   (**************************************************************************************)
 
-  let generate () : unit =
+  let generate () : ops_push_eval =
     let eval_rename =
       lemma "eval_rename" (build_eval_rename ()) @@ prove_eval_rename ()
     in
-    let _seval_rscomp =
+    let seval_rscomp =
       lemma "seval_rscomp" (build_seval_rscomp ()) @@ prove_seval_rscomp ()
     in
     let seval_srcomp =
@@ -315,8 +315,15 @@ struct
       lemma "eval_substitute" (build_eval_substitute ())
       @@ prove_eval_substitute seval_up_subst
     in
-    let _seval_scomp =
+    let seval_scomp =
       lemma "seval_scomp" (build_seval_scomp ()) @@ prove_seval_scomp eval_substitute
     in
-    ()
+    { eval_rename
+    ; eval_substitute
+    ; seval_rscomp
+    ; seval_srcomp
+    ; seval_scomp
+    ; seval_scons
+    ; seval_up_subst
+    }
 end

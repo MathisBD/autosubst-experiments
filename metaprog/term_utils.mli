@@ -4,8 +4,11 @@
 open Monad
 
 (**************************************************************************************)
-(** *** Miscellaneous. *)
+(** *** Typing. *)
 (**************************************************************************************)
+
+(** [pretype t] turns a [Contrexpr.constr_expr] into an [EConstr.t] using pretyping. *)
+val pretype : Constrexpr.constr_expr -> EConstr.t m
 
 (** [typecheck t] checks that [t] is well-typed and computes the type of [t], using typing
     information to resolve evars in [t]. *)

@@ -1,7 +1,23 @@
 open Monad
 
 (**************************************************************************************)
-(** *** Miscellaneous. *)
+(** *** Typing. *)
+(**************************************************************************************)
+
+let pretype (t : Constrexpr.constr_expr) : EConstr.t m =
+ fun env sigma ->
+  let t = Constrintern.intern_constr env sigma t in
+  let t, ustate = Pretyping.understand env sigma t in
+  (Evd.merge_universe_context sigma ustate, t)
+
+let typecheck (t : EConstr.t) : EConstr.types m =
+ fun env sigma -> Typing.type_of env sigma t
+
+let retype (t : EConstr.t) : EConstr.types m =
+ fun env sigma -> (sigma, Retyping.get_type_of env sigma t)
+
+(**************************************************************************************)
+(** *** Building constants/inductives/constructors. *)
 (**************************************************************************************)
 
 let mk_qualid (dir : string list) (label : string) : Libnames.qualid =
@@ -15,21 +31,6 @@ let mk_kername (dir : string list) (label : string) : Names.KerName.t =
   in
   let label = Names.Label.make label in
   Names.KerName.make dir label
-
-let fresh_ident (id : Names.Id.t) : Names.Id.t m =
-  let* env = get_env in
-  let idset = Environ.ids_of_named_context_val (Environ.named_context_val env) in
-  ret @@ Namegen.next_ident_away id idset
-
-let typecheck (t : EConstr.t) : EConstr.types m =
- fun env sigma -> Typing.type_of env sigma t
-
-let retype (t : EConstr.t) : EConstr.types m =
- fun env sigma -> (sigma, Retyping.get_type_of env sigma t)
-
-(**************************************************************************************)
-(** *** Building constants/inductives/constructors. *)
-(**************************************************************************************)
 
 let mkconst (name : Names.Constant.t) : EConstr.t = EConstr.UnsafeMonomorphic.mkConst name
 let mkind (name : Names.Ind.t) : EConstr.t = EConstr.UnsafeMonomorphic.mkInd name
@@ -70,6 +71,11 @@ let vdef (name : string) (def : EConstr.t) (ty : EConstr.t) : EConstr.rel_declar
       }
     , def
     , ty )
+
+let fresh_ident (id : Names.Id.t) : Names.Id.t m =
+  let* env = get_env in
+  let idset = Environ.ids_of_named_context_val (Environ.named_context_val env) in
+  ret @@ Namegen.next_ident_away id idset
 
 let with_local_decl (decl : EConstr.rel_declaration) (k : Names.Id.t -> 'a m) : 'a m =
   let* id =

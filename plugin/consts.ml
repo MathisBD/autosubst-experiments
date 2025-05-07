@@ -25,7 +25,9 @@ let nil = resolve "autosubst.list.nil"
 let cons = resolve "autosubst.list.cons"
 let string = resolve "autosubst.string.type"
 let eq = resolve "autosubst.eq.type"
+let eq_refl = resolve "autosubst.eq.eq_refl"
 let point_eq = resolve "autosubst.point_eq.type"
+let transitivity = resolve "autosubst.transitivity"
 let measure_induction = resolve "autosubst.measure_induction"
 
 (**************************************************************************************)

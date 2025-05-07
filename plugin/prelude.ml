@@ -37,6 +37,9 @@ let ctor_ty_constr (sign : signature) (tys : arg_ty list) (ind : EConstr.t) : EC
 (** *** References to generated constants. *)
 (**************************************************************************************)
 
+(** We gather the names of generated constants & lemmas in records. Once everything has
+    been generated, we store the names using the [Libobject] API (see [main.ml]). *)
+
 (** Level zero terms, renaming functions, and substitution functions. *)
 type ops_zero =
   { term : Names.Ind.t
@@ -119,12 +122,33 @@ type ops_reify_eval =
   ; seval : Names.Constant.t
   }
 
-(** Bijection between level zero and level one, and custom induction principle on level
-    one terms. *)
+(** Proof of bijection between level zero and level one, and custom induction principle on
+    level one terms. *)
 type ops_bijection =
   { eval_reify_inv : Names.Constant.t
   ; seval_sreify_inv : Names.Constant.t
   ; term_ind : Names.Constant.t
+  }
+
+(** Lemmas which push [eval] inside terms. *)
+type ops_push_eval =
+  { eval_rename : Names.Constant.t
+  ; eval_substitute : Names.Constant.t
+  ; seval_rscomp : Names.Constant.t
+  ; seval_srcomp : Names.Constant.t
+  ; seval_scomp : Names.Constant.t
+  ; seval_scons : Names.Constant.t
+  ; seval_up_subst : Names.Constant.t
+  }
+
+(** All generated operations. *)
+type ops_all =
+  { ops_ops0 : ops_zero
+  ; ops_ops1 : ops_one
+  ; ops_re : ops_reify_eval
+  ; ops_congr : ops_congr
+  ; ops_bij : ops_bijection
+  ; ops_pe : ops_push_eval
   }
 
 (**************************************************************************************)

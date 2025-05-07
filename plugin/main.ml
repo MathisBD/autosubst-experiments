@@ -1,59 +1,8 @@
 open Prelude
 
-(** Main entry point for the plugin. *)
-let main () =
-  let s =
-    { n_ctors = 2
-    ; base_types = [| EConstr.to_constr Evd.empty @@ Lazy.force Consts.string |]
-    ; ctor_names = [| "App"; "Lam" |]
-    ; ctor_types = [| [ AT_term; AT_term ]; [ AT_base 0; AT_bind AT_term ] |]
-    }
-  in
-  (*let term n = List.init n @@ fun _ -> AT_term in
-  let s =
-    { n_ctors = 16
-    ; base_types =
-        [| EConstr.to_constr Evd.empty @@ Lazy.force Consts.nat
-         ; EConstr.to_constr Evd.empty @@ Lazy.force Consts.string
-        |]
-    ; ctor_names =
-        [| "csort"
-         ; "cpi"
-         ; "clam"
-         ; "capp"
-         ; "cunit"
-         ; "ctt"
-         ; "ctop"
-         ; "cstar"
-         ; "cbot"
-         ; "cbot_elim"
-         ; "pvec"
-         ; "pvnil"
-         ; "pvcons"
-         ; "pvec_elim"
-         ; "pvec_elimG"
-         ; "pvec_elimP"
-        |]
-    ; ctor_types =
-        [| [ AT_base 0; AT_base 1 ]
-         ; [ AT_base 0; AT_term; AT_bind AT_term ]
-         ; [ AT_base 0; AT_term; AT_bind AT_term ]
-         ; term 2
-         ; []
-         ; []
-         ; []
-         ; []
-         ; []
-         ; AT_base 1 :: term 2
-         ; term 4
-         ; term 1
-         ; term 3
-         ; term 12
-         ; term 12
-         ; term 10
-        |]
-    }
-  in*)
+(** Given a signature, generate all relevant definitions and lemmas (i.e. add them to the
+    global environment), and return the names of the generated operations. *)
+let generate_operations (s : signature) : ops_all =
   (* Level zero operations. *)
   let module Ops_zero = Gen_ops_zero.Make (struct
     let sign = s
@@ -96,5 +45,112 @@ let main () =
     let re = re
     let bij = bij
   end) in
-  let _ = Ops_push_eval.generate () in
-  ()
+  (* Gather all constant & inductive names. *)
+  let pe = Ops_push_eval.generate () in
+  { ops_ops0 = ops0
+  ; ops_ops1 = ops1
+  ; ops_re = re
+  ; ops_congr = congr
+  ; ops_bij = bij
+  ; ops_pe = pe
+  }
+
+(** A testing signature.*)
+let build_signature () : signature =
+  { n_ctors = 2
+  ; base_types = [| EConstr.to_constr Evd.empty @@ Lazy.force Consts.string |]
+  ; ctor_names = [| "App"; "Lam" |]
+  ; ctor_types = [| [ AT_term; AT_term ]; [ AT_base 0; AT_bind AT_term ] |]
+  }
+
+(*let term n = List.init n @@ fun _ -> AT_term in
+let s =
+  { n_ctors = 16
+  ; base_types =
+      [| EConstr.to_constr Evd.empty @@ Lazy.force Consts.nat
+       ; EConstr.to_constr Evd.empty @@ Lazy.force Consts.string
+      |]
+  ; ctor_names =
+      [| "csort"
+       ; "cpi"
+       ; "clam"
+       ; "capp"
+       ; "cunit"
+       ; "ctt"
+       ; "ctop"
+       ; "cstar"
+       ; "cbot"
+       ; "cbot_elim"
+       ; "pvec"
+       ; "pvnil"
+       ; "pvcons"
+       ; "pvec_elim"
+       ; "pvec_elimG"
+       ; "pvec_elimP"
+      |]
+  ; ctor_types =
+      [| [ AT_base 0; AT_base 1 ]
+       ; [ AT_base 0; AT_term; AT_bind AT_term ]
+       ; [ AT_base 0; AT_term; AT_bind AT_term ]
+       ; term 2
+       ; []
+       ; []
+       ; []
+       ; []
+       ; []
+       ; AT_base 1 :: term 2
+       ; term 4
+       ; term 1
+       ; term 3
+       ; term 12
+       ; term 12
+       ; term 10
+      |]
+  }
+in*)
+
+(** We keep track of the generated operations using the [Libobject] API. The first step is
+    to create a reference using [Summary.ref]. *)
+let saved_ops : ops_all option ref = Summary.ref ~name:"autosubst_saved_ops_summary" None
+
+(** Next we need to declare a [Libobject.obj], which gives us a function
+    [update_saved_ops] to update the contents of [saved_ops]. Accessing the contents of
+    [saved_ops] can be done by simply de-referencing: [!saved_ops].
+
+    It is important that we call [Libobject.declare_object] at the toplevel. *)
+let update_saved_ops : ops_all option -> Libobject.obj =
+  Libobject.declare_object
+    { (Libobject.default_object "autosubst_saved_ops_libobject") with
+      cache_function = (fun v -> saved_ops := v)
+    ; load_function = (fun _ v -> saved_ops := v)
+    ; classify_function = (fun _ -> Keep)
+    }
+
+(** Main entry point for the plugin. *)
+let main () =
+  let s = build_signature () in
+  (* Generate the operations. *)
+  let ops = generate_operations s in
+  (* Save the operations. *)
+  Lib.add_leaf @@ update_saved_ops (Some ops)
+
+let reify (t : Constrexpr.constr_expr) : unit =
+  let s = build_signature () in
+  let ops =
+    match !saved_ops with
+    | None -> Log.error "reify: must generate operations beforehand."
+    | Some ops -> ops
+  in
+  monad_run
+  @@
+  (* Reify. *)
+  let* t = pretype t in
+  let* t', p = Reify.reify_term s ops t in
+  let* _ = typecheck t' in
+  let* p_ty = typecheck p in
+  (* Print. *)
+  let* env = get_env in
+  let* sigma = get_sigma in
+  Log.printf "reify result: %s" (Log.show_econstr env sigma t');
+  Log.printf "type of the proof: %s" (Log.show_econstr env sigma p_ty);
+  ret ()
