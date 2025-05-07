@@ -53,10 +53,6 @@ struct
     @@ mklist (app (Lazy.force Consts.arg_ty) (mkind base))
     @@ List.map on_arg_ty P.sign.ctor_types.(i)
 
-  (**************************************************************************************)
-  (** *** Put everything together. *)
-  (**************************************************************************************)
-
   (** Declare module [S] which contains the signature. *)
   let build_module_S (base : Names.Ind.t) (eval_base : Names.Constant.t)
       (ctor : Names.Ind.t) (ctor_type : Names.Constant.t) :
@@ -79,6 +75,10 @@ struct
     in
     (mod_S, qualid_S)
 end
+
+(**************************************************************************************)
+(** *** Put everything together. *)
+(**************************************************************************************)
 
 (** Generate the level one signature. *)
 let generate (s : signature) (ops0 : ops_zero) : ops_one =
