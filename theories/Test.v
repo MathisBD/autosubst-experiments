@@ -6,7 +6,7 @@ From Prototype Require Constants LevelOne LevelTwo LevelTwoIrred LevelTwoSimp.
 Declare ML Module "autosubst-experiments.plugin".
 
 Test.
-Reify (substitute sshift (Var 0)).
+Reify (substitute (scomp sid (scons (Var 0) sid)) (Var 0)).
 
 (*Print term.
 Print rename.

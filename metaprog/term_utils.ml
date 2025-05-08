@@ -4,6 +4,9 @@ open Monad
 (** *** Typing. *)
 (**************************************************************************************)
 
+let unify ?(pb = Conversion.CONV) (t1 : EConstr.t) (t2 : EConstr.t) : unit m =
+ fun env sigma -> (Unification.w_unify env sigma pb t1 t2, ())
+
 let pretype (t : Constrexpr.constr_expr) : EConstr.t m =
  fun env sigma ->
   let t = Constrintern.intern_constr env sigma t in

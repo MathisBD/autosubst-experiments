@@ -73,13 +73,15 @@ type ops_one =
   ; e_abind : Names.Construct.t
   ; subst : Names.Constant.t
   ; (* Operations on expressions and substitutions. *)
-    rscomp : Names.Constant.t
+    sid : Names.Constant.t
+  ; sshift : Names.Constant.t
+  ; scons : Names.Constant.t
+  ; up_subst : Names.Constant.t
+  ; rscomp : Names.Constant.t
   ; srcomp : Names.Constant.t
   ; scomp : Names.Constant.t
   ; rename : Names.Constant.t
   ; substitute : Names.Constant.t
-  ; scons : Names.Constant.t
-  ; up_subst : Names.Constant.t
   ; (* Other constants. *)
     esize : Names.Constant.t
   ; inv_Kt : Names.Constant.t

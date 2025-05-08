@@ -7,6 +7,11 @@ open Monad
 (** *** Typing. *)
 (**************************************************************************************)
 
+(** [unify ?pb t1 t2] unifies [t1 =?= t2] (if [pb] is [CONV]) or [t1 <=? t2] (if [pb] is
+    [CUMUL]), instantiating evars. Raises an exception if unification fails. By default
+    [pb] is [CONV]. *)
+val unify : ?pb:Conversion.conv_pb -> EConstr.t -> EConstr.t -> unit m
+
 (** [pretype t] turns a [Contrexpr.constr_expr] into an [EConstr.t] using pretyping. *)
 val pretype : Constrexpr.constr_expr -> EConstr.t m
 
