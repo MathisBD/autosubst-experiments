@@ -58,9 +58,9 @@ in*)
     to create a reference using [Summary.ref]. *)
 let saved_ops : ops_all option ref = Summary.ref ~name:"autosubst_saved_ops_summary" None
 
-(** Next we need to declare a [Libobject.obj], which gives us a function
-    [update_saved_ops] to update the contents of [saved_ops]. Accessing the contents of
-    [saved_ops] can be done by simply de-referencing: [!saved_ops].
+(** We declare a [Libobject.obj], which gives us a function [update_saved_ops] to update
+    the contents of [saved_ops]. Accessing the contents of [saved_ops] can be done by
+    simply de-referencing: [!saved_ops].
 
     It is important that we call [Libobject.declare_object] at the toplevel. *)
 let update_saved_ops : ops_all option -> Libobject.obj =

@@ -79,11 +79,23 @@ val with_local_ctx : EConstr.rel_context -> (Names.Id.t list -> 'a m) -> 'a m
 (** *** Building terms. *)
 (**************************************************************************************)
 
+(** [fresh_type] creates a [Type] term with a fresh universe level, and adds the new
+    universe level to the evar map. *)
+val fresh_type : EConstr.t m
+
+(** [fresh_evar ty] creates a fresh evar with type [ty] (if provided). If [ty] is not
+    provided, it creates another fresh evar (of type [Type]) for the type. *)
+val fresh_evar : EConstr.t option -> EConstr.t m
+
 (** [app f x] is a lightweight notation for an application to one argument. *)
 val app : EConstr.t -> EConstr.t -> EConstr.t
 
 (** [apps f xs] is a lightweight notation for an application to several arguments. *)
 val apps : EConstr.t -> EConstr.t array -> EConstr.t
+
+(** [apps_ev f n args] builds the application [f args], inserting [n] evars before the
+    arguments [args]. *)
+val apps_ev : EConstr.t -> int -> EConstr.t array -> EConstr.t m
 
 (** [arrow t1 t2] constructs the non-dependent product [t1 -> t2]. It takes care of
     lifting [t2]. *)
@@ -92,14 +104,6 @@ val arrow : EConstr.types -> EConstr.types -> EConstr.types
 (** [arrows [t1 ; ... , tn] t] constructs the non-dependent product
     [t1 -> ... -> tn -> t]. It takes care of lifting. *)
 val arrows : EConstr.types list -> EConstr.types -> EConstr.types
-
-(** [fresh_type] creates a [Type] term with a fresh universe level, and adds the new
-    universe level to the evar map. *)
-val fresh_type : EConstr.t m
-
-(** [fresh_evar ty] creates a fresh evar with type [ty] (if provided). If [ty] is not
-    provided, it creates another fresh evar (of type [Type]) for the type. *)
-val fresh_evar : EConstr.t option -> EConstr.t m
 
 (** [lambda name ty body] makes a lambda abstraction with the given parameters, in the
     locally nameless style. *)

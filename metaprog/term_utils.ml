@@ -114,11 +114,6 @@ let with_local_ctx (ctx : EConstr.rel_context) (k : Names.Id.t list -> 'a m) : '
 (** *** Building terms. *)
 (**************************************************************************************)
 
-let app f x = EConstr.mkApp (f, [| x |])
-let apps f xs = EConstr.mkApp (f, xs)
-let arrow t1 t2 = EConstr.mkArrowR t1 (EConstr.Vars.lift 1 t2)
-let rec arrows ts t = match ts with [] -> t | t1 :: ts -> arrow t1 (arrows ts t)
-
 let fresh_type : EConstr.t m =
  fun env sigma ->
   let level = UnivGen.fresh_level () in
@@ -133,6 +128,23 @@ let fresh_evar (ty : EConstr.t option) : EConstr.t m =
       let sigma, t = fresh_type env sigma in
       let sigma, ty = Evarutil.new_evar env sigma t in
       Evarutil.new_evar env sigma ty
+
+let app f x = EConstr.mkApp (f, [| x |])
+let apps f xs = EConstr.mkApp (f, xs)
+
+let apps_ev (f : EConstr.t) (n : int) (args : EConstr.t array) : EConstr.t m =
+  let rec mk_evars n evars : EConstr.t list m =
+    if n <= 0
+    then ret evars
+    else
+      let* ev = fresh_evar None in
+      mk_evars (n - 1) (ev :: evars)
+  in
+  let* evars = mk_evars n [] in
+  ret @@ apps f @@ Array.concat [ Array.of_list evars; args ]
+
+let arrow t1 t2 = EConstr.mkArrowR t1 (EConstr.Vars.lift 1 t2)
+let rec arrows ts t = match ts with [] -> t | t1 :: ts -> arrow t1 (arrows ts t)
 
 let lambda name ty mk_body =
   with_local_decl (vass name ty) @@ fun id ->
