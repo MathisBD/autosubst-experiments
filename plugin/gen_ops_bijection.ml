@@ -46,20 +46,17 @@ struct
           ret @@ apps (mkctor P.ops1.e_abase) [| mkctor (P.ops1.base, b + 1); mkVar arg |]
       | AT_term -> ret @@ apps (mkctor P.ops1.e_aterm) [| mkVar arg |]
       | AT_bind ty ->
-          let* ev = fresh_evar None in
           let* arg' = build_arg ty arg in
-          ret @@ apps (mkctor P.ops1.e_abind) [| ev; arg' |]
+          apps_ev (mkctor P.ops1.e_abind) 1 [| arg' |]
     in
     (* Re-build the list of arguments. *)
     let rec build_args (args : (arg_ty * Names.Id.t) list) : EConstr.t m =
       match args with
       | [] -> ret @@ mkctor P.ops1.e_al_nil
       | (ty, arg) :: args ->
-          let* ev1 = fresh_evar None in
-          let* ev2 = fresh_evar None in
           let* rarg = build_arg ty arg in
           let* rargs = build_args args in
-          ret @@ apps (mkctor P.ops1.e_al_cons) [| ev1; ev2; rarg; rargs |]
+          apps_ev (mkctor P.ops1.e_al_cons) 2 [| rarg; rargs |]
     in
     (* Build the recursive hypothesis on argument [arg] with arg type [ty].
      Base types ([AT_base]) don't give rise to a hypothesis. *)

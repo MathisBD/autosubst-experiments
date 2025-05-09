@@ -13,8 +13,14 @@ let pretype (t : Constrexpr.constr_expr) : EConstr.t m =
   let t, ustate = Pretyping.understand env sigma t in
   (Evd.merge_universe_context sigma ustate, t)
 
-let typecheck (t : EConstr.t) : EConstr.types m =
- fun env sigma -> Typing.type_of env sigma t
+let typecheck (t : EConstr.t) (expected_ty : EConstr.t option) : EConstr.types m =
+ fun env sigma ->
+  let sigma, actual_ty = Typing.type_of env sigma t in
+  match expected_ty with
+  | None -> (sigma, actual_ty)
+  | Some expected_ty ->
+      let sigma = Unification.w_unify env sigma Conversion.CUMUL actual_ty expected_ty in
+      (sigma, actual_ty)
 
 let retype (t : EConstr.t) : EConstr.types m =
  fun env sigma -> (sigma, Retyping.get_type_of env sigma t)
@@ -276,8 +282,10 @@ let case (scrutinee : EConstr.t)
 let declare_def (kind : Decls.definition_object_kind) (name : string)
     ?(ty : EConstr.t option) (body : EConstr.t) : Names.Constant.t m =
   (* Typecheck to resolve evars. *)
-  let* _ = typecheck body in
-  let* _ = match ty with None -> ret () | Some ty -> monad_ignore @@ typecheck ty in
+  let* _ = typecheck body None in
+  let* _ =
+    match ty with None -> ret () | Some ty -> monad_ignore @@ typecheck ty None
+  in
   (* Constant info. *)
   let info =
     Declare.Info.make ~kind:(Decls.IsDefinition kind)
@@ -302,7 +310,7 @@ let declare_def (kind : Decls.definition_object_kind) (name : string)
 let declare_theorem (kind : Decls.theorem_kind) (name : string) (stmt : EConstr.t)
     (tac : unit Proofview.tactic) : Names.Constant.t m =
   (* Typecheck to solve evars. *)
-  let* _ = typecheck stmt in
+  let* _ = typecheck stmt None in
   (* Build the proof. *)
   let* env = get_env in
   let* sigma = get_sigma in
@@ -315,7 +323,7 @@ let declare_theorem (kind : Decls.theorem_kind) (name : string) (stmt : EConstr.
   let proof, _, _ = Proof.run_tactic env tac proof in
   let body = List.hd @@ Proof.partial_proof proof in
   (* Typecheck to solve evars and get universe constraints. *)
-  let* _ = typecheck body in
+  let* _ = typecheck body None in
   (* Constant info. *)
   let info =
     Declare.Info.make ~kind:(Decls.IsProof kind)
@@ -336,12 +344,12 @@ let declare_ind (name : string) (arity : EConstr.t) (ctor_names : string list)
     (ctor_types : (Names.Id.t -> EConstr.t m) list) : Names.Ind.t m =
   let open Entries in
   (* Typecheck to solve evars. *)
-  let* _ = typecheck arity in
+  let* _ = typecheck arity None in
   (* Build the constructor types. *)
   let build_ctor_type (mk_ty : Names.Id.t -> EConstr.t m) : Constr.t m =
     with_local_decl (vass name arity) @@ fun ind ->
     let* ty = mk_ty ind in
-    let* _ = typecheck ty in
+    let* _ = typecheck ty None in
     let* sigma = get_sigma in
     ret @@ EConstr.to_constr sigma @@ EConstr.Vars.subst_var sigma ind ty
   in

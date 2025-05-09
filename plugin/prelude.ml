@@ -157,6 +157,24 @@ type ops_all =
 (** *** Utility functions. *)
 (**************************************************************************************)
 
+(** [is_const sigma cname t] checks if [t] is a constant with name [cname]. *)
+let is_const (sigma : Evd.evar_map) (c : Names.Constant.t) (t : EConstr.t) : bool =
+  match EConstr.kind sigma t with
+  | Constr.Const (c', _) when Names.Constant.UserOrd.equal c c' -> true
+  | _ -> false
+
+(** [is_ind sigma iname t] checks if [t] is an inductive with name [iname]. *)
+let is_ind (sigma : Evd.evar_map) (i : Names.Ind.t) (t : EConstr.t) : bool =
+  match EConstr.kind sigma t with
+  | Constr.Ind (i', _) when Names.Ind.UserOrd.equal i i' -> true
+  | _ -> false
+
+(** [is_ctor sigma cname t] checks if [t] is a constructor with name [cname]. *)
+let is_ctor (sigma : Evd.evar_map) (c : Names.Construct.t) (t : EConstr.t) : bool =
+  match EConstr.kind sigma t with
+  | Constr.Construct (c', _) when Names.Construct.UserOrd.equal c c' -> true
+  | _ -> false
+
 (** Helper function to declare a definition. *)
 let def (name : string) ?(kind = Decls.Definition) (mk_body : EConstr.t m) :
     Names.Constant.t =
@@ -174,3 +192,38 @@ let lemma (name : string) (mk_stmt : EConstr.t m) (tac : unit Proofview.tactic) 
       let* stmt = mk_stmt in
       declare_theorem Decls.Lemma name stmt tac
     end
+
+(**************************************************************************************)
+(** *** Pattern matching utilities. *)
+(**************************************************************************************)
+
+(** The reification and evaluation machinery needs to pattern match on terms. We develop
+    small pattern matching utilities to deal with this. *)
+
+(** A pattern ['vars patt] is a function which takes a term (an [EConstr.t]) and either:
+    - succeeds and extracts a set of variables of type ['vars].
+    - fails and returns [None]. *)
+type 'vars patt = EConstr.t -> 'vars option m
+
+(** A branch [('vars, 'res) branch] is a function which takes a set of extracted variables
+    of type ['vars] and returns a result of type ['res]. *)
+type ('vars, 'res) branch = 'vars -> 'res m
+
+(** A case ['res case] is a pair of a pattern and a branch. *)
+type _ case = Case : 'vars patt * ('vars, 'res) branch -> 'res case
+
+(** [pattern_match t cases default] performs case analysis on [t]:
+    - [cases] is a list of cases which are tried in order until a pattern succeeds.
+    - [default] is a branch which has no pattern (it is passed [t]) and is tried only if
+      all [cases] fail. *)
+let pattern_match (t : EConstr.t) (cases : 'res case list)
+    (default_branch : (EConstr.t, 'res) branch) : 'res m =
+  let rec loop cases =
+    match cases with
+    | [] -> default_branch t
+    | Case (p, b) :: cases -> begin
+        let* vars_opt = p t in
+        match vars_opt with Some vars -> b vars | None -> loop cases
+      end
+  in
+  loop cases

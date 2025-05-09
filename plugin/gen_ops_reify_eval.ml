@@ -25,20 +25,17 @@ struct
       | AT_term ->
           ret @@ apps (mkctor P.ops1.e_aterm) [| app (EConstr.mkVar reify) (mkVar arg) |]
       | AT_bind ty ->
-          let* ev = fresh_evar None in
           let* rarg = reify_arg ty arg in
-          ret @@ apps (mkctor P.ops1.e_abind) [| ev; rarg |]
+          apps_ev (mkctor P.ops1.e_abind) 1 [| rarg |]
     in
     (* Reify a list of arguments. *)
     let rec reify_args (args : (arg_ty * Names.Id.t) list) : EConstr.t m =
       match args with
       | [] -> ret @@ mkctor P.ops1.e_al_nil
       | (ty, arg) :: args ->
-          let* ev1 = fresh_evar None in
-          let* ev2 = fresh_evar None in
           let* rarg = reify_arg ty arg in
           let* rargs = reify_args args in
-          ret @@ apps (mkctor P.ops1.e_al_cons) [| ev1; ev2; rarg; rargs |]
+          apps_ev (mkctor P.ops1.e_al_cons) 2 [| rarg; rargs |]
     in
     if i = 0
     then (* Variable constructor. *)
@@ -148,29 +145,16 @@ struct
     match (i, args) with
     | 0, [ idx ] -> ret @@ app (mkctor (P.ops0.term, 1)) @@ mkVar idx
     | 1, [ c; al ] ->
-        let* kal = fresh_evar None in
-        ret
-        @@ apps (mkconst eval_ctor) [| mkVar c; apps (mkVar eval) [| kal; mkVar al |] |]
+        let* al' = apps_ev (mkVar eval) 1 [| mkVar al |] in
+        ret @@ apps (mkconst eval_ctor) [| mkVar c; al' |]
     | 2, [] -> ret @@ Lazy.force Consts.tt
     | 3, [ ty; tys; a; al ] ->
-        let* t1 = fresh_evar None in
-        let* t2 = fresh_evar None in
-        let* ka = fresh_evar None in
-        let* kal = fresh_evar None in
-        ret
-        @@ apps (Lazy.force Consts.pair)
-             [| t1
-              ; t2
-              ; apps (mkVar eval) [| ka; mkVar a |]
-              ; apps (mkVar eval) [| kal; mkVar al |]
-             |]
+        let* a' = apps_ev (mkVar eval) 1 [| mkVar a |] in
+        let* al' = apps_ev (mkVar eval) 1 [| mkVar al |] in
+        apps_ev (Lazy.force Consts.pair) 2 [| a'; al' |]
     | 4, [ b; x ] -> ret @@ mkVar x
-    | 5, [ t ] ->
-        let* kt = fresh_evar None in
-        ret @@ apps (mkVar eval) [| kt; mkVar t |]
-    | 6, [ ty; a ] ->
-        let* ka = fresh_evar None in
-        ret @@ apps (mkVar eval) [| ka; mkVar a |]
+    | 5, [ t ] -> apps_ev (mkVar eval) 1 [| mkVar t |]
+    | 6, [ ty; a ] -> apps_ev (mkVar eval) 1 [| mkVar a |]
     | _ -> Log.error "build_eval: %i" i
 
   (** Build [seval : O.subst -> subst]. *)

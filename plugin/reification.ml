@@ -3,53 +3,6 @@
 
 open Prelude
 
-let is_const (sigma : Evd.evar_map) (c : Names.Constant.t) (t : EConstr.t) : bool =
-  match EConstr.kind sigma t with
-  | Constr.Const (c', _) when Names.Constant.UserOrd.equal c c' -> true
-  | _ -> false
-
-let is_ind (sigma : Evd.evar_map) (i : Names.Ind.t) (t : EConstr.t) : bool =
-  match EConstr.kind sigma t with
-  | Constr.Ind (i', _) when Names.Ind.UserOrd.equal i i' -> true
-  | _ -> false
-
-let is_ctor (sigma : Evd.evar_map) (c : Names.Construct.t) (t : EConstr.t) : bool =
-  match EConstr.kind sigma t with
-  | Constr.Construct (c', _) when Names.Construct.UserOrd.equal c c' -> true
-  | _ -> false
-
-(**************************************************************************************)
-(** *** Pattern matching utilities. *)
-(**************************************************************************************)
-
-(** A pattern ['vars patt] is a function which takes a term (an [EConstr.t]) and either:
-    - succeeds and extracts a set of variables of type ['vars].
-    - fails and returns [None]. *)
-type 'vars patt = EConstr.t -> 'vars option m
-
-(** A branch [('vars, 'res) branch] is a function which takes a set of extracted variables
-    of type ['vars] and returns a result of type ['res]. *)
-type ('vars, 'res) branch = 'vars -> 'res m
-
-(** A case ['res case] is a pair of a pattern and a branch. *)
-type _ case = Case : 'vars patt * ('vars, 'res) branch -> 'res case
-
-(** [pattern_match t cases default] performs case analysis on [t]:
-    - [cases] is a list of cases which are tried in order until a pattern succeeds.
-    - [default] is a branch which has no pattern (it is passed [t]) and is tried only if
-      all [cases] fail. *)
-let pattern_match (t : EConstr.t) (cases : 'res case list)
-    (default_branch : (EConstr.t, 'res) branch) : 'res m =
-  let rec loop cases =
-    match cases with
-    | [] -> default_branch t
-    | Case (p, b) :: cases -> begin
-        let* vars_opt = p t in
-        match vars_opt with Some vars -> b vars | None -> loop cases
-      end
-  in
-  loop cases
-
 module Make (P : sig
   val sign : signature
   val ops0 : ops_zero
@@ -84,6 +37,13 @@ struct
             (sigma, Some (i - 2, args))
         | _ -> (sigma, None)
       end
+    | _ -> (sigma, None)
+
+  (** Pattern which matches [rename ?r ?t]. *)
+  let rename_patt : (EConstr.t * EConstr.t) patt =
+   fun t env sigma ->
+    match EConstr.kind sigma t with
+    | App (f, [| r; t |]) when is_const sigma P.ops0.rename f -> (sigma, Some (r, t))
     | _ -> (sigma, None)
 
   (** Pattern which matches [substitute ?s ?t]. *)
@@ -121,11 +81,65 @@ struct
   (** *** Reify terms and substitutions. *)
   (**************************************************************************************)
 
+  let rec mk_args (al : EConstr.t list) : EConstr.t m =
+    match al with
+    | [] -> ret @@ mkctor P.ops1.e_al_nil
+    | a :: al ->
+        let* al' = mk_args al in
+        apps_ev (mkctor P.ops1.e_al_cons) 2 [| a; al' |]
+
   let rec reify_term (t : EConstr.t) : (EConstr.t * EConstr.t) m =
     (* Branch for [Var ?i]. *)
     let var_branch i =
       let t' = app (mkctor P.ops1.e_var) i in
       let* p = apps_ev (Lazy.force Consts.eq_refl) 1 [| t |] in
+      ret (t', p)
+    in
+    (* Branch for [C_i ?args]. *)
+    let ctor_branch (i, args) : (EConstr.t * EConstr.t) m =
+      let args = Array.to_list args in
+      (* Reify a single argument. *)
+      let rec reify_arg (ty, arg) =
+        match ty with
+        (* For [AT_base] we produce the proof [eq_refl]. *)
+        | AT_base b_idx ->
+            let arg' =
+              apps (mkctor P.ops1.e_abase) [| mkctor (P.ops1.base, b_idx + 1); arg |]
+            in
+            let p =
+              apps (Lazy.force Consts.eq_refl)
+                [| EConstr.of_constr P.sign.base_types.(b_idx); arg |]
+            in
+            ret (arg', p)
+        (* For [AT_term] we reuse the proof given by [reify_term]. *)
+        | AT_term ->
+            let* arg', p = reify_term arg in
+            ret (app (mkctor P.ops1.e_aterm) arg', p)
+        (* For [AT_bind] we reuse the proof given by [reify_arg]. *)
+        | AT_bind ty ->
+            let* arg', p = reify_arg (ty, arg) in
+            let* arg' = apps_ev (mkctor P.ops1.e_abind) 1 [| arg' |] in
+            ret (arg', p)
+      in
+      let* rargs = List.monad_map reify_arg @@ List.combine P.sign.ctor_types.(i) args in
+      let args', p_args = List.split rargs in
+      let* al' = mk_args args' in
+      let t' = apps (mkctor P.ops1.e_ctor) [| mkctor (P.ops1.ctor, i + 1); al' |] in
+      let n_args = List.length P.sign.ctor_types.(i) in
+      (* No need to use a lemma of the form [eval_ctor]: [eval] computes on constructors. *)
+      let* p =
+        apps_ev (mkconst P.congr.congr_ctors.(i)) (2 * n_args) @@ Array.of_list p_args
+      in
+      ret (t', p)
+    in
+    (* Branch for [rename ?r ?t1]. *)
+    let rename_branch (r, t1) =
+      let* p_r = apps_ev (Lazy.force Consts.reflexivity) 3 [| r |] in
+      let* t1', p_t1 = reify_term t1 in
+      let t' = apps (mkconst P.ops1.rename) [| kt P.ops1; r; t1' |] in
+      let p1 = apps (mkconst P.pe.eval_rename) [| r; t1' |] in
+      let* p2 = apps_ev (mkconst P.congr.congr_rename) 4 [| p_r; p_t1 |] in
+      let* p = apps_ev (Lazy.force Consts.transitivity) 6 [| p1; p2 |] in
       ret (t', p)
     in
     (* Branch for [substitute ?s ?t1]. *)
@@ -146,7 +160,11 @@ struct
     in
     (* Actual pattern matching. *)
     pattern_match t
-      [ Case (var_patt, var_branch); Case (substitute_patt, substitute_branch) ]
+      [ Case (var_patt, var_branch)
+      ; Case (ctor_patt, ctor_branch)
+      ; Case (rename_patt, rename_branch)
+      ; Case (substitute_patt, substitute_branch)
+      ]
       default_branch
 
   and reify_subst (s : EConstr.t) : (EConstr.t * EConstr.t) m =
@@ -218,16 +236,15 @@ let reify_term (sign : signature) (ops : ops_all) (t : EConstr.t) :
   end) in
   let* t', p = M.reify_term t in
   (* Typecheck to resolve evars. *)
-  let* _ = typecheck t' in
-  let p_expected_ty =
+  let* _ = typecheck t' None in
+  let p_ty =
     apps (Lazy.force Consts.eq)
       [| mkind ops.ops_ops0.term
        ; apps (mkconst ops.ops_re.eval) [| kt ops.ops_ops1; t' |]
        ; t
       |]
   in
-  let* p_actual_ty = typecheck p in
-  let* _ = unify ~pb:Conversion.CUMUL p_actual_ty p_expected_ty in
+  let* _ = typecheck p (Some p_ty) in
   ret (t', p)
 
 (** [reify_subst sign ops s] reifies the level zero substitution [s] into a pair
@@ -247,8 +264,8 @@ let reify_subst (sign : signature) (ops : ops_all) (s : EConstr.t) :
   end) in
   let* s', p = M.reify_subst s in
   (* Typecheck to resolve evars. *)
-  let* _ = typecheck s' in
-  let p_expected_ty =
+  let* _ = typecheck s' None in
+  let p_ty =
     apps (Lazy.force Consts.point_eq)
       [| Lazy.force Consts.nat
        ; mkind ops.ops_ops0.term
@@ -256,6 +273,5 @@ let reify_subst (sign : signature) (ops : ops_all) (s : EConstr.t) :
        ; s
       |]
   in
-  let* p_actual_ty = typecheck p in
-  let* _ = unify ~pb:Conversion.CUMUL p_actual_ty p_expected_ty in
+  let* _ = typecheck p (Some p_ty) in
   ret (s', p)

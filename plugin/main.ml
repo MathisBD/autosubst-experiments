@@ -108,7 +108,7 @@ let reify (t : Constrexpr.constr_expr) : unit =
   @@
   (* Reify. *)
   let* t = pretype t in
-  let* t', p = Reify.reify_term s ops t in
+  let* t', p = Reification.reify_term s ops t in
   let* p_ty = retype p in
   (* Print. *)
   let* env = get_env in
