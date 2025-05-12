@@ -99,7 +99,7 @@ struct
     let ctor_branch (i, args) : (EConstr.t * EConstr.t) m =
       let args = Array.to_list args in
       (* Reify a single argument. *)
-      let rec reify_arg (ty, arg) =
+      let rec reify_arg ty arg =
         match ty with
         (* For [AT_base] we produce the proof [eq_refl]. *)
         | AT_base b_idx ->
@@ -117,11 +117,11 @@ struct
             ret (app (mkctor P.ops1.e_aterm) arg', p)
         (* For [AT_bind] we reuse the proof given by [reify_arg]. *)
         | AT_bind ty ->
-            let* arg', p = reify_arg (ty, arg) in
+            let* arg', p = reify_arg ty arg in
             let* arg' = apps_ev (mkctor P.ops1.e_abind) 1 [| arg' |] in
             ret (arg', p)
       in
-      let* rargs = List.monad_map reify_arg @@ List.combine P.sign.ctor_types.(i) args in
+      let* rargs = List.monad_map2 reify_arg P.sign.ctor_types.(i) args in
       let args', p_args = List.split rargs in
       let* al' = mk_args args' in
       let t' = apps (mkctor P.ops1.e_ctor) [| mkctor (P.ops1.ctor, i + 1); al' |] in

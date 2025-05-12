@@ -101,7 +101,8 @@ with rred : ren -> Prop :=
 
 | RR_cons_l i r1 r2 : rred (R_comp (R_cons i r1) r2)
 | RR_shift_cons r : 
-  is_rcons r \/ is_rcons_l r -> rred (R_comp R_shift r).
+  is_rcons r \/ is_rcons_l r -> rred (R_comp R_shift r)
+| RR_zero_shift : rred (R_cons Q_zero R_shift).
 
 Hint Constructors qred : core.
 Hint Constructors rred : core.
@@ -140,15 +141,17 @@ split ; intros H.
 Qed.     
 
 Lemma qirred_rapply_cons i r k :
-  qirred (Q_rapply (R_cons i r) k) <-> qirred i /\ rirred r /\ is_qmvar k.
+  qirred (Q_rapply (R_cons i r) k) <-> 
+    qirred i /\ rirred r /\ is_qmvar k /\ ~(i = Q_zero /\ r = R_shift).
 Proof.
 split.
-- intros H. split3.
+- intros H. split4.
   + intros H' ; apply H ; clear H. constructor ; left. constructor ; now left.
   + intros H' ; apply H ; clear H. constructor ; left. constructor ; now right. 
-  + destruct k ; triv. exfalso. apply H. triv. 
-- intros (H1 & H2 & H3) H. destruct k ; triv. inv H ; triv.
-  destruct H4 ; triv. inv H0. destruct H5 ; triv.
+  + destruct k ; triv. exfalso. apply H. triv.
+  + intros H' ; apply H ; clear H. destruct H' ; subst. constructor ; left. now constructor.  
+- intros (H1 & H2 & H3 & H4) H. destruct k ; triv. inv H ; triv.
+  destruct H5 ; triv. inv H0. destruct H6 ; triv. apply H4 ; triv.
 Qed.
 
 Lemma qirred_rapply r i : 
@@ -169,12 +172,13 @@ split ; intros H.
 Qed.
 
 Lemma rirred_cons i r : 
-  rirred (R_cons i r) <-> qirred i /\ rirred r.
+  rirred (R_cons i r) <-> qirred i /\ rirred r /\ ~(i = Q_zero /\ r = R_shift).
 Proof.
 split.
-- intros H. split ; intros H' ; apply H.
-  all: constructor ; auto.
-- intros [H1 H2] H. inv H. destruct H3 ; auto.
+- intros H. split3 ; intros H' ; apply H ; triv.
+  destruct H' ; subst. now constructor. 
+- intros (H1 & H2 & H3) H. inv H. destruct H4 ; triv.
+  apply H3 ; triv.
 Qed.
 
 Lemma rirred_mvar_l m r : 
@@ -278,7 +282,8 @@ with sred : subst -> Prop :=
 | SR_cons_l t s1 s2 : sred (S_comp (S_cons t s1) s2)
 (** Simplify [shift >> (t . s)] into [s]. *)
 | SR_shift_cons s : 
-  is_scons s \/ is_scons_l s -> sred (S_comp S_shift s).
+  is_scons s \/ is_scons_l s -> sred (S_comp S_shift s)
+| SR_zero_shift : sred (S_cons (E_tvar Q_zero) S_shift).
 
 Hint Constructors ered : core.
 Hint Constructors sred : core.
@@ -374,13 +379,15 @@ split ; intros H.
 Qed.     
 
 Lemma sirred_cons t s : 
-  sirred (S_cons t s) <-> eirred t /\ sirred s.
+  sirred (S_cons t s) <-> 
+    eirred t /\ sirred s /\ ~(t = E_tvar Q_zero /\ s = S_shift).
 Proof.
 split ; intros H.
-- split ; intros H' ; apply H ; clear H.
+- split3 ; intros H' ; apply H ; clear H.
   + constructor ; now left.
   + constructor ; now right.
-- intros H'. inv H'. destruct H1 ; triv.
+  + destruct H' ; subst. now constructor. 
+- intros H'. inv H'. destruct H1 ; triv. destruct H as (_ & _ & H). triv.
 Qed.   
 
 Lemma sirred_shift_l s : 

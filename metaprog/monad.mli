@@ -53,4 +53,8 @@ module List : sig
 
   (** Same as [monad_map] but the function also gets the index of each argument. *)
   val monad_mapi : (int -> 'a -> 'b m) -> 'a list -> 'b list m
+
+  (** Same as [monad_map] but the function takes two arguments. Throws an exception if the
+      lengths of the lists differ. *)
+  val monad_map2 : ('a -> 'b -> 'c m) -> 'a list -> 'b list -> 'c list m
 end

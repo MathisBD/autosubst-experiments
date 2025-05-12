@@ -41,7 +41,7 @@ where "'term'" := (expr Kt)
   and "'arg' ty" := (expr (Ka ty))
   and "'args' tys" := (expr (Kal tys)).
 
-Derive Signature NoConfusion NoConfusionHom for expr.
+Derive Signature for expr.
 
 (** Size of an expression. This is used in the plugin to prove a custom 
     induction principle for level one terms instantiated to a specific
@@ -202,28 +202,6 @@ Proof. intros s1 s2 Hs r1 r2 Hr i. cbv [scomp]. now rewrite Hs, Hr. Qed.
 (*********************************************************************************)
 (** *** Properties of renaming and substitution. *)
 (*********************************************************************************)
-
-(*Lemma rshift_plus k l : rcomp (rshift k) (rshift l) =₁ rshift (k + l).
-Proof. intros i. cbv [rcomp rshift]. lia. Qed.
-
-Lemma rshift_succ_l k : rcomp (rshift 1) (rshift k) =₁ rshift (S k).
-Proof. rewrite rshift_plus. reflexivity. Qed.
-    
-Lemma rshift_succ_r k : rcomp (rshift k) (rshift 1) =₁ rshift (S k).
-Proof. rewrite rshift_plus. intros i. cbv [rshift]. lia. Qed.
-
-Lemma sshift_plus k l : scomp (sshift k) (sshift l) =₁ sshift (k + l).
-Proof. 
-induction k as [|k IH] ; intros i ; cbv [scomp sshift substitute] ; simpl.
-- reflexivity.
-- f_equal. lia.
-Qed.   
-
-Lemma sshift_succ_l k : scomp (sshift 1) (sshift k) =₁ sshift (S k).
-Proof. rewrite sshift_plus. reflexivity. Qed.
-    
-Lemma sshift_succ_r k : scomp (sshift k) (sshift 1) =₁ sshift (S k).
-Proof. rewrite sshift_plus. intros i. cbv [sshift]. f_equal ; lia. Qed.*)
 
 Lemma rid_rcons : rcons 0 rshift =₁ rid.
 Proof. intros [|i] ; reflexivity. Qed.

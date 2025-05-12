@@ -51,4 +51,13 @@ module List = struct
           ret (x' :: xs')
     in
     loop 0 xs
+
+  let rec monad_map2 (f : 'a -> 'b -> 'c m) (xs : 'a list) (ys : 'b list) : 'c list m =
+    match (xs, ys) with
+    | [], [] -> ret []
+    | x :: xs, y :: ys ->
+        let* z = f x y in
+        let* zs = monad_map2 f xs ys in
+        ret (z :: zs)
+    | _ -> raise (Invalid_argument "monad_map2")
 end
