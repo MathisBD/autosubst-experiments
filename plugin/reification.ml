@@ -234,6 +234,7 @@ let reify_term (sign : signature) (ops : ops_all) (t : EConstr.t) :
     let bij = ops.ops_bij
     let pe = ops.ops_pe
   end) in
+  (* Reify. *)
   let* t', p = M.reify_term t in
   (* Typecheck to resolve evars. *)
   let* _ = typecheck t' None in

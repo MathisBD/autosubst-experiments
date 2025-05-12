@@ -1,59 +1,66 @@
 From Coq Require Import Lia String.
 From Ltac2 Require Ltac2.
-From Ltac2 Require Import Printf.
+From Ltac2 Require Import Printf RedFlags.
 From Prototype Require Import Prelude Sig.
 From Prototype Require Constants LevelOne LevelTwo LevelTwoIrred LevelTwoSimp.
 
 Declare ML Module "autosubst-experiments.plugin".
-Ltac2 @external reify : constr -> constr * constr := "autosubst-experiments.plugin" "reify".
+Ltac2 @external reify_term : constr -> constr * constr := "autosubst-experiments.plugin" "reify_term".
+Ltac2 @external eval_term : constr -> constr * constr := "autosubst-experiments.plugin" "eval_term".
+
+Class TermSimplification {term} (t s : term) := 
+  MkTermSimplification { term_simplification : t = s }.
+Hint Mode TermSimplification + + - : typeclass_instances.
 
 Autosubst Generate.
 
-Class TermSimplification (t s : term) := 
-  MkTermSimplification { term_simplification : t = s }.
-
-Arguments term_simplification t {s _}.
-Hint Mode TermSimplification + - : typeclass_instances.
-
-Lemma autosubst_simpl_term_substitute s t res :
+Lemma autosubst_simpl_term_substitute (s : subst) (t res : term) :
   TermSimplification (substitute s t) res -> substitute s t = res.
 Proof. intros H. now apply term_simplification. Qed.
 #[export] Hint Rewrite -> autosubst_simpl_term_substitute : asimpl.
 
-Lemma congr_eval : 
-  forall k (t1 t2 : T.O.expr k), t1 = t2 -> eval k t1 = eval k t2.
-Proof. now intros k t1 t2 ->. Qed.
+Ltac2 red_flags_simp () : RedFlags.t := 
+  red_flags:(beta iota delta 
+    [T.esimp T.ssimp T.esimp_functional T.ssimp_functional
+     T.qsimp T.rsimp T.qsimp_functional T.rsimp_functional
+     T.substitute T.scomp T.substitute_functional T.scomp_functional
+     T.rename T.srcomp T.rename_functional T.srcomp_functional
+     T.substitute_aux T.scomp_aux T.rename_aux T.sapply_aux T.rup T.sren
+     T.sapply T.rscomp T.sapply_functional T.rscomp_functional
+     T.rapply T.rcomp T.rapply_functional T.rcomp_functional
+     T.rcomp_aux T.rapply_aux]).
 
-From Ltac2 Require Import RedFlags.
-
-Ltac2 rasimpl_red_flags () : RedFlags.t := 
-  red_flags:(beta delta [T.eeval]).
-
+Ltac2 red_flags_eval () : RedFlags.t :=
+  red_flags:(beta iota delta   
+    [T.eeval T.seval T.eeval_functional T.seval_functional
+     T.reval T.qeval T.reval_functional T.qeval_functional
+     T.assign_qnat T.assign_ren T.assign_term T.assign_subst
+     List.nth (* TODO use something else than [List.nth]. *)
+     ]).
 
 (** Solve a goal of the form [TermSimplification t0]. *)
 Ltac2 build_TermSimplification (t0 : constr) : unit :=
   (* Reify Level 0 -> Level 1. *)
-  let (t1, p1) := reify t0 in 
-  let p1 := constr:(eq_sym $p1) in
-  printf "t1 := %t" t1;
-  printf "p1 := %t" (Constr.type p1);
+  let (t1, p1) := reify_term t0 in 
   (* Reify Level 1 -> Level 2. *)
   let env := T.empty_env () in
   let (env, t2) := T.reify_expr env t1 in
   let env := T.build_env env in
-  printf "t2 := %t" t2;
-  (* Simplify. *)
-  let t2' := constr:(T.esimp $t2) in
-  let p2 := constr:(eq_sym (T.esimp_sound $env $t2)) in
-  printf "t2' := %t" t2';
-  printf "p2 := %t" p2;
-  let t2'' := Std.eval_cbn rasimpl_red_flags t2 in 
-  (* Build the instance of [TermSimplification t0]. *)
-  let t0' := constr:(eval Kt (T.eeval $env $t2')) in
-  let eq := constr:(eq_trans $p1 (congr_eval Kt $t1 _ $p2)) in
-  printf "t0' := %t" t0';
-  exact (MkTermSimplification $t0 $t0' $eq).
-  
+  (* Simplify on Level 2. *)
+  let t2' := Std.eval_cbv (red_flags_simp ()) constr:(T.esimp $t2) in
+  (* Eval Level 2 -> Level 1. *)
+  let t1' := Std.eval_cbv (red_flags_eval ()) constr:(T.eeval $env $t2') in
+  (* Eval Level 1 -> Level 0. *)
+  let (t0', p3) := eval_term t1' in
+  (* Assemble the typeclass instance. *)
+  let eq := constr:(eq_trans
+    (eq_sym $p1) 
+    (eq_trans 
+      (f_equal (eval Kt) (eq_sym (T.esimp_sound $env $t2))) 
+      $p3)) 
+  in
+  exact (MkTermSimplification term $t0 $t0' $eq).
+
 #[export] Hint Extern 10 (TermSimplification ?t0 _) =>
   let tac := ltac2:(t0 |-  
     match Ltac1.to_constr t0 with 
@@ -65,12 +72,13 @@ Ltac2 build_TermSimplification (t0 : constr) : unit :=
     
 Ltac rasimpl := (rewrite_strat (topdown (hints asimpl))) ; [ | (exact _) ..].
 
-Lemma test : substitute sid (substitute (scomp sshift sid) (Var 0)) = Var 0.
+Axiom (t : term).
+Axiom (s : subst).
+Lemma test : substitute (scons t s) (Var 1) = Var 0.
 Proof. rasimpl.
+    About seval_sreify_inv.
 
-Qed.
-
-
+Admitted.
 
 (*Autosubst Reify (substitute (scomp sid (scons (Var 0) sid)) (Var 0)).*)
 (*Autosubst Reify (rename (rcomp rid rshift) (Var 0)).*)

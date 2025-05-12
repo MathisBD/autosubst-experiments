@@ -42,7 +42,15 @@ struct
   let substitute_patt : (EConstr.t * EConstr.t) patt =
    fun t env sigma ->
     match EConstr.kind sigma t with
-    | App (f, [| s; t |]) when is_const sigma P.ops1.substitute f -> (sigma, Some (s, t))
+    | App (f, [| _; s; t |]) when is_const sigma P.ops1.substitute f ->
+        (sigma, Some (s, t))
+    | _ -> (sigma, None)
+
+  (** Pattern which matches [reify ?t]. *)
+  let reify_patt : EConstr.t patt =
+   fun t env sigma ->
+    match EConstr.kind sigma t with
+    | App (f, [| t |]) when is_const sigma P.re.reify f -> (sigma, Some t)
     | _ -> (sigma, None)
 
   (** Pattern which matches [O.sid]. *)
@@ -69,6 +77,13 @@ struct
     | App (f, [| s1; s2 |]) when is_const sigma P.ops1.scomp f -> (sigma, Some (s1, s2))
     | _ -> (sigma, None)
 
+  (** Pattern which matches [O.sreify ?s]. *)
+  let sreify_patt : EConstr.t patt =
+   fun s env sigma ->
+    match EConstr.kind sigma s with
+    | App (f, [| s |]) when is_const sigma P.re.sreify f -> (sigma, Some s)
+    | _ -> (sigma, None)
+
   (**************************************************************************************)
   (** *** Reify terms and substitutions. *)
   (**************************************************************************************)
@@ -80,8 +95,8 @@ struct
       let* p = apps_ev (Lazy.force Consts.eq_refl) 1 [| t |] in
       ret (t, p)
     in
-    (* Branch for [C_i ?args]. *)
-    (*let ctor_branch (i, args) : (EConstr.t * EConstr.t) m =
+    (* Branch for [O.E_ctor ?c ?al]. *)
+    (*let ctor_branch (c, al) : (EConstr.t * EConstr.t) m =
       let args = Array.to_list args in
       (* Reify a single argument. *)
       let rec reify_arg (ty, arg) =
@@ -127,74 +142,83 @@ struct
       let* p = apps_ev (Lazy.force Consts.transitivity) 6 [| p1; p2 |] in
       ret (t, p)
     in
-    (* Branch for [substitute ?s ?t1]. *)
-    (*let substitute_branch (s, t1) =
-      let* s', p_s = reify_subst s in
-      let* t1', p_t1 = reify_term t1 in
-      let t' = apps (mkconst P.ops1.substitute) [| kt P.ops1; s'; t1' |] in
+    (* Branch for [O.substitute ?s' ?t1']. *)
+    let substitute_branch (s', t1') =
+      let* s, p_s = eval_subst s' in
+      let* t1, p_t1 = eval_term t1' in
+      let t = apps (mkconst P.ops0.substitute) [| s; t1 |] in
       let p1 = apps (mkconst P.pe.eval_substitute) [| s'; t1' |] in
       let* p2 = apps_ev (mkconst P.congr.congr_substitute) 4 [| p_s; p_t1 |] in
       let* p = apps_ev (Lazy.force Consts.transitivity) 6 [| p1; p2 |] in
-      ret (t', p)
-    in*)
+      ret (t, p)
+    in
+    (* Branch for [reify ?t]. *)
+    let reify_branch t = ret (t, app (mkconst P.bij.eval_reify_inv) t) in
     (* Default branch. *)
     let default_branch t' =
       let t = apps (mkconst P.re.eval) [| kt P.ops1; t' |] in
-      let p = app (mkconst P.bij.eval_reify_inv) t in
+      let* p = apps_ev (Lazy.force Consts.eq_refl) 1 [| t |] in
       ret (t, p)
     in
     (* Actual pattern matching. *)
     pattern_match t'
-      [ Case (var_patt, var_branch); Case (rename_patt, rename_branch) ]
+      [ Case (var_patt, var_branch)
+      ; Case (rename_patt, rename_branch)
+      ; Case (substitute_patt, substitute_branch)
+      ; Case (reify_patt, reify_branch)
+      ]
       default_branch
 
-  (*and eval_subst (s : EConstr.t) : (EConstr.t * EConstr.t) m =
-    (* Match [sid]. *)
+  and eval_subst (s' : EConstr.t) : (EConstr.t * EConstr.t) m =
+    (* Match [O.sid]. *)
     let sid_branch () =
-      let s' = mkconst P.ops1.sid in
+      let s = mkconst P.ops0.sid in
       let* p = apps_ev (Lazy.force Consts.reflexivity) 3 [| s |] in
-      ret (s', p)
+      ret (s, p)
     in
-    (* Match [sshift]. *)
+    (* Match [O.sshift]. *)
     let sshift_branch () =
-      let s' = mkconst P.ops1.sshift in
+      let s = mkconst P.ops0.sshift in
       let* p = apps_ev (Lazy.force Consts.reflexivity) 3 [| s |] in
-      ret (s', p)
+      ret (s, p)
     in
-    (* Match [scons ?t ?s1]. *)
-    let scons_branch (t, s1) =
-      let* t', p_t = reify_term t in
-      let* s1', p_s1 = reify_subst s1 in
-      let s' = apps (mkconst P.ops1.scons) [| t'; s1' |] in
+    (* Match [O.scons ?t' ?s1']. *)
+    let scons_branch (t', s1') =
+      let* t, p_t = eval_term t' in
+      let* s1, p_s1 = eval_subst s1' in
+      let s = apps (mkconst P.ops0.scons) [| t; s1 |] in
       let p1 = apps (mkconst P.pe.seval_scons) [| t'; s1' |] in
       let* p2 = apps_ev (mkconst P.congr.congr_scons) 4 [| p_t; p_s1 |] in
       let* p = apps_ev (Lazy.force Consts.transitivity) 6 [| p1; p2 |] in
-      ret (s', p)
+      ret (s, p)
     in
-    (* Match [scomp ?s1 ?s2]. *)
-    let scomp_branch (s1, s2) =
-      let* s1', p_s1 = reify_subst s1 in
-      let* s2', p_s2 = reify_subst s2 in
-      let s' = apps (mkconst P.ops1.scomp) [| s1'; s2' |] in
+    (* Match [O.scomp ?s1' ?s2']. *)
+    let scomp_branch (s1', s2') =
+      let* s1, p_s1 = eval_subst s1' in
+      let* s2, p_s2 = eval_subst s2' in
+      let s = apps (mkconst P.ops0.scomp) [| s1; s2 |] in
       let p1 = apps (mkconst P.pe.seval_scomp) [| s1'; s2' |] in
       let* p2 = apps_ev (mkconst P.congr.congr_scomp) 4 [| p_s1; p_s2 |] in
       let* p = apps_ev (Lazy.force Consts.transitivity) 6 [| p1; p2 |] in
-      ret (s', p)
+      ret (s, p)
     in
+    (* Match [sreify ?s]. *)
+    let sreify_branch s = ret (s, app (mkconst P.bij.seval_sreify_inv) s) in
     (* Default branch. *)
-    let default_branch s =
-      let s' = app (mkconst P.re.sreify) s in
-      let p = app (mkconst P.bij.seval_sreify_inv) s in
-      ret (s', p)
+    let default_branch s' =
+      let s = app (mkconst P.re.seval) s' in
+      let* p = apps_ev (Lazy.force Consts.reflexivity) 3 [| s |] in
+      ret (s, p)
     in
     (* Actual pattern matching. *)
-    pattern_match s
+    pattern_match s'
       [ Case (sid_patt, sid_branch)
       ; Case (sshift_patt, sshift_branch)
       ; Case (scons_patt, scons_branch)
       ; Case (scomp_patt, scomp_branch)
+      ; Case (sreify_patt, sreify_branch)
       ]
-      default_branch*)
+      default_branch
 end
 
 (**************************************************************************************)
@@ -206,9 +230,6 @@ end
     - [p] is a proof of [eval t' = t]. *)
 let eval_term (sign : signature) (ops : ops_all) (t' : EConstr.t) :
     (EConstr.t * EConstr.t) m =
-  let* env = get_env in
-  let* sigma = get_sigma in
-  Log.printf "%s" (Log.show_econstr env sigma t');
   let module M = Make (struct
     let sign = sign
     let ops0 = ops.ops_ops0

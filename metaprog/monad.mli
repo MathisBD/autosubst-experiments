@@ -18,6 +18,11 @@ val ( let* ) : 'a m -> ('a -> 'b m) -> 'b m
     and empty local context. The final evar map is discarded. *)
 val monad_run : 'a m -> 'a
 
+(** Run a monadic computation as a tactic, using the proof's current environment and evar
+    map, and updating the proof's evar map. New evars in the evar-map are not considered
+    goals. Assumes exactly one goal is under focus. *)
+val monad_run_tactic : 'a m -> 'a Proofview.tactic
+
 (** Get the current environment. *)
 val get_env : Environ.env m
 

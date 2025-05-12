@@ -89,7 +89,7 @@ let generate_operations (s : signature) : ops_all =
   ; ops_pe = pe
   }
 
-(** Main entry point for the plugin. *)
+(** Main entry point for the plugin: generate level zero terms, operations, and lemmas. *)
 let generate () =
   (* We use a testing signature (for the moment). *)
   let s = build_signature () in
@@ -98,66 +98,30 @@ let generate () =
   (* Save the operations. *)
   Lib.add_leaf @@ update_saved_ops (Some ops)
 
-let reify (t : Constrexpr.constr_expr) : unit =
-  let s = build_signature () in
-  let ops =
-    match !saved_ops with
-    | None -> Log.error "reify: must generate operations beforehand."
-    | Some ops -> ops
-  in
-  monad_run
-  @@
-  (* Reify. *)
-  let* t = pretype t in
-  let* t', p = Reification.reify_term s ops t in
-  let* p_ty = retype p in
-  (* Print. *)
-  let* env = get_env in
-  let* sigma = get_sigma in
-  Log.printf "reify result: %s" (Log.show_econstr env sigma t');
-  Log.printf "type of the proof: %s" (Log.show_econstr env sigma p_ty);
-  ret ()
-
-let reify_tac (t0 : EConstr.t) : (EConstr.t * EConstr.t) Proofview.tactic =
-  let open PVMonad in
+let reify_term_tac (t : EConstr.t) : (EConstr.t * EConstr.t) Proofview.tactic =
   let s = build_signature () in
   let ops =
     match !saved_ops with
     | None -> Log.error "reify_tac: must generate operations beforehand."
     | Some ops -> ops
   in
-  Proofview.Goal.enter_one @@ fun g ->
-  (* Level 0 -> Level 1 *)
-  let env = Proofview.Goal.env g in
-  let sigma = Proofview.Goal.sigma g in
-  let sigma, res = Reification.reify_term s ops t0 env sigma in
-  let* _ = Proofview.Unsafe.tclEVARSADVANCE sigma in
-  ret res
+  monad_run_tactic @@ Reification.reify_term s ops t
 
-let tac_name (s : string) : Tac2expr.ml_tactic_name =
-  { mltac_plugin = "autosubst-experiments.plugin"; mltac_tactic = s }
-
-let () =
-  let open Tac2externals in
-  let open Tac2ffi in
-  define (tac_name "reify") (constr @-> tac (pair constr constr)) @@ fun t0 ->
-  reify_tac t0
-
-let eval (t' : Constrexpr.constr_expr) : unit =
+let eval_term_tac (t : EConstr.t) : (EConstr.t * EConstr.t) Proofview.tactic =
   let s = build_signature () in
   let ops =
     match !saved_ops with
-    | None -> Log.error "reify: must generate operations beforehand."
+    | None -> Log.error "eval_tac: must generate operations beforehand."
     | Some ops -> ops
   in
-  monad_run
-  @@
-  (* Reify. *)
-  let* t' = pretype t' in
-  let* t, p = Evaluation.eval_term s ops t' in
-  let* p_ty = retype p in
-  (* Print. *)
-  let* env = get_env in
-  let* sigma = get_sigma in
-  Log.printf "type of the proof: %s" (Log.show_econstr env sigma p_ty);
-  ret ()
+  monad_run_tactic @@ Evaluation.eval_term s ops t
+
+(** Register the reification and evaluation tactics using Ltac2's FFI. *)
+let () =
+  let open Tac2externals in
+  let open Tac2ffi in
+  let name s =
+    Tac2expr.{ mltac_plugin = "autosubst-experiments.plugin"; mltac_tactic = s }
+  in
+  define (name "reify_term") (constr @-> tac (pair constr constr)) reify_term_tac;
+  define (name "eval_term") (constr @-> tac (pair constr constr)) eval_term_tac

@@ -13,6 +13,12 @@ let monad_run (mx : 'a m) : 'a =
   let _, x = mx env sigma in
   x
 
+let monad_run_tactic (mx : 'a m) : 'a Proofview.tactic =
+  let open Proofview in
+  Goal.enter_one @@ fun g ->
+  let sigma, x = mx (Goal.env g) (Goal.sigma g) in
+  tclTHEN (Unsafe.tclEVARSADVANCE sigma) (tclUNIT x)
+
 let get_env : Environ.env m = fun env sigma -> (sigma, env)
 let with_env env mx = fun _ sigma -> mx env sigma
 let with_env' f mx = fun env sigma -> mx (f env) sigma
