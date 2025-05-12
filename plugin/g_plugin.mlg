@@ -1,14 +1,17 @@
 DECLARE PLUGIN "autosubst-experiments.plugin"
 
 {
-    open Stdarg
+  open Stdarg
 }
 
 VERNAC COMMAND EXTEND Test CLASSIFIED AS SIDEFF
-| [ "Test" ] -> { Main.main () }
+| [ "Autosubst" "Generate" ] -> { Main.generate () }
 END
 
 VERNAC COMMAND EXTEND Reify CLASSIFIED AS QUERY
-| [ "Reify" constr(t) ] -> { Main.reify t }
+| [ "Autosubst" "Reify" constr(t) ] -> { Main.reify t }
 END 
 
+VERNAC COMMAND EXTEND Eval CLASSIFIED AS QUERY
+| [ "Autosubst" "Eval" constr(t) ] -> { Main.eval t }
+END 

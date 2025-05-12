@@ -6,7 +6,7 @@
  (libraries
   coq-core.vernac
   coq-core.tactics
-  coq-core.plugins.ltac
+  coq-core.plugins.ltac2
   coq-equations.plugin
   autosubst-experiments.metaprog))
 
