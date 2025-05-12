@@ -63,13 +63,16 @@ Qed.
 (** *** [rcons] *)
 (*********************************************************************************)
 
-Equations rcons (i : qnat) (r : ren) : ren :=
+Equations rcons : qnat -> ren -> ren :=
 rcons Q_zero R_shift := R_id ;
 rcons i r := R_cons i r.
 
 Lemma rcons_sound e i r : 
   reval e (rcons i r) =₁ P.rcons (qeval e i) (reval e r).
-Proof. funelim (rcons i r) ; simp qeval ; triv. intros [|] ; reflexivity. Qed.
+Proof. 
+funelim (rcons i r) ; simp qeval ; triv. 
+intros [|] ; reflexivity.
+Qed.
 #[export] Hint Rewrite rcons_sound : qeval reval.
 
 Lemma rcons_irred i r :
@@ -127,13 +130,14 @@ apply rapply_elim with
 all: intros ; triv.
 - apply rapply_aux_irred ; triv. intros H1 H2. rewrite qirred_rapply.
   split5 ; triv.
+- now apply qirred_succ in H0.
 - rewrite qirred_rapply in H1. apply rapply_aux_irred ; triv. 
   + now apply H.
   + intros H2 H3. rewrite qirred_rapply. split5 ; triv. now apply H.
 - apply rapply_aux_irred ; triv. intros H1 H2. rewrite qirred_rapply.
   split5 ; triv.
 - apply rcomp_aux_irred ; triv. intros H1 H2. rewrite rirred_shift_l.
-  split4 ; triv. destruct r2 ; triv. destruct r2_1 ; triv.
+  split3 ; triv.
 - rewrite rirred_cons in *. apply rcons_irred.
   + now apply H.
   + now apply H0.
@@ -151,6 +155,7 @@ Qed.
 (** Simplify a quoted natural. *)
 Equations qsimp : qnat -> qnat :=
 qsimp Q_zero := Q_zero ;
+qsimp (Q_succ i) := rapply R_shift (qsimp i) ;
 qsimp (Q_rapply r i) := rapply (rsimp r) (qsimp i) ;
 qsimp (Q_mvar m) := Q_mvar m 
 
@@ -187,6 +192,7 @@ Proof.
 apply qsimp_elim with (P := fun _ res => qirred res) (P0 := fun _ res => rirred res).
 all: intros ; triv.
 - now apply rapply_rcomp_irred.
+- now apply rapply_rcomp_irred.
 - now apply rcons_irred.
 - now apply rapply_rcomp_irred.
 Qed.
@@ -196,64 +202,6 @@ Proof. now apply qsimp_rsimp_irred. Qed.
 
 Lemma rsimp_irred r : rirred (rsimp r).
 Proof. now apply qsimp_rsimp_irred. Qed.
-
-(*********************************************************************************)
-(** *** [sapply_aux] *)
-(*********************************************************************************)
-
-(** Helper function for [sapply] which takes care of trivial cases. *)
-Equations sapply_aux : subst -> qnat -> term :=
-sapply_aux S_id i := E_tvar i ;
-sapply_aux (S_cons t _) Q_zero := t ;
-sapply_aux (S_ren r) i := E_tvar (rapply r i) ;
-sapply_aux s i := E_subst s (E_tvar i).
-
-Lemma sapply_aux_sound e s i : 
-  eeval e (sapply_aux s i) = seval e s (qeval e i).
-Proof. funelim (sapply_aux s i) ; simp qeval eeval ; triv. Qed.
-#[export] Hint Rewrite sapply_aux_sound : eeval seval.
-
-Lemma sapply_aux_irred s i :
-  sirred s -> qirred i ->
-  (s <> S_id -> ~is_sren s -> ~(is_scons s /\ i = Q_zero) -> eirred (E_subst s (E_tvar i))) ->
-  eirred (sapply_aux s i).
-Proof.
-intros H1 H2 H3. funelim (sapply_aux s i).
-all: try solve [ apply H3 ; triv ].
-- now rewrite eirred_tvar.
-- now apply sirred_cons in H1.
-- rewrite eirred_tvar. apply rapply_rcomp_irred ; triv. 
-  rewrite sirred_ren in H1. destruct r ; triv.
-Qed.
-
-(*********************************************************************************)
-(** *** [scomp_aux] *)
-(*********************************************************************************)
-
-(** Helper function for [rscomp], [srcomp], and [scomp]
-    which takes care of trivial cases. *)
-Equations scomp_aux : subst -> subst -> subst :=
-scomp_aux s S_id := s ;
-scomp_aux S_shift (S_cons t s) := s ;
-scomp_aux s1 s2 := S_comp s1 s2.
-
-Lemma scomp_aux_sound e s1 s2 : 
-  seval e (scomp_aux s1 s2) =₁ O.scomp (seval e s1) (seval e s2).
-Proof.
-funelim (scomp_aux s1 s2) ; simp seval eeval ; triv.
-now rewrite O.scomp_sid_r.
-Qed.
-#[export] Hint Rewrite scomp_aux_sound : seval eeval.
-
-Lemma scomp_aux_irred s1 s2 :
-  sirred s1 -> sirred s2 -> 
-  (s2 <> S_id -> ~(s1 = S_shift /\ is_scons s2) -> sirred (S_comp s1 s2)) ->
-  sirred (scomp_aux s1 s2).
-Proof.
-intros H1 H2 H3. funelim (scomp_aux s1 s2) ; triv.
-all: try solve [ apply H3 ; triv ]. 
-now rewrite sirred_cons in H2.
-Qed.
 
 (*********************************************************************************)
 (** *** [scons] *)
@@ -291,6 +239,141 @@ Proof.
 intros H1 H2. rewrite scons_scons_alt. funelim (scons_alt t s) ; triv.
 all: solve [ rewrite sirred_cons ; triv ].
 Qed. 
+
+(*********************************************************************************)
+(** *** [tnat] and [sren] *)
+(*********************************************************************************)
+
+(** Turn an irreducible quoted natural into an irreducible term. 
+    We take care of extracting [Q_rapply] into [E_subst]. *)
+Equations tnat : qnat -> term :=
+tnat (Q_rapply r i) := E_subst (sren r) (E_tvar i) ; 
+tnat i := E_tvar i
+
+(** Turn an irreducible renaming into an irreducible substitution. *)
+with sren (r : ren) : subst :=
+sren R_id := S_id ;
+sren R_shift := S_shift ;
+sren (R_cons i r) := S_cons (tnat i) (sren r) ;
+sren (R_comp r1 r2) := S_comp (sren r1) (sren r2) ;
+sren (R_mvar r) := S_ren (R_mvar r).
+
+Lemma tnat_sren_sound e : 
+  (forall i, eeval e (tnat i) = O.E_var (qeval e i)) *
+  (forall r, seval e (sren r) =₁ O.rscomp (reval e r) O.E_var).
+Proof.
+apply tnat_elim with 
+  (P := fun i res => eeval e res = O.E_var (qeval e i))
+  (P0 := fun r res => seval e res =₁ O.rscomp (reval e r) O.E_var).
+all: intros ; simp eeval seval ; triv.
+- rewrite H. reflexivity.  
+- rewrite H, H0. intros [|] ; reflexivity.
+- rewrite H0, H. reflexivity.
+Qed.  
+
+Lemma tnat_sound e i : 
+  eeval e (tnat i) = O.E_var (qeval e i).
+Proof. now apply tnat_sren_sound. Qed.
+#[export] Hint Rewrite tnat_sound : eeval seval.
+
+Lemma sren_sound e r :
+  seval e (sren r) =₁ O.rscomp (reval e r) O.E_var.
+Proof. now apply tnat_sren_sound. Qed.
+#[export] Hint Rewrite sren_sound : eeval seval.
+
+Lemma sren_cons r : is_scons (sren r) -> is_rcons r.
+Proof. destruct r ; triv. Qed.
+
+Lemma tnat_sren_irred :
+  (forall i, qirred i -> eirred (tnat i)) *
+  (forall r, rirred r -> sirred (sren r)).
+Proof.
+apply tnat_elim with 
+  (P := fun i res => qirred i -> eirred res)
+  (P0 := fun r res => rirred r -> sirred res).
+all: intros ; triv.
+- rewrite eirred_tvar ; triv.
+- apply qirred_succ in H ; triv.
+- rewrite eirred_subst. rewrite qirred_rapply in H0. split5 ; triv.
+  + rewrite eirred_tvar. destruct i ; triv.
+    destruct H0 as (_ & H0 & _). apply qirred_succ in H0. triv.
+  + now apply H.
+  + intros (H1 & H2). destruct i ; triv. clear H1.
+    apply sren_cons in H2. destruct r ; triv. 
+    destruct H0 as (_ & _ & _ & _ & H0). triv.
+  + destruct r ; triv.  
+- rewrite eirred_tvar. triv.  
+- rewrite rirred_cons in H1. rewrite sirred_cons. split3.
+  + now apply H.
+  + now apply H0.
+  + intros (H2 & H3). destruct H1 as (_ & _ & H1) ; apply H1. split.
+    * destruct i ; triv.
+    * destruct r ; triv.  
+- rewrite rirred_comp in H1. feed H ; triv. feed H0 ; triv.
+  rewrite sirred_comp. split7 ; triv.
+  + destruct r1 ; triv.
+  + destruct r1 ; triv.
+  + destruct r1 ; triv.
+  + destruct r2 ; triv.
+  + destruct r1 ; triv. destruct r2 ; triv.
+    destruct H1 as (_ & _ & _ & _ & _ & _ & H1). triv.     
+- rewrite sirred_ren. triv.
+Qed.
+
+(*********************************************************************************)
+(** *** [scomp_aux] *)
+(*********************************************************************************)
+
+(** Helper function for [rscomp], [srcomp], and [scomp]
+    which takes care of trivial cases. *)
+Equations scomp_aux : subst -> subst -> subst :=
+scomp_aux s S_id := s ;
+scomp_aux S_shift (S_cons t s) := s ;
+scomp_aux s1 s2 := S_comp s1 s2.
+
+Lemma scomp_aux_sound e s1 s2 : 
+  seval e (scomp_aux s1 s2) =₁ O.scomp (seval e s1) (seval e s2).
+Proof.
+funelim (scomp_aux s1 s2) ; simp seval eeval ; triv.
+now rewrite O.scomp_sid_r.
+Qed.
+#[export] Hint Rewrite scomp_aux_sound : seval eeval.
+
+Lemma scomp_aux_irred s1 s2 :
+  sirred s1 -> sirred s2 -> 
+  (s2 <> S_id -> ~(s1 = S_shift /\ is_scons s2) -> sirred (S_comp s1 s2)) ->
+  sirred (scomp_aux s1 s2).
+Proof.
+intros H1 H2 H3. funelim (scomp_aux s1 s2) ; triv.
+all: try solve [ apply H3 ; triv ]. 
+now rewrite sirred_cons in H2.
+Qed.
+
+(*********************************************************************************)
+(** *** [sapply_aux] *)
+(*********************************************************************************)
+
+(** Helper function for [sapply] which takes care of trivial cases. *)
+Equations sapply_aux : subst -> qnat -> term :=
+sapply_aux S_id i := E_tvar i ;
+sapply_aux (S_cons t _) Q_zero := t ;
+sapply_aux s i := E_subst s (E_tvar i).
+
+Lemma sapply_aux_sound e s i : 
+  eeval e (sapply_aux s i) = seval e s (qeval e i).
+Proof. funelim (sapply_aux s i) ; simp qeval eeval ; triv. Qed.
+#[export] Hint Rewrite sapply_aux_sound : eeval seval.
+
+Lemma sapply_aux_irred s i :
+  sirred s -> qirred i -> ~is_qrapply i ->
+  (s <> S_id -> ~(is_scons s /\ i = Q_zero) -> eirred (E_subst s (E_tvar i))) ->
+  eirred (sapply_aux s i).
+Proof.
+intros H1 H2 H3 H4. funelim (sapply_aux s i).
+all: try solve [ apply H4 ; triv ].
+- rewrite eirred_tvar. destruct i ; triv.
+- now rewrite sirred_cons in H1.
+Qed.
 
 (*********************************************************************************)
 (** *** [sapply] and [rscomp] *)
@@ -331,6 +414,9 @@ Lemma rscomp_sound e r s :
 Proof. now apply sapply_rscomp_sound. Qed.
 #[export] Hint Rewrite rscomp_sound : eeval seval.
 
+Lemma eirred_tvar_zero : eirred (E_tvar Q_zero).
+Proof. intros H. inv H. inv H1. Qed.
+
 Lemma sapply_rscomp_irred :
   (forall s i, sirred s -> qirred i -> eirred (sapply s i)) *
   (forall r s, rirred r -> sirred s -> sirred (rscomp r s)).
@@ -339,17 +425,21 @@ apply sapply_elim with
   (P := fun s i res => sirred s -> qirred i -> eirred res)
   (P0 := fun r s res => rirred r -> sirred s -> sirred res).
 all: intros ; triv.
-- apply sapply_aux_irred ; triv. intros H1 H2 H3. rewrite eirred_subst_var.
-  split6 ; triv. intros [? ?] ; triv.
+- apply sapply_aux_irred ; triv. intros H1 H2. rewrite eirred_subst.
+  split5 ; triv.
+  + apply eirred_tvar_zero.
+  + intros [? ?] ; triv.
+- now apply qirred_succ in H0.
 - rewrite qirred_rapply in H1. apply sapply_aux_irred ; triv. 
   + now apply H.
-  + intros H2 H3 H4. rewrite eirred_subst_var. split6 ; triv.
+  + intros H2 H3. rewrite eirred_subst. split5 ; triv.
+    * rewrite eirred_tvar. destruct i ; triv. destruct H1 as (_ & H1 & _).
+      now apply qirred_succ in H1.
     * now apply H.
-    * intros [? ?] ; triv.
-- apply sapply_aux_irred ; triv. intros H1 H2 H3. rewrite eirred_subst_var.
-  split6 ; triv. 
-- apply scomp_aux_irred ; triv. intros H1. rewrite sirred_shift_l.
-  split3 ; triv. 
+    * intros [? ?] ; destruct i ; triv.
+- apply sapply_aux_irred ; triv. intros H1 H2. rewrite eirred_subst.
+  split5 ; triv. rewrite eirred_tvar ; triv. 
+- apply scomp_aux_irred ; triv. intros H1. rewrite sirred_comp. triv. 
 - rewrite rirred_cons in H1. apply scons_irred. 
   + apply H ; triv.
   + apply H0 ; triv.
@@ -358,48 +448,8 @@ all: intros ; triv.
   apply H0 ; triv. apply H ; triv.
 - apply scomp_aux_irred ; triv.
   + rewrite sirred_ren ; triv.
-  + intros H1 H2. rewrite sirred_ren_l. split3 ; triv.
-Qed.
-
-(*********************************************************************************)
-(** *** [sren] *)
-(*********************************************************************************)
-
-(** Turn an irreducible renaming into an irreducible substitution. *)
-Equations sren (r : ren) : subst :=
-sren R_id := S_id ;
-sren R_shift := S_shift ;
-sren (R_cons i r) := S_cons (E_tvar i) (sren r) ;
-sren (R_comp r1 r2) := S_comp (sren r1) (sren r2) ;
-sren (R_mvar r) := S_ren (R_mvar r).
-
-Lemma sren_sound e r : 
-  seval e (sren r) =₁ O.rscomp (reval e r) O.E_var.
-Proof.
-funelim (sren r) ; simp eeval qeval ; triv.
-+ rewrite H. intros [|] ; reflexivity.
-+ rewrite H0, H. reflexivity.
-Qed.  
-#[export] Hint Rewrite sren_sound : seval eeval.
-
-Lemma sren_irred r : rirred r -> sirred (sren r).
-Proof.
-intros H. funelim (sren r) ; triv.
-- rewrite rirred_cons in H0. rewrite sirred_cons. split3. 
-  + rewrite eirred_tvar. triv.
-  + apply H. triv.
-  + intros (H1 & H2). destruct H0 as (_ & _ & H0) ; apply H0. split.
-    * now inv H1.
-    * funelim (sren r) ; triv.  
-- rewrite rirred_comp in H1. feed H ; triv. feed H0 ; triv.
-  rewrite sirred_comp. split7 ; triv.
-  + funelim (sren r1) ; triv.
-  + funelim (sren r1) ; triv.
-  + funelim (sren r1) ; triv.
-  + funelim (sren r2) ; triv.
-  + funelim (sren r1) ; triv. funelim (sren r2) ; triv.
-    destruct H2 as (_ & _ & _ & _ & _ & _ & H2). triv.     
-- rewrite sirred_ren. triv.
+  + intros H1 H2. rewrite sirred_comp. split7 ; triv.
+    rewrite sirred_ren. triv.
 Qed.
 
 (*********************************************************************************)
@@ -425,10 +475,10 @@ Qed.
 (** *** [rename_aux] *)
 (*********************************************************************************)
 
-(** Helper function for [rename] which takes care of trivial cases. *)
+(*(** Helper function for [rename] which takes care of trivial cases. *)
 Equations rename_aux {k} (r : ren) (t : expr k) : expr k :=
 rename_aux R_id t := t ;
-rename_aux r t := E_ren r t.
+rename_aux r t := E_subst (sren r) t.
 
 Lemma rename_aux_sound e {k} r (t : expr k) :
   eeval e (rename_aux r t) = O.rename (reval e r) (eeval e t).
@@ -443,7 +493,7 @@ Lemma rename_aux_irred {k} r (t : expr k) :
 Proof.
 intros H1 H2 H3. funelim (rename_aux r t) ; triv.
 all: solve [ apply H3 ; triv ].
-Qed.
+Qed.*)
 
 (*********************************************************************************)
 (** *** [substitute_aux] *)
@@ -452,8 +502,6 @@ Qed.
 (** Helper function for [rename] which takes care of trivial cases. *)
 Equations substitute_aux {k} (s : subst) (t : expr k) : expr k :=
 substitute_aux S_id t := t ;
-substitute_aux (S_ren r) (E_tvar i) := E_tvar (rapply r i) ;
-substitute_aux (S_ren r) t := E_ren r t ;
 substitute_aux (S_cons t _) (E_tvar Q_zero) := t ;
 substitute_aux s t := E_subst s t.
 
@@ -461,23 +509,18 @@ Lemma substitute_aux_sound e {k} s (t : expr k) :
   eeval e (substitute_aux s t) = O.substitute (seval e s) (eeval e t).
 Proof.
 funelim (substitute_aux s t) ; simp seval eeval qeval ; triv.
-all: try solve [ now rewrite O.ren_is_subst ].
 now rewrite O.subst_sid.
 Qed.
 #[export] Hint Rewrite substitute_aux_sound : eeval seval.
 
 Lemma substitute_aux_irred {k} s (t : expr k) :
   eirred t -> sirred s -> 
-  (match s with S_ren r => ~is_tvar t -> eirred (E_ren r t) | _ => True end) ->
-  (s <> S_id -> ~is_sren s -> ~(is_tvar_zero t /\ is_scons s) -> eirred (E_subst s t)) ->
+  (s <> S_id -> ~(is_tvar_zero t /\ is_scons s) -> eirred (E_subst s t)) ->
   eirred (substitute_aux s t).
 Proof.
-intros H1 H2 H3 H4. funelim (substitute_aux s t) ; triv.
+intros H1 H2 H3. funelim (substitute_aux s t) ; triv.
 all: try solve [ apply H3 ; triv ].
-all: try solve [ apply H4 ; triv ].
-- now rewrite sirred_cons in H2.
-- rewrite eirred_tvar in *. rewrite sirred_ren in H2. 
-  destruct r ; try discriminate. apply rapply_rcomp_irred ; triv.
+now rewrite sirred_cons in H2.
 Qed.
 
 (*********************************************************************************)
@@ -486,16 +529,15 @@ Qed.
 
 (** Apply an irreducible renaming to an irreducible expression. *)
 Equations rename {k} (r : ren) (t : expr k) : expr k by struct t :=
-rename r (E_tvar i) := E_tvar (rapply r i) ;
+(*rename r (E_tvar i) :=  E_tvar (rapply r i) ;*)
 rename r (E_tctor c al) := E_tctor c (rename r al) ;
 rename r E_al_nil := E_al_nil ;
 rename r (E_al_cons a al) := E_al_cons (rename r a) (rename r al) ;
 rename _ (E_abase b x) := E_abase b x ;
 rename r (E_aterm t) := E_aterm (rename r t) ;
 rename r (E_abind a) := E_abind (rename (rup r) a) ;
-rename r2 (E_ren r1 e) := rename_aux (rcomp r1 r2) e ;
 rename r (E_subst s e) := substitute_aux (srcomp s r) e ;
-rename r e := rename_aux r e 
+rename r e := substitute_aux (sren r) e 
 
 (** Compose an irreducible substitution with an irreducible renaming. *)
 with srcomp (s : subst) (r : ren) : subst by struct s :=
@@ -513,10 +555,11 @@ apply rename_elim with
   (P0 := fun s r res => seval e res =₁ O.srcomp (seval e s) (reval e r)).
 all: intros ; simp eeval seval qeval reval ; triv.
 - now rewrite H.
+- now rewrite O.ren_is_subst.
 - now rewrite H, H0.
 - now rewrite H.
 - rewrite H. now rewrite rup_sound.
-- now rewrite O.ren_ren.
+- rewrite O.ren_is_subst. now rewrite O.subst_subst, O.ren_subst.
 - now rewrite O.ren_subst, H.
 - rewrite H, H0. intros [|] ; reflexivity.
 - rewrite H. intros i. cbv [O.scomp O.srcomp]. now rewrite O.ren_subst.
@@ -541,41 +584,42 @@ apply rename_elim with
   (P := fun {k} r (t : expr k) res => rirred r -> eirred t -> eirred res)
   (P0 := fun s r res => sirred s -> rirred r -> sirred res).
 all: intros ; triv.
-- rewrite eirred_tvar in *. apply rapply_rcomp_irred ; triv.
+- rewrite eirred_tvar in *. apply substitute_aux_irred ; triv.
+  + now rewrite eirred_tvar.
+  + now apply tnat_sren_irred.
+  + intros H1 H2. rewrite eirred_subst. split5 ; triv.
+    * rewrite eirred_tvar. triv.
+    * apply tnat_sren_irred. triv.
 - rewrite eirred_tctor in *. now apply H.
-- apply rename_aux_irred ; triv. intros H1. intros H' ; inv H' ; triv.
-  destruct H4 ; triv.
+- apply substitute_aux_irred ; triv.
+  + now apply tnat_sren_irred.
+  + intros H1 H2. rewrite eirred_subst. split5 ; triv.
+    now apply tnat_sren_irred.
 - rewrite eirred_al_cons in *. split ; [apply H | apply H0] ; triv.
 - rewrite eirred_aterm in *. now apply H.
 - rewrite eirred_abind in *. apply H ; triv. now apply rup_irred.
-- rewrite eirred_ren in H0. apply rename_aux_irred ; triv.
-  + apply rapply_rcomp_irred ; triv.
-  + destruct e ; triv.
-  + intros H2. rewrite eirred_ren. split3 ; triv.
-    apply rapply_rcomp_irred ; triv.
+- now apply eirred_ren in H0.
 - rewrite eirred_subst in H1. feed2 H ; triv. 
   apply substitute_aux_irred ; triv.
-  + destruct (srcomp s r) ; triv. intros H4. rewrite sirred_ren in H. 
-    destruct r0 ; try discriminate. rewrite eirred_ren. split3 ; triv.
-    destruct H1 as (_ & _ & H1 & _). destruct e ; triv.
-    all: exfalso ; apply H1 ; triv.
-  + intros H4 H5 H6. rewrite eirred_subst. split7 ; triv.
-- now apply sren_irred.
+  intros H4 H5. rewrite eirred_subst. split5 ; triv.
+- now apply tnat_sren_irred.
 - apply scomp_aux_irred ; triv. 
-  + now apply sren_irred.
-  + intros H1 H2. rewrite sirred_shift_l. split3 ; triv.
-    now apply sren_irred.
+  + now apply tnat_sren_irred.
+  + intros H1 H2. rewrite sirred_comp. split7 ; triv.
+    now apply tnat_sren_irred.
 - rewrite sirred_cons in *. apply scons_irred ; [apply H | apply H0] ; triv.
 - rewrite sirred_comp in H0. feed2 H ; triv. apply scomp_aux_irred ; triv.
   intros H4 H5. rewrite sirred_comp. split7 ; triv.
 - rewrite sirred_ren in H. destruct r0 ; triv. apply scomp_aux_irred.
   + now rewrite sirred_ren.
-  + now apply sren_irred.
-  + intros H1 H2. rewrite sirred_ren_l. split3 ; triv. now apply sren_irred.
+  + now apply tnat_sren_irred.
+  + intros H1 H2. rewrite sirred_comp. split7 ; triv. 
+    * now rewrite sirred_ren.
+    * now apply tnat_sren_irred.
 - apply scomp_aux_irred ; triv.
-  + now apply sren_irred.
-  + intros H1 H2. rewrite sirred_mvar_l. split ; triv.
-    now apply sren_irred.   
+  + now apply tnat_sren_irred.
+  + intros H1 H2. rewrite sirred_comp. split7 ; triv.
+    now apply tnat_sren_irred.   
 Qed.
 
 (*********************************************************************************)
@@ -610,7 +654,6 @@ substitute s (E_al_cons a al) := E_al_cons (substitute s a) (substitute s al) ;
 substitute _ (E_abase b x) := E_abase b x ;
 substitute s (E_aterm t) := E_aterm (substitute s t) ;
 substitute s (E_abind a) := E_abind (substitute (sup s) a) ;
-substitute s (E_ren r e) := substitute_aux (rscomp r s) e ;
 substitute s2 (E_subst s1 e) := substitute_aux (scomp s1 s2) e ;
 substitute s e := substitute_aux s e 
 
@@ -633,8 +676,7 @@ all: intros ; simp eeval seval ; triv.
 - now rewrite H, H0.
 - now rewrite H.
 - now rewrite H, sup_sound.
-- now rewrite O.subst_ren.
-- now rewrite H, O.subst_subst.
+- now rewrite O.subst_subst, H.
 - rewrite H, H0. now rewrite O.scomp_scons_distrib.
 - rewrite H. now rewrite O.scomp_assoc.
 Qed.
@@ -657,37 +699,28 @@ apply substitute_elim with
   (P := fun {k} s (t : expr k) res => sirred s -> eirred t -> eirred res)
   (P0 := fun s1 s2 res => sirred s1 -> sirred s2 -> sirred res).
 all: intros ; triv.
-- rewrite eirred_tvar in H0. now apply sapply_rscomp_irred.
+- apply sapply_rscomp_irred ; triv. rewrite eirred_tvar in H0. destruct H0.
+  destruct i ; triv.
+  + exfalso ; now apply H1.
+  + exfalso ; now apply H0.
 - rewrite eirred_tctor in *. now apply H.
 - apply substitute_aux_irred ; triv.
-  + destruct s ; triv. intros _. rewrite eirred_ren. 
-    rewrite sirred_ren in H. destruct r ; try discriminate. 
-    split3 ; triv.
-  + intros H1 H2 H3. rewrite eirred_subst. split7 ; triv. 
+  intros H1 H2. rewrite eirred_subst. triv. 
 - rewrite eirred_al_cons in *. feed2 H ; triv. feed2 H0 ; triv.
 - rewrite eirred_aterm in *. now apply H.
 - rewrite eirred_abind in *. apply H ; triv. apply sup_irred ; triv.
-- rewrite eirred_ren in H0. destruct e ; triv. apply substitute_aux_irred ; triv. 
-  + apply sapply_rscomp_irred ; triv.
-  + assert (H1 : sirred (rscomp r s)) by now apply sapply_rscomp_irred.
-    destruct (rscomp r s) ; triv. intros _. rewrite sirred_ren in H1. 
-    destruct r0 ; try discriminate. rewrite eirred_ren. split3 ; triv.
-  + intros H1 H2 H3. rewrite eirred_subst. split7 ; triv.
-    apply sapply_rscomp_irred ; triv. 
+- now apply eirred_ren in H0.
 - rewrite eirred_subst in H1. feed2 H ; triv. apply substitute_aux_irred ; triv.
-  + destruct (scomp s1 s2) ; triv. intros H4. rewrite eirred_ren.
-    destruct H1 as (H5 & H6 & H7 & H8 & H9 & H10 & H11). 
-    rewrite sirred_ren in H. destruct r ; triv. destruct e ; triv.
-    all: solve [ exfalso ; apply H7 ; triv ].
-  + intros H4 H5 H6. rewrite eirred_subst. split7 ; triv.
-- apply scomp_aux_irred ; triv. intros H1 H2. rewrite sirred_shift_l. split3 ; triv.
+  intros H4 H5. rewrite eirred_subst. triv.
+- apply scomp_aux_irred ; triv. intros H1 H2. rewrite sirred_comp. triv.
 - rewrite sirred_cons in *. feed2 H ; triv. feed2 H0 ; triv. apply scons_irred ; triv.
 - rewrite sirred_comp in H0. feed2 H ; triv. apply scomp_aux_irred ; triv.
   intros H4 H5. rewrite sirred_comp. split7 ; triv.
 - rewrite sirred_ren in H. destruct r ; triv. apply scomp_aux_irred ; triv.
   + rewrite sirred_ren. triv.
-  + intros H1 H2. rewrite sirred_ren_l. split3 ; triv.
-- apply scomp_aux_irred ; triv. intros H1 H2. rewrite sirred_mvar_l. split ; triv.
+  + intros H1 H2. rewrite sirred_comp. split7 ; triv.
+    rewrite sirred_ren ; triv.
+- apply scomp_aux_irred ; triv. intros H1 H2. rewrite sirred_comp. triv.
 Qed.
 
 (*********************************************************************************)
@@ -696,7 +729,7 @@ Qed.
 
 (** Simplify an expression. *)
 Equations esimp {k} (t : expr k) : expr k :=
-esimp (E_tvar i) := E_tvar (qsimp i) ;
+esimp (E_tvar i) := tnat (qsimp i) ;
 esimp (E_tctor c al) := E_tctor c (esimp al) ;
 esimp E_al_nil := E_al_nil ;
 esimp (E_al_cons a al) := E_al_cons (esimp a) (esimp al) ;
@@ -743,7 +776,7 @@ Lemma esimp_ssimp_irred :
 Proof.
 apply esimp_elim with (P := fun _ _ res => eirred res) (P0 := fun _ res => sirred res).
 all: intros ; triv.
-- rewrite eirred_tvar. now apply qsimp_irred.
+- apply tnat_sren_irred. apply qsimp_irred. 
 - now rewrite eirred_tctor.
 - now rewrite eirred_al_cons.
 - now rewrite eirred_aterm.
@@ -752,7 +785,7 @@ all: intros ; triv.
 - apply substitute_scomp_irred ; triv.
 - now apply scons_irred.
 - apply substitute_scomp_irred ; triv.
-- apply sren_irred. now apply rsimp_irred.
+- apply tnat_sren_irred. now apply rsimp_irred.
 Qed.
 
 Lemma esimp_irred {k} (t : expr k) : eirred (esimp t).

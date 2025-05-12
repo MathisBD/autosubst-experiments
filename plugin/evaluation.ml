@@ -132,24 +132,10 @@ struct
     in
     (* Branch for [O.E_ctor ?c ?al]. *)
     let ctor_branch (i, al) =
-      (* O.E_ctor CApp (O.E_al_cons (O.E_aterm t1') (O.E_al_cons (O.E_aterm t2') O.E_al_nil))
-  
-     let (t1, p_t1) = eval_term t1' in
-     let (t2, p_t2) = eval_term t2' in
-     let t = App t1 t2 in
-     let p = congr_App _ _ _ _ p_t1 p_t2 in
-  *)
-      (* O.E_ctor CLam (O.E_al_cons (O.E_abase BString str) (O.E_al_cons (O.E_abind (O.E_aterm t1')) O.E_al_nil))
-  
-     let p_str = eq_refl str in
-     let (t1, p_t1) = eval_term t1' in
-     let t = Lam str t1 in
-     let p = congr_Lam _ _ _ _ p_str p_t1 in
-  *)
       let rec eval_arg ty a : (EConstr.t * EConstr.t) m =
         match ty with
         | AT_base _ ->
-            let* p = apps_ev (Lazy.force Consts.reflexivity) 1 [| a |] in
+            let* p = apps_ev (Lazy.force Consts.eq_refl) 1 [| a |] in
             ret (a, p)
         | AT_term -> eval_term a
         | AT_bind ty -> eval_arg ty a
@@ -274,9 +260,6 @@ let eval_term (sign : signature) (ops : ops_all) (t' : EConstr.t) :
   let* t, p = M.eval_term t' in
   (* Typecheck to resolve evars. *)
   let* _ = typecheck t None in
-  let* env = get_env in
-  let* sigma = get_sigma in
-  Log.printf "after evaluation: %s" (Log.show_econstr env sigma t);
   let p_ty =
     apps (Lazy.force Consts.eq)
       [| mkind ops.ops_ops0.term

@@ -25,11 +25,11 @@ Ltac2 red_flags_simp () : RedFlags.t :=
      T.qsimp T.rsimp T.qsimp_functional T.rsimp_functional
      T.substitute T.scomp T.substitute_functional T.scomp_functional
      T.rename T.srcomp T.rename_functional T.srcomp_functional
-     T.substitute_aux T.scomp_aux T.rename_aux T.sapply_aux T.sup T.rup T.sren
+     T.tnat T.sren T.tnat_functional T.sren_functional
+     T.substitute_aux T.scomp_aux T.sapply_aux T.sup T.rup 
      T.sapply T.rscomp T.sapply_functional T.rscomp_functional
      T.rapply T.rcomp T.rapply_functional T.rcomp_functional
-     T.rcomp_aux T.rapply_aux T.rcons T.scons
-     (*apply_noConfusion noConfusion_retr NoConfusionHomPackage_kind*)]).
+     T.rcomp_aux T.rapply_aux T.rcons T.scons]).
 
 Ltac2 red_flags_eval () : RedFlags.t :=
   red_flags:(beta iota delta   
@@ -52,9 +52,7 @@ Ltac2 build_TermSimplification (t0 : constr) : unit :=
   (* Eval Level 2 -> Level 1. *)
   let t1' := Std.eval_cbv (red_flags_eval ()) constr:(T.eeval $env $t2') in
   (* Eval Level 1 -> Level 0. *)
-  printf "t1': %t" t1';
   let (t0', p3) := eval_term t1' in
-  printf "t0': %t" t0';
   (* Assemble the typeclass instance. *)
   let eq := constr:(eq_trans
     (eq_sym $p1) 
@@ -64,6 +62,7 @@ Ltac2 build_TermSimplification (t0 : constr) : unit :=
   in
   exact (MkTermSimplification term $t0 $t0' $eq).
 
+(** Hook [build_TermSimplification] into typeclass search. *)
 #[export] Hint Extern 10 (TermSimplification ?t0 _) =>
   let tac := ltac2:(t0 |-  
     match Ltac1.to_constr t0 with 
@@ -73,11 +72,14 @@ Ltac2 build_TermSimplification (t0 : constr) : unit :=
   in 
   tac t0 : typeclass_instances.
     
+(** Main simplification tactic. The call to [exact _] triggers typeclass search
+    to find an instance of [TermSimplification ?t _], which in turn calls 
+    [build_TermSimplification] via [Hint Extern]. *)
 Ltac rasimpl := (rewrite_strat (topdown (hints asimpl))) ; [ | (exact _) ..].
 
 Axiom (t t1 t2 : term).
 Axiom (s : subst).
-Lemma test : substitute sid (Lam "x" t) = Var 0.
+Lemma test : substitute sshift (Lam "x" t) = Var 0.
 Proof. rasimpl. 
 Admitted.
 

@@ -24,6 +24,8 @@ Include LevelTwo.Make (S).
     on their head constructor(s). We provide discriminator functions 
     which handle this. *)
 
+Definition is_qsucc x := 
+  match x with Q_succ _ => true | _ => false end.  
 Definition is_qrapply x := 
   match x with Q_rapply _ _ => true | _ => false end.
 Definition is_qmvar x :=
@@ -63,6 +65,8 @@ Definition is_smvar s :=
 Definition is_sren s := 
   match s with S_ren _ => true | _ => false end.
 
+Definition is_sshift_l s :=
+  match s with S_comp S_shift _ => true | _ => false end.
 Definition is_scons_l s :=
   match s with S_comp (S_cons _ _) _ => true | _ => false end.
 Definition is_scomp_l s :=
@@ -80,29 +84,37 @@ Definition is_sren_l s :=
 Inductive qred : qnat -> Prop :=
 
 (** Congruence. *)
-| QR_ren r x : rred r \/ qred x -> qred (Q_rapply r x)
-
+| QR_congr_succ i : qred i -> qred (Q_succ i)
+| QR_congr_rapply r i : rred r \/ qred i -> qred (Q_rapply r i)
+(** Reduce [i[r1][r2]] into [i[r1 >> r2]]. *)
 | QR_ren_ren r1 r2 i : qred (Q_rapply r1 (Q_rapply r2 i))
+(** Reduce [i[rid]] into [i]. *)
 | QR_ren_id i : qred (Q_rapply R_id i)
-| QR_rcons_zero r : 
-    is_rcons r \/ is_rcons_l r -> qred (Q_rapply r Q_zero)
+(** Reduce [0[i . r]] into [i]. *)
+| QR_rcons_zero r : is_rcons r -> qred (Q_rapply r Q_zero)
+(** Reduce [S i] into [i[R_shift]]. *)
+| QR_succ_shift i : qred (Q_succ i)
 
 (** Reducible renamings. *)
 with rred : ren -> Prop :=
 
 (** Congruence. *)
-| RR_cons i r : qred i \/ rred r -> rred (R_cons i r)
-| RR_comp r1 r2 : rred r1 \/ rred r2 -> rred (R_comp r1 r2)
-
-(** Composition should be right associated, with neutral element [R_id]. *)
+| RR_congr_cons i r : qred i \/ rred r -> rred (R_cons i r)
+| RR_congr_comp r1 r2 : rred r1 \/ rred r2 -> rred (R_comp r1 r2)
+(** Reduce [rid >> r] into [r]. *)
 | RR_rid_l r : rred (R_comp R_id r)
+(** Reduce [r >> rid] into [r]. *)
 | RR_rid_r r : rred (R_comp r R_id)
+(** Reduce [(r1 >> r2) >> r3] into [r1 >> (r2 >> r3)]. *)
 | RR_comp_l r1 r2 r3 : rred (R_comp (R_comp r1 r2) r3)
-
+(** Reduce [(i . r1) >> r2] into [i[r2] . (r1 >> r2)]. *)
 | RR_cons_l i r1 r2 : rred (R_comp (R_cons i r1) r2)
-| RR_shift_cons r : 
-  is_rcons r \/ is_rcons_l r -> rred (R_comp R_shift r)
-| RR_zero_shift : rred (R_cons Q_zero R_shift).
+(** Reduce [shift >> (i . r)] into [r]. *)
+| RR_shift_cons r : is_rcons r -> rred (R_comp R_shift r)
+(** Reduce [0 . shift] into [rid]. *)
+| RR_zero_shift : rred (R_cons Q_zero R_shift)
+(** Reduce [0[r] . (shift >> r)] into [r]. *)
+(*| RR_shift_cons_l r : rred (R_cons (Q_rapply r Q_zero) (R_comp R_shift r))*).
 
 Hint Constructors qred : core.
 Hint Constructors rred : core.
@@ -115,45 +127,12 @@ Definition rirred r := ~ rred r.
 (** *** Characterization of irreducible forms for renamings & naturals. *)
 (*********************************************************************************)
 
-Lemma qirred_rapply_shift i : 
-  qirred (Q_rapply R_shift i) <-> qirred i /\ ~is_qrapply i.
-split ; intros H.
-- split ; intros H' ; apply H ; clear H.
-  + constructor ; now right.
-  + destruct i ; triv.
-- intros H'. inv H'.
-  + destruct H1 ; triv.
-  + destruct H ; triv.
-  + destruct H1 ; triv.
-Qed.
+Lemma qirred_zero : qirred Q_zero.
+Proof. intros H. inv H. Qed.
 
-Lemma qirred_rapply_mvar m i : 
-  qirred (Q_rapply (R_mvar m) i) <-> qirred i /\ ~is_qrapply i.
-Proof.
-split ; intros H.
-- split ; intros H' ; apply H ; clear H.
-  + constructor ; now right.
-  + destruct i ; triv.
-- intros H'. inv H'.
-  + destruct H1 ; triv.
-  + destruct H ; triv.
-  + destruct H1 ; triv.
-Qed.     
-
-Lemma qirred_rapply_cons i r k :
-  qirred (Q_rapply (R_cons i r) k) <-> 
-    qirred i /\ rirred r /\ is_qmvar k /\ ~(i = Q_zero /\ r = R_shift).
-Proof.
-split.
-- intros H. split4.
-  + intros H' ; apply H ; clear H. constructor ; left. constructor ; now left.
-  + intros H' ; apply H ; clear H. constructor ; left. constructor ; now right. 
-  + destruct k ; triv. exfalso. apply H. triv.
-  + intros H' ; apply H ; clear H. destruct H' ; subst. constructor ; left. now constructor.  
-- intros (H1 & H2 & H3 & H4) H. destruct k ; triv. inv H ; triv.
-  destruct H5 ; triv. inv H0. destruct H6 ; triv. apply H4 ; triv.
-Qed.
-
+Lemma qirred_succ i : ~qirred (Q_succ i).
+Proof. intros H. apply H. now constructor. Qed.
+    
 Lemma qirred_rapply r i : 
   qirred (Q_rapply r i) <-> 
     rirred r /\ qirred i /\ r <> R_id /\ ~is_qrapply i /\
@@ -166,13 +145,15 @@ split ; intros H.
 - intros H' ; inv H' ; triv.
   + destruct H1 ; triv.
   + destruct H as (_ & _ & _ & H & _). triv.
-  + destruct H1 ; destruct r ; triv.
-    * destruct H as (_ & _ & _ & _ & H). triv.
-    * destruct H as (H & _). destruct r1 ; triv.        
+  + destruct r ; triv. clear H1. destruct H as (_ & _ & _ & _ & H). triv.
 Qed.
 
+Lemma qirred_mvar m : qirred (Q_mvar m).
+Proof. intros H. inv H. Qed.
+
 Lemma rirred_cons i r : 
-  rirred (R_cons i r) <-> qirred i /\ rirred r /\ ~(i = Q_zero /\ r = R_shift).
+  rirred (R_cons i r) <-> 
+    qirred i /\ rirred r /\ ~(i = Q_zero /\ r = R_shift).
 Proof.
 split.
 - intros H. split3 ; intros H' ; apply H ; triv.
@@ -186,20 +167,18 @@ Lemma rirred_mvar_l m r :
 Proof.
 split.
 - intros H. split.
-  + intros H'. apply H ; clear H. apply RR_comp. now right.
+  + intros H'. apply H ; clear H. apply RR_congr_comp. now right.
   + intros H' ; subst. apply H. now constructor. 
 - intros (H & H') H''. inv H'' ; triv. now destruct H1.
 Qed.      
 
 Lemma rirred_shift_l r : 
   rirred (R_comp R_shift r) <-> 
-    rirred r /\ r <> R_id /\ ~is_rcons r /\ ~is_rcons_l r.
+    rirred r /\ r <> R_id /\ ~is_rcons r.
 Proof.
 split.
-- intros H. split4 ; triv. intros H' ; apply H ; triv.
-- intros (H1 & H2) H. inv H ; triv.
-  + destruct H3 ; triv.
-  + destruct H3 ; triv.
+- intros H. split3 ; triv. intros H' ; apply H ; triv.
+- intros (H1 & H2 & H3) H. inv H ; triv. destruct H4 ; triv.
 Qed.
 
 Lemma rirred_comp r1 r2 : 
@@ -216,52 +195,39 @@ split ; intros H.
   + destruct H1 ; triv.
   + destruct H as (_ & _ & H & _) ; triv.
   + destruct H as (_ & _ & _ & H & _) ; triv.
-  + destruct H1 ; destruct r2 ; triv.
-    * destruct H as (_ & _ & _ & _ & _ & _ & H). triv.
-    * destruct r2_1 ; triv. destruct H as (_ & H & _). triv.
+  + destruct r2 ; triv. destruct H as (_ & _ & _ & _ & _ & _ & H). triv.
 Qed. 
 
 (*********************************************************************************)
 (** *** Irreducible forms for substitutions & expressions. *)
 (*********************************************************************************)
 
-(** Expressions in which we can push renamings. *)
-Definition is_push_ren {k} (e : expr k) : Prop :=
-  match e with E_mvar _ => False | _ => True end.
-
 (** Expressions in which we can push substitutions. *)
-Definition is_push_subst {k} (e : expr k) : Prop :=
+Definition is_push {k} (e : expr k) : Prop :=
   match e with E_mvar _ | E_tvar _ => False | _ => True end.
 
 (** Reducible expression. *)
 Inductive ered : forall {k}, expr k -> Prop :=
 
 (** Congruence. *)
-| ER_tvar i : qred i -> ered (E_tvar i)
-| ER_tctor c al : ered al -> ered (E_tctor c al)
-| ER_al_cons {ty} {tys} (a : arg ty) (al : args tys) : 
-    ered a \/ ered al -> ered (E_al_cons a al)
-| ER_aterm t : ered t -> ered (E_aterm t)
-| ER_abind {ty} (a : arg ty) : ered a -> ered (E_abind a) 
-| ER_ren {k} r (e : expr k) : rred r \/ ered e -> ered (E_ren r e)
-| ER_subst {k} s (e : expr k) : sred s \/ ered e -> ered (E_subst s e)
+| ER_congr_tvar i : qred i -> ered (E_tvar i)
+| ER_congr_tctor c al : ered al -> ered (E_tctor c al)
+| ER_congr_al_cons {ty} {tys} (a : arg ty) (al : args tys) : ered a \/ ered al -> ered (E_al_cons a al)
+| ER_congr_aterm t : ered t -> ered (E_aterm t)
+| ER_congr_abind {ty} (a : arg ty) : ered a -> ered (E_abind a) 
+| ER_congr_ren {k} r (e : expr k) : rred r \/ ered e -> ered (E_ren r e)
+| ER_congr_subst {k} s (e : expr k) : sred s \/ ered e -> ered (E_subst s e)
 
-(** Push renamings/substitutions inside expressions. *)
-| ER_push_ren {k} r (e : expr k) : is_push_ren e -> ered (E_ren r e)
-| ER_push_subst {k} s (e : expr k) : is_push_subst e -> ered (E_subst s e)
-
-(** Identity renaming/substitution. *)
-| ER_ren_rid {k} (e : expr k) : ered (E_ren R_id e)
+(** Reduce [E_tvar i[r]] into [substitute (S_ren r) (E_tvar i)]. *)
+| ER_extract_rapply r i : ered (E_tvar (Q_rapply r i))
+(** Reduce [rename r e] into [substitute (S_ren r) e]. *)
+| ER_extract_ren {k} r (e : expr k) : ered (E_ren r e)
+(** Push substitutions inside expressions. *)
+| ER_push_subst {k} s (e : expr k) : is_push e -> ered (E_subst s e)
+(** Reduce [e[sid]] into [e]. *)
 | ER_subst_sid {k} (e : expr k) : ered (E_subst S_id e)
-
-(** Apply a substitution/renaming to a variable. *)
-| ER_scons_zero s : 
-    is_scons s \/ is_scons_l s -> ered (E_subst s (E_tvar Q_zero))
-| ER_sren_var s r i : 
-    ered (E_subst s (E_tvar (Q_rapply r i)))
-
-(** Substitute with a renaming. *)
-| ER_subst_ren {k} (e : expr k) r : ered (E_subst (S_ren r) e)
+(** Reduce [0[t . s]] into [t]. *)
+| ER_scons_zero s : is_scons s -> ered (E_subst s (E_tvar Q_zero))
 
 (** Reducible substitutions. *)
 with sred : subst -> Prop :=
@@ -271,19 +237,22 @@ with sred : subst -> Prop :=
 | SR_comp s1 s2 : sred s1 \/ sred s2 -> sred (S_comp s1 s2)
 | SR_ren r : rred r -> sred (S_ren r)
 
-(** Composition should be right associated, with neutral element [S_id]. *)
+(** Reduce [sid >> s] into [s]. *)
 | SR_sid_l s : sred (S_comp S_id s)
+(** Reduce [s >> sid] into [s]. *)
 | SR_sid_r s : sred (S_comp s S_id)
+(** Reduce [(s1 >> s2) >> s3] into [s1 >> (s2 >> s3)]. *)
 | SR_comp_l s1 s2 s3: sred (S_comp (S_comp s1 s2) s3)
-
 (** Push [S_ren] into renamings. *)
 | SR_ren_distrib r : ~is_rmvar r -> sred (S_ren r)
 (** Composition distributes over [S_cons]. *)
 | SR_cons_l t s1 s2 : sred (S_comp (S_cons t s1) s2)
-(** Simplify [shift >> (t . s)] into [s]. *)
-| SR_shift_cons s : 
-  is_scons s \/ is_scons_l s -> sred (S_comp S_shift s)
-| SR_zero_shift : sred (S_cons (E_tvar Q_zero) S_shift).
+(** Reduce [shift >> (t . s)] into [s]. *)
+| SR_shift_cons s : is_scons s -> sred (S_comp S_shift s)
+(** Reduce [0 . shift] into [sid]. *)
+| SR_zero_shift : sred (S_cons (E_tvar Q_zero) S_shift)
+(** Reduce [s 0 . (shift >> s)] into [s]. *)
+(*| SR_zero_shift_l s : sred (S_cons (E_subst s (E_tvar Q_zero)) (S_comp S_shift s))*).
 
 Hint Constructors ered : core.
 Hint Constructors sred : core.
@@ -296,8 +265,18 @@ Definition sirred s := ~sred s.
 (** *** Characterization of irreducible forms for expressions & substitutions. *)
 (*********************************************************************************)
 
-Lemma eirred_tvar i : eirred (E_tvar i) <-> qirred i.
-Proof. split ; intros H H' ; apply H ; triv. now inv H'. Qed.
+Lemma eirred_tvar i : 
+  eirred (E_tvar i) <-> ~is_qrapply i /\ ~is_qsucc i.
+Proof. 
+split ; intros H.
+- split ; intros H' ; apply H ; destruct i ; triv.
+- intros H'. destruct H. destruct i ; triv.
+  + inv H'. inv H2.
+  + inv H'. inv H2.
+Qed.
+
+Lemma eirred_mvar m : eirred (E_mvar m).
+Proof. intros H. inv H. Qed.
 
 Lemma eirred_tctor c al : eirred (E_tctor c al) <-> eirred al.
 Proof. split ; intros H H' ; apply H ; triv. now inv H'. Qed.
@@ -323,60 +302,25 @@ Lemma eirred_abind {ty} (a : arg ty) :
   eirred (E_abind a) <-> eirred a.
 Proof. split ; intros H H' ; apply H ; triv. now inv H'. Qed.
 
-Lemma eirred_ren {k} (e : expr k) r :
-  eirred (E_ren r e) <-> is_tmvar e /\ rirred r /\ r <> R_id.
-Proof.
-split ; intros H.
-- split3.
-  + destruct e ; triv. 
-    all: exfalso ; apply H ; clear H. 
-    all: apply ER_push_ren ; triv.
-  + intros H' ; apply H ; triv.
-  + intros H' ; apply H ; triv.
-- intros H' ; inv H' ; triv.
-  + destruct H2 ; triv. destruct e ; triv.
-  + destruct e ; triv.
-Qed.
-
-Lemma eirred_subst_var s i :
-  eirred (E_subst s (E_tvar i)) <->
-    qirred i /\ sirred s /\ ~(i = Q_zero /\ is_scons s) /\ s <> S_id /\ 
-    ~is_sren s /\ ~is_qrapply i.
-Proof.
-split ; intros H.
-- split6 ; intros H' ; apply H ; clear H ; triv.
-  + destruct H' as [-> H']. triv.
-  + destruct s ; triv.
-  + destruct i ; triv.
-- destruct H as (H1 & H2 & H3 & H4 & H5 & H6). intros H' ; inv H' ; triv.
-  + destruct H7 ; triv. now inv H.
-  + destruct H7 ; triv. destruct s ; triv. destruct s1 ; triv.
-Qed.
-
-Definition is_tvar_rapply {k} (e : expr k) := 
-  match e with 
-  | E_tvar (Q_rapply _ _) => true 
-  | _ => false
-  end.
+Lemma eirred_ren {k} (e : expr k) r : ~eirred (E_ren r e).
+Proof. intros H ; apply H. triv. Qed.
 
 Lemma eirred_subst {k} (e : expr k) s :
   eirred (E_subst s e) <->
-    eirred e /\ sirred s /\ ~is_push_subst e /\ ~is_tvar_rapply e /\
-    ~(is_tvar_zero e /\ is_scons s) /\ s <> S_id /\ ~is_sren s.
+    eirred e /\ sirred s /\ ~is_push e /\
+    ~(is_tvar_zero e /\ is_scons s) /\ s <> S_id.
 Proof.
 split ; intros H.
-- split7 ; intros H' ; apply H ; triv.
-  + destruct e ; triv. destruct q ; triv.
-  + destruct e ; triv. destruct q ; triv. destruct s ; triv.
-  + destruct s ; triv.
+- split5 ; intros H' ; apply H ; triv.
+  destruct e ; triv. destruct q ; triv. destruct s ; triv.
 - intros H' ; inv H' ; triv.
   + destruct H2 ; triv.
-  + destruct H2 ; destruct s ; try discriminate.
-    * destruct H as (_ & _ & _ & _ & H & _). triv.
-    * destruct s1 ; triv. destruct H as (_ & H & _) ; triv.
-  + destruct H as (_ & _ & _ & H & _). triv.
-  + destruct H as (_ & _ & _ & _ & _ & _ & H). triv.
+  + destruct s ; triv.
+    destruct H as (_ & _ & _ & H & _). triv.
 Qed.     
+
+Lemma sirred_mvar m : sirred (S_mvar m).
+Proof. intros H. inv H. Qed.
 
 Lemma sirred_cons t s : 
   sirred (S_cons t s) <-> 
@@ -389,42 +333,6 @@ split ; intros H.
   + destruct H' ; subst. now constructor. 
 - intros H'. inv H'. destruct H1 ; triv. destruct H as (_ & _ & H). triv.
 Qed.   
-
-Lemma sirred_shift_l s : 
-  sirred (S_comp S_shift s) <->
-    sirred s /\ ~is_scons s /\ s <> S_id.
-Proof.
-split.
-- intros H. split3 ; intros H' ; apply H ; clear H ; triv.
-- intros (H1 & H2 & H3) H'. inv H' ; triv.
-  + destruct H0 ; triv.
-  + destruct H0 ; triv. destruct s ; triv. destruct s1 ; triv.
-Qed.  
-
-Lemma sirred_ren_l r s : 
-  sirred (S_comp (S_ren r) s) <-> is_rmvar r /\ sirred s /\ s <> S_id.
-Proof.
-split ; intros H.
-- split3.
-  + destruct r ; triv. 
-    all: exfalso ; apply H.
-    all: constructor ; left.
-    all: now apply SR_ren_distrib.
-  + intros H' ; apply H ; clear H. constructor. now right.
-  + intros H'. apply H ; clear H. subst. now constructor.
-- intros H'. inv H' ; triv. destruct H1 ; triv. inv H0 ; triv.
-  destruct r ; triv.
-Qed.
-
-Lemma sirred_mvar_l m s : 
-  sirred (S_comp (S_mvar m) s) <-> sirred s /\ s <> S_id.
-Proof.
-split.
-- intros H. split.
-  + intros H'. apply H ; clear H. apply SR_comp. now right.
-  + intros H' ; subst. apply H. now constructor. 
-- intros (H & H') H''. inv H'' ; triv. now destruct H1.
-Qed. 
 
 Lemma sirred_ren r : sirred (S_ren r) <-> is_rmvar r.
 Proof.
@@ -447,9 +355,7 @@ split ; intros H.
   + destruct H1 ; triv.
   + destruct H as (_ & _ & H & _) ; triv.
   + destruct H as (_ & _ & _ & H & _) ; triv.
-  + destruct H1 ; destruct s2 ; triv.
-    * destruct H as (_ & _ & _ & _ & _ & _ & H). triv.
-    * destruct s2_1 ; triv. destruct H as (_ & H & _). triv.
+  + destruct s2 ; triv. destruct H as (_ & _ & _ & _ & _ & _ & H). triv.
 Qed. 
 
 End Make.

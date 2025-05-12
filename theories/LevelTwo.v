@@ -24,6 +24,8 @@ Definition mvar := nat.
 Inductive qnat :=
 (** Zero. *)
 | Q_zero : qnat
+(** Successor. *)
+| Q_succ : qnat -> qnat
 (** Explicit renaming applied to a quoted natural. *)
 | Q_rapply : ren -> qnat -> qnat 
 (** Quoted natural meta-variable. *)
@@ -113,6 +115,7 @@ Section Evaluation.
  
   Equations qeval : qnat -> nat :=
   qeval Q_zero := 0 ;
+  qeval (Q_succ i) := S (qeval i) ; 
   qeval (Q_rapply r i) := reval r (qeval i) ;
   qeval (Q_mvar x) := e.(assign_qnat) x
   
@@ -243,6 +246,9 @@ Ltac2 add_subst_mvar (t : constr) (e : env) : int * env :=
 Ltac2 rec reify_nat (e : env) (t : constr) : env * constr := 
   lazy_match! t with 
   | 0 => e, constr:(Q_zero)
+  | S ?i => 
+    let (e, i) := reify_nat e i in
+    e, constr:(S $i)
   | ?r ?i =>
     let (e, r) := reify_ren e r in
     let (e, i) := reify_nat e i in
