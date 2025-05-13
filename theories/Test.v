@@ -79,7 +79,7 @@ Ltac rasimpl := (rewrite_strat (topdown (hints asimpl))) ; [ | (exact _) ..].
 
 Axiom (t t1 t2 : term).
 Axiom (s : subst).
-Lemma test : substitute sshift (Lam "x" t) = Var 0.
+Lemma test : substitute sshift (Lam "x" (App t (Var 0))) = Var 0.
 Proof. rasimpl. 
 Admitted.
 

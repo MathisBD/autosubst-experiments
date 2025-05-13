@@ -1,0 +1,355 @@
+From Prototype Require Import Prelude Sig LevelOne LevelTwo LevelTwoIrred LevelTwoSimp.
+
+Module Make (S : Sig).
+Include LevelTwoSimp.Make (S).
+
+Print qnat.
+
+(*
+
+?i[?i . r] =q= ?i[0 . r]
+?i[?i[r1] . r2] =q= ?i[0[r1] . r2]
+
+?i[?i . rshift] =q= ?i
+
+?i[0 . (?i . rshift^2)] =q= ?i[0 . rshift] =q= ?i
+
+*)
+
+
+
+(** Add some power to [auto] and variants. *)
+#[local] Hint Extern 5 => exfalso : core.
+    
+Definition sem_qnat_eq (i1 i2 : qnat) : Prop :=
+  forall e, qeval e i1 = qeval e i2.
+#[local] Notation "i1 '=q=' i2" := (sem_qnat_eq i1 i2) 
+  (at level 70, no associativity).
+
+#[local] Instance sem_qnat_equiv : Equivalence sem_qnat_eq.
+Proof. 
+constructor.
+- intros ??. triv.
+- intros ????. triv.
+- intros ??????. etransitivity ; eauto.
+Qed.
+
+Definition sem_ren_eq (r1 r2 : ren) : Prop :=
+  forall e, reval e r1 = reval e r2.
+#[local] Notation "r1 '=r=' r2" := (sem_ren_eq r1 r2) 
+  (at level 70, no associativity).
+
+#[local] Instance sem_ren_equiv : Equivalence sem_ren_eq.
+Proof. 
+constructor.
+- intros ??. triv.
+- intros ????. triv.
+- intros ??????. etransitivity ; eauto.
+Qed.
+
+Definition triv_env : env :=
+  Build_env (fun _ => 0) (fun _ => P.rid) (fun _ => O.E_var 0) (fun _ => O.sid). 
+
+Definition qnat_env (f : mvar -> nat) : env :=
+  Build_env f (fun _ => P.rid) (fun _ => O.E_var 0) (fun _ => O.sid).
+
+Definition ren_env (f : mvar -> P.ren) : env :=
+  Build_env (fun _ => 0) f (fun _ => O.E_var 0) (fun _ => O.sid).
+  
+Definition qnat_ren_env (f : mvar -> nat) (g : mvar -> P.ren) : env :=
+  Build_env f g (fun _ => O.E_var 0) (fun _ => O.sid).
+
+Equations qvariant : qnat -> nat :=
+qvariant Q_zero := 0 ;
+qvariant (Q_succ _) := 1 ;
+qvariant (Q_rapply _ _) := 2 ;
+qvariant (Q_mvar _) := 3.
+
+(*******************************************************************************)
+
+Equations rlim : nat -> ren -> nat -> nat :=
+rlim _ R_id i := i ;
+rlim _ R_shift i := S i ;
+rlim m (R_cons _ r) i := rlim m r (pred i) ;
+rlim m (R_comp r1 r2) i with r1 := {
+  | R_shift => rlim m r2 (S i)
+  | R_mvar _ => rlim m r2 (i + m)
+  | _ => 0 (* Should not happen. *) } ;
+rlim m (R_mvar _) i := i + m.
+
+Equations rbound : ren -> nat :=
+rbound (R_cons _ r) := S (rbound r) ;
+rbound (R_comp r1 r2) with r1 := {
+  | R_shift => pred (rbound r2) ;
+  | _ => rbound r2 } ;
+rbound _ := 0.
+
+(** After [rbound r], [reval (qnat_env f) r] 
+    behaves as [rlim 0 r]. *)
+Lemma rlim_spec m f r (Hr : rirred r) :
+  forall i, rbound r <= i -> reval (qnat_ren_env f (fun _ => add m)) r i = rlim m r i.
+Proof.
+induction r in Hr |- *.
+all: intros i Hi ; simp qeval rlim rbound in * ; triv.
+- rewrite rirred_cons in Hr. destruct i as [|i] ; [lia|]. simpl.
+  rewrite <-IHr ; solve [lia | triv]. 
+- clear IHr1. rewrite rirred_comp in Hr. 
+  destruct r1 ; simp rbound rlim in * ; triv.
+  + rewrite <-IHr2 ; solve [lia | triv].
+  + destruct Hr as (_ & _ & _ & Hr & _). triv.
+  + destruct Hr as (_ & _ & Hr & _). triv.
+  + cbv [P.rcomp]. simp qeval. cbn. rewrite IHr2 ; triv.
+    * f_equal. lia.
+    * lia.
+- cbn. lia. 
+Qed.
+
+Lemma rlim_pos m r (Hr : rirred r) :
+  forall i, rbound r < i -> 0 < rlim m r i.
+Proof.
+induction r ; simp rbound rlim in * ; triv.
+- intros i Hi. simp rlim. apply IHr ; [now rewrite rirred_cons in Hr | lia].
+- intros i Hi. rewrite rirred_comp in Hr. destruct r1 ; simp rbound rlim in * ; triv.
+  + apply IHr2 ; [triv | lia].
+  + destruct Hr as (_ & _ & _ & Hr & _). triv.
+  + destruct Hr as (_ & _ & Hr & _ & _). triv.
+  + apply IHr2 ; triv. lia.
+- intros i Hi. simp rlim. lia. 
+Qed.
+
+Lemma rlim_non_zero m r (Hr : rirred r) :
+  forall i, rbound r < i -> rlim m r i <> 0.
+Proof. intros i H. generalize (rlim_pos m r Hr i H). lia. Qed.
+
+(*******************************************************************************)
+
+Lemma qeq_zero_rapply_1 r m (H : qirred (Q_rapply r (Q_mvar m))) : 
+  ~ Q_zero =q= Q_rapply r (Q_mvar m).
+Proof.
+rewrite qirred_rapply in H.
+intros H1. specialize (H1 (qnat_ren_env (fun _ => S (rbound r)) (fun _ => add 0))). 
+simp qeval in H1. cbn [assign_qnat qnat_ren_env] in H1.
+rewrite rlim_spec in H1 ; triv. 
+symmetry in H1. apply rlim_non_zero in H1 ; triv.
+Qed.
+
+Lemma qeq_zero_rapply_2 m (H : qirred (Q_rapply (R_mvar m) Q_zero)) :
+  ~ Q_zero =q= Q_rapply (R_mvar m) Q_zero.
+Proof.
+intros H1. specialize (H1 (ren_env (fun _ => P.rshift))). simp qeval in H1.
+cbn [assign_ren ren_env] in H1. triv.
+Qed.
+
+Lemma qeq_zero_rapply_3 m r (H : qirred (Q_rapply (R_comp (R_mvar m) r) Q_zero)) :
+  ~ Q_zero =q= Q_rapply (R_comp (R_mvar m) r) Q_zero.
+Proof.
+assert (Hr : rirred r).
+{ rewrite qirred_rapply in H. destruct H as (H & _). rewrite rirred_comp in H. triv. }
+intros H1. specialize (H1 (qnat_ren_env (fun _ => 0) (fun _ => add (S (rbound r))))).
+simp qeval in H1. cbn [assign_ren qnat_ren_env] in H1. cbv [P.rcomp] in H1. 
+rewrite rlim_spec in H1 ; [|triv|lia]. 
+symmetry in H1. apply rlim_non_zero in H1 ; triv. lia.
+Qed.
+
+(*
+
+forall e, eval e (Q_rapply r1 (Q_mvar m)) = eval e (Q_rapply r2 (Q_mvar m))
+-->
+forall e, eval e r (e m) = eval e 
+
+*)
+
+Lemma qeq_zero_rapply_4 r (H : qirred (Q_rapply (R_comp R_shift r) Q_zero)) :
+  ~is_rid r -> 
+  ~is_rcons r ->
+  ~is_  
+
+forall k, ~ (forall e, 0 = qeval e (R_comp R_shift r) k).
+Proof.
+
+(*
+
+Q_zero --- Q_rapply (R_mvar m) Q_zero 
+--> take e[m] := rshift
+
+Q_zero --- Q_rapply (R_comp R_mvar r) Q_zero  --> OK
+Q_zero --- Q_rapply (R_comp R_shift _) Q_zero --> OK
+
+--> show : forall k, exists e, Q_rapply (R_mvar m) k > 0
+     and : forall k, exists e, Q_rapply (R_comp (R_mvar m) r) k > 0
+
+*)
+
+
+(*******************************************************************************)
+
+
+(*Inductive rspec_base : ren -> Prop :=
+| rspec_base_shift : rspec_base R_shift 
+| rspec_base_mvar m : rspec_base (R_mvar m).
+
+Inductive rspec_comp : ren -> Prop :=
+| rspec_comp_base r : rspec_base r -> rspec_comp r 
+| rspec_comp_shift r : rspec_comp r -> rspec_comp (R_comp R_shift r)
+| rspec_comp_mvar m r : rirred r -> rspec_comp (R_comp (R_mvar m) r).
+
+Inductive rspec_cons : ren -> Prop :=
+| rspec_cons_id : rspec_cons R_id
+| rspec_cons_comp r : rspec_comp r -> rspec_cons r
+| rspec_cons_cons i r : qirred i -> rspec_cons r -> rspec_cons (R_cons i r).
+
+#[local] Hint Constructors rspec_base rspec_comp rspec_cons : core.
+
+(** The other direction does not hold. *)
+Lemma rirred_spec (r : ren) : rirred r -> rspec_cons r.
+Proof.
+intros H. induction r in H |- * ; triv.
+- rewrite rirred_cons in H. apply rspec_cons_cons ; triv. now apply IHr.
+- rewrite rirred_comp in H. feed IHr1 ; triv. feed IHr2 ; triv. 
+  apply rspec_cons_comp. destruct r1 ; triv.
+  + apply rspec_comp_shift. destruct IHr2 ; triv. 
+    destruct H as (_ & _ & _ & _ & _ & _ & H). triv.
+  + destruct H as (_ & _ & _ & H & _). triv.
+  + destruct H as (_ & _ & H & _). triv.
+Qed.     *)
+
+(*Lemma qeval_zero_rapply r (H1 : rirred r) (H2 : r <> R_id) :
+  forall k, reval (ren_env (fun _ => P.rshift)) r k > 0.
+Proof.
+remember (ren_env (fun _ => P.rshift)) as e.
+Admitted.*)
+
+Lemma qeq_mvar_1 r m : 
+  qirred (Q_rapply r (Q_mvar m)) -> ~ Q_mvar m =q= Q_rapply r (Q_mvar m).
+Proof. Admitted.
+
+Lemma qeq_mvar_2 r m1 m2 :
+  m1 <> m2 -> qirred (Q_rapply r (Q_mvar m1)) -> ~ Q_mvar m2 =q= Q_rapply r (Q_mvar m1).
+Proof. Admitted.
+
+Lemma qeq_mvar m i (Hi : qirred i) : 
+  Q_mvar m =q= i -> is_qmvar i.
+Proof.
+intros E. destruct i ; triv ; exfalso.
+- specialize (E (qnat_env (fun _ => 1))).
+  simp qeval in E. cbn in E. triv.
+- destruct i ; triv.
+  + admit.
+  + assert (Hm : m = m0 \/ m <> m0) by lia. destruct Hm as [<- | Hm].
+    * now apply qeq_mvar_1 in E.
+    * apply qeq_mvar_2 in E ; triv.
+Admitted.
+
+Lemma qeq_variant i1 i2 (H1 : qirred i1) (H2 : qirred i2) : 
+  i1 =q= i2 -> qvariant i1 = qvariant i2.
+Proof.
+intros E. destruct i1, i2 ; simp qvariant ; triv ; exfalso.
+- apply (qeq_zero_rapply r i2) ; triv.
+- assert (H : is_qmvar Q_zero). { eapply qeq_mvar ; triv. } triv.
+- apply (qeq_zero_rapply r i1) ; triv.
+- assert (H : is_qmvar (Q_rapply r i1)). { eapply qeq_mvar ; triv. } triv.
+- assert (H : is_qmvar Q_zero). { eapply qeq_mvar ; triv. } triv.
+- assert (H : is_qmvar (Q_rapply r i2)). { eapply qeq_mvar ; triv. } triv.
+Qed. 
+
+
+
+
+Equations rvariant : ren -> nat :=
+rvariant R_id := 0 ;
+rvariant R_shift := 1 ;
+rvariant (R_cons _ _) := 2 ;
+rvariant (R_comp _ _) := 3 ;
+rvariant (R_mvar _) := 4.
+
+
+(*Equations rofs : ren -> nat :=
+rofs R_id := 
+
+Equations rbound : ren -> nat :=
+rbound R_id := 0 ;
+rbound R_shift := 1 ;
+rbound (R_cons _ r) := S (rscope r) ;
+rbound (R_comp r1 r2) := rscope r1 + rscope r2 ;
+rbound _ := 0
+
+with rbound : ren -> nat :=
+
+
+Lemma rscope_prop r : 
+  rirred r ->
+  exists e, forall i, rscope r <= i -> i - rscope r <= reval e r i.
+Proof.
+induction r ; intros H ; simp rscope.
+- eexists. intros i _. simpl. cbv [rid]. lia.
+- eexists. intros i Hi. simpl. cbv [rshift]. lia.
+- feed IHr. { now rewrite rirred_cons in H. }
+  destruct IHr as [e IHr]. exists e. intros i Hi. simp qeval. 
+  destruct i as [|i] ; triv. cbv [P.rcons]. simpl. rewrite <-(IHr i) ; lia.
+- rewrite rirred_comp in H. clear IHr1. feed IHr2 ; triv. destruct IHr2 as [e IHr].
+  exists e. intros i Hi. destruct r1 ; simp rscope in * ; triv.
+  +      
+  
+  feed IHr1 ; triv. feed IHr2 ; triv.
+  destruct IHr1 as [e1 IHr1]. destruct IHr2 as [e2 IHr2].
+  exists e2.  
+
+(* eexists. intros i H. simpl. destruct i as [|i] ; [lia|]. apply le_n_S.*)
+- exists (const_ren_env (fun _ => S)). intros i _. simpl. lia.
+Admitted. *)
+
+
+(*
+
+Q_zero --- Q_rapply r Q_mvar  --> OK
+Q_zero --- Q_rapply (R_comp R_mvar r) Q_zero  --> OK
+Q_zero --- Q_rapply (R_comp R_shift _) Q_zero --> OK
+
+*)
+
+Definition const_qnat_env (f : mvar -> nat) : env :=
+  Build_env f (fun _ => P.rid) (fun _ => O.E_var 0) (fun _ => O.sid). 
+
+Definition const_ren_env (r : mvar -> P.ren) : env :=
+  Build_env (fun _ => 0) r (fun _ => O.E_var 0) (fun _ => O.sid). 
+
+Lemma test r i : 
+  qirred (Q_rapply r i) -> exists e, qeval e (Q_rapply r i) <> 0.
+Proof.
+intros H. induction i in r, H |- * ; triv.
+- destruct r ; triv.
+  + rewrite qirred_rapply in H. destruct H as (H & _). destruct r1 ; triv.
+    * admit.
+    * eexists. simp qeval. cbv [P.rcomp].
+      cbn [const_ren_env].
+     admit.
+  + exists (const_ren_env (fun _ => 1)). simp qeval. triv. 
+- eexists. simp qeval. (const_qnat_env 1). simp qeval. cbv [assign_qnat]. cbn [const_qnat_env]. 
+
+Lemma completeness_qvariant i1 i2 : 
+  qirred i1 -> qirred i2 -> qvariant i1 <> qvariant i2 -> exists e, qeval e i1 <> qeval e i2.
+Proof.
+intros H1 H2 Hvar. *)
+
+Lemma completeness_qvariant i1 i2 : 
+  qirred i1 -> qirred i2 -> (forall e, qeval e i1 = qeval e i2) -> qvariant i1 = qvariant i2.
+Admitted.
+
+Lemma completeness_qnat (i1 i2 : qnat) : 
+  qirred i1 -> qirred i2 -> (forall e, qeval e i1 = qeval e i2) -> i1 = i2.
+Proof.
+intros H1 H2 Heq.
+induction i1 in i2, H1, H2, Heq |- * ; destruct i2.
+all: try solve [ pose proof (Hvar := completeness_qvariant _ _ H1 H2 Heq) ; triv ].
+- 
+ admit.
+- specialize (Heq (const_qnat_env (fun m => m))). simp qeval in Heq. cbv in Heq.
+  now subst.
+
+Lemma completeness_aux {k} (t1 t2 : expr k) : 
+  eirred t1 -> eirred t2 -> (forall e, eeval e t1 = eeval e t2) -> t1 = t2.
+Proof.
+intros H1 H2 Heq. induction t1 in t2, H1, H2, Heq |- *.
+- depelim t2.
+  + f_equal. inv Heq.  rewrite eirred_tvar in H1.*)
+

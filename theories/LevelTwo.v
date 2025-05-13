@@ -44,6 +44,8 @@ with ren :=
 (** Renaming meta-variable. *)
 | R_mvar : mvar -> ren.
 
+Derive NoConfusion for qnat ren.
+
 (*********************************************************************************)
 (** *** Expressions and explicit substitutions. *)
 (*********************************************************************************)
@@ -98,6 +100,9 @@ with subst :=
 where "'term'" := (expr Kt)
   and "'arg' ty" := (expr (Ka ty))
   and "'args' tys" := (expr (Kal tys)).
+
+Derive Signature NoConfusion NoConfusionHom for expr.
+Derive NoConfusion for subst.
 
 (*********************************************************************************)
 (** *** Evaluation. *)

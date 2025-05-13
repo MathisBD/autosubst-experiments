@@ -3,8 +3,11 @@ From Ltac2 Require Export Ltac2.
 From Equations Require Export Equations.
 Export ListNotations.
 
+(** Just to make sure. *)
+#[export] Unset Equations With UIP.
+
 (** Ltac2 is still missing many basic Ltac1 tactics,
-    so I use Ltac1 for proofs. *)
+    so we use Ltac1 for proofs. *)
 #[export] Set Default Proof Mode "Classic".
 
 (** Coercion to view booleans as propositions. *)
@@ -13,19 +16,6 @@ Coercion is_true : bool >-> Sortclass.
 (*********************************************************************************)
 (** *** Convenience tactics. *)
 (*********************************************************************************)
-
-(** Simplify equations of the form [existT ?a ?b _ = existT ?a ?b _], 
-    which are often generates by Rocq's [inversion] tactic. *)
-Ltac simpl_existT :=
-  match goal with 
-  | [ H : existT _ _ _ = existT _ _ _ |- _ ] =>
-    apply Eqdep.EqdepTheory.inj_pair2 in H 
-  | _ => idtac
-  end.
-
-(** Run [inversion H], and cleanup the resulting equations. *)
-Ltac inv H := 
-  inversion H ; repeat first [ progress subst | progress simpl_existT ].
 
 (** Split n-ary conjunctions. *)
 Ltac split3 := split ; [|split].
@@ -37,8 +27,7 @@ Ltac split8 := split ; [|split7].
 
 (** On a hypothesis of the form [H : A -> B], this generates two goals:
     - the first asks to prove [A]. 
-    - the second asks to prove the original goal, 
-      in a context where [H : B]. *)
+    - the second asks to prove the original goal in a context where [H : A]. *)
 Ltac feed H := 
   match type of H with 
   | ?A -> ?B => 

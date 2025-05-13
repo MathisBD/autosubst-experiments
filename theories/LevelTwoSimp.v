@@ -9,6 +9,9 @@ From Prototype Require Import Prelude Sig LevelOne LevelTwo LevelTwoIrred.
 Module Make (S : Sig).
 Include LevelTwoIrred.Make (S).
 
+(** Add some power to [auto] and variants. *)
+#[local] Hint Extern 4 => exfalso : core.
+
 (*********************************************************************************)
 (** *** [rapply_aux] *)
 (*********************************************************************************)
@@ -130,7 +133,6 @@ apply rapply_elim with
 all: intros ; triv.
 - apply rapply_aux_irred ; triv. intros H1 H2. rewrite qirred_rapply.
   split5 ; triv.
-- now apply qirred_succ in H0.
 - rewrite qirred_rapply in H1. apply rapply_aux_irred ; triv. 
   + now apply H.
   + intros H2 H3. rewrite qirred_rapply. split5 ; triv. now apply H.
@@ -293,7 +295,6 @@ apply tnat_elim with
   (P0 := fun r res => rirred r -> sirred res).
 all: intros ; triv.
 - rewrite eirred_tvar ; triv.
-- apply qirred_succ in H ; triv.
 - rewrite eirred_subst. rewrite qirred_rapply in H0. split5 ; triv.
   + rewrite eirred_tvar. destruct i ; triv.
     destruct H0 as (_ & H0 & _). apply qirred_succ in H0. triv.
@@ -414,9 +415,6 @@ Lemma rscomp_sound e r s :
 Proof. now apply sapply_rscomp_sound. Qed.
 #[export] Hint Rewrite rscomp_sound : eeval seval.
 
-Lemma eirred_tvar_zero : eirred (E_tvar Q_zero).
-Proof. intros H. inv H. inv H1. Qed.
-
 Lemma sapply_rscomp_irred :
   (forall s i, sirred s -> qirred i -> eirred (sapply s i)) *
   (forall r s, rirred r -> sirred s -> sirred (rscomp r s)).
@@ -429,7 +427,6 @@ all: intros ; triv.
   split5 ; triv.
   + apply eirred_tvar_zero.
   + intros [? ?] ; triv.
-- now apply qirred_succ in H0.
 - rewrite qirred_rapply in H1. apply sapply_aux_irred ; triv. 
   + now apply H.
   + intros H2 H3. rewrite eirred_subst. split5 ; triv.
@@ -472,34 +469,10 @@ apply rapply_rcomp_irred ; triv.
 Qed.
 
 (*********************************************************************************)
-(** *** [rename_aux] *)
-(*********************************************************************************)
-
-(*(** Helper function for [rename] which takes care of trivial cases. *)
-Equations rename_aux {k} (r : ren) (t : expr k) : expr k :=
-rename_aux R_id t := t ;
-rename_aux r t := E_subst (sren r) t.
-
-Lemma rename_aux_sound e {k} r (t : expr k) :
-  eeval e (rename_aux r t) = O.rename (reval e r) (eeval e t).
-Proof.
-funelim (rename_aux r t) ; simp reval ; triv. now rewrite O.ren_rid.
-Qed.
-#[export] Hint Rewrite rename_aux_sound : eeval seval.
-
-Lemma rename_aux_irred {k} r (t : expr k) :
-  rirred r -> eirred t -> (r <> R_id -> eirred (E_ren r t)) ->
-  eirred (rename_aux r t).
-Proof.
-intros H1 H2 H3. funelim (rename_aux r t) ; triv.
-all: solve [ apply H3 ; triv ].
-Qed.*)
-
-(*********************************************************************************)
 (** *** [substitute_aux] *)
 (*********************************************************************************)
 
-(** Helper function for [rename] which takes care of trivial cases. *)
+(** Helper function for [rename] and [substitute] which takes care of trivial cases. *)
 Equations substitute_aux {k} (s : subst) (t : expr k) : expr k :=
 substitute_aux S_id t := t ;
 substitute_aux (S_cons t _) (E_tvar Q_zero) := t ;
@@ -598,7 +571,6 @@ all: intros ; triv.
 - rewrite eirred_al_cons in *. split ; [apply H | apply H0] ; triv.
 - rewrite eirred_aterm in *. now apply H.
 - rewrite eirred_abind in *. apply H ; triv. now apply rup_irred.
-- now apply eirred_ren in H0.
 - rewrite eirred_subst in H1. feed2 H ; triv. 
   apply substitute_aux_irred ; triv.
   intros H4 H5. rewrite eirred_subst. split5 ; triv.
@@ -701,15 +673,12 @@ apply substitute_elim with
 all: intros ; triv.
 - apply sapply_rscomp_irred ; triv. rewrite eirred_tvar in H0. destruct H0.
   destruct i ; triv.
-  + exfalso ; now apply H1.
-  + exfalso ; now apply H0.
 - rewrite eirred_tctor in *. now apply H.
 - apply substitute_aux_irred ; triv.
   intros H1 H2. rewrite eirred_subst. triv. 
 - rewrite eirred_al_cons in *. feed2 H ; triv. feed2 H0 ; triv.
 - rewrite eirred_aterm in *. now apply H.
 - rewrite eirred_abind in *. apply H ; triv. apply sup_irred ; triv.
-- now apply eirred_ren in H0.
 - rewrite eirred_subst in H1. feed2 H ; triv. apply substitute_aux_irred ; triv.
   intros H4 H5. rewrite eirred_subst. triv.
 - apply scomp_aux_irred ; triv. intros H1 H2. rewrite sirred_comp. triv.
@@ -795,3 +764,4 @@ Lemma ssimp_irred s : sirred (ssimp s).
 Proof. now apply esimp_ssimp_irred. Qed.
 
 End Make.
+

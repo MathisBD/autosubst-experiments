@@ -116,6 +116,8 @@ with rred : ren -> Prop :=
 (** Reduce [0[r] . (shift >> r)] into [r]. *)
 (*| RR_shift_cons_l r : rred (R_cons (Q_rapply r Q_zero) (R_comp R_shift r))*).
 
+Derive Signature for qred rred.
+
 Hint Constructors qred : core.
 Hint Constructors rred : core.
 
@@ -128,7 +130,7 @@ Definition rirred r := ~ rred r.
 (*********************************************************************************)
 
 Lemma qirred_zero : qirred Q_zero.
-Proof. intros H. inv H. Qed.
+Proof. intros H. depelim H. Qed.
 
 Lemma qirred_succ i : ~qirred (Q_succ i).
 Proof. intros H. apply H. now constructor. Qed.
@@ -142,14 +144,14 @@ split ; intros H.
 - split5 ; intros H' ; apply H ; triv.
   + destruct i ; triv.
   + destruct r ; triv. destruct H' as (_ & ->). triv.
-- intros H' ; inv H' ; triv.
-  + destruct H1 ; triv.
+- intros H' ; depelim H' ; triv.
+  + destruct H0 ; triv.
   + destruct H as (_ & _ & _ & H & _). triv.
-  + destruct r ; triv. clear H1. destruct H as (_ & _ & _ & _ & H). triv.
+  + destruct r ; triv. destruct H as (_ & _ & _ & _ & H). triv.
 Qed.
 
 Lemma qirred_mvar m : qirred (Q_mvar m).
-Proof. intros H. inv H. Qed.
+Proof. intros H. depelim H. Qed.
 
 Lemma rirred_cons i r : 
   rirred (R_cons i r) <-> 
@@ -158,8 +160,7 @@ Proof.
 split.
 - intros H. split3 ; intros H' ; apply H ; triv.
   destruct H' ; subst. now constructor. 
-- intros (H1 & H2 & H3) H. inv H. destruct H4 ; triv.
-  apply H3 ; triv.
+- intros (H1 & H2 & H3) H. depelim H. destruct H ; triv. apply H3 ; triv.
 Qed.
 
 Lemma rirred_mvar_l m r : 
@@ -169,7 +170,7 @@ split.
 - intros H. split.
   + intros H'. apply H ; clear H. apply RR_congr_comp. now right.
   + intros H' ; subst. apply H. now constructor. 
-- intros (H & H') H''. inv H'' ; triv. now destruct H1.
+- intros (H & H') H''. depelim H'' ; triv. now destruct H0.
 Qed.      
 
 Lemma rirred_shift_l r : 
@@ -178,7 +179,7 @@ Lemma rirred_shift_l r :
 Proof.
 split.
 - intros H. split3 ; triv. intros H' ; apply H ; triv.
-- intros (H1 & H2 & H3) H. inv H ; triv. destruct H4 ; triv.
+- intros (H1 & H2 & H3) H. depelim H ; triv. destruct H ; triv.
 Qed.
 
 Lemma rirred_comp r1 r2 : 
@@ -191,8 +192,8 @@ split ; intros H.
   + destruct r1 ; triv.
   + destruct r1 ; triv.
   + destruct H' as [-> H']. destruct r2 ; triv.
-- intros H' ; inv H' ; triv.
-  + destruct H1 ; triv.
+- intros H' ; depelim H' ; triv.
+  + destruct H0 ; triv.
   + destruct H as (_ & _ & H & _) ; triv.
   + destruct H as (_ & _ & _ & H & _) ; triv.
   + destruct r2 ; triv. destruct H as (_ & _ & _ & _ & _ & _ & H). triv.
@@ -254,6 +255,8 @@ with sred : subst -> Prop :=
 (** Reduce [s 0 . (shift >> s)] into [s]. *)
 (*| SR_zero_shift_l s : sred (S_cons (E_subst s (E_tvar Q_zero)) (S_comp S_shift s))*).
 
+Derive Signature for ered sred.
+
 Hint Constructors ered : core.
 Hint Constructors sred : core.
 
@@ -271,36 +274,39 @@ Proof.
 split ; intros H.
 - split ; intros H' ; apply H ; destruct i ; triv.
 - intros H'. destruct H. destruct i ; triv.
-  + inv H'. inv H2.
-  + inv H'. inv H2.
+  + depelim H'. depelim H1.
+  + depelim H'. depelim H1.
 Qed.
 
+Lemma eirred_tvar_zero : eirred (E_tvar Q_zero).
+Proof. intros H. depelim H. depelim H. Qed.
+
 Lemma eirred_mvar m : eirred (E_mvar m).
-Proof. intros H. inv H. Qed.
+Proof. intros H. depelim H. Qed.
 
 Lemma eirred_tctor c al : eirred (E_tctor c al) <-> eirred al.
-Proof. split ; intros H H' ; apply H ; triv. now inv H'. Qed.
+Proof. split ; intros H H' ; apply H ; triv. now depelim H'. Qed.
 
 Lemma eirred_al_nil : eirred E_al_nil.
-Proof. intros H ; inv H. Qed.
+Proof. intros H ; depelim H. Qed.
 
 Lemma eirred_al_cons {ty tys} (a : arg ty) (al : args tys) :
   eirred (E_al_cons a al) <-> eirred a /\ eirred al.
 Proof.
 split ; intros H.
 - split ; intros H' ; apply H ; triv.
-- intros H' ; inv H' ; triv. destruct H1 ; triv.
+- intros H' ; depelim H' ; triv. destruct H0 ; triv.
 Qed.
 
 Lemma eirred_abase b x : eirred (E_abase b x).
 Proof. triv. Qed.
 
 Lemma eirred_aterm t : eirred (E_aterm t) <-> eirred t.
-Proof. split ; intros H H' ; apply H ; triv. now inv H'. Qed.
+Proof. split ; intros H H' ; apply H ; triv. now depelim H'. Qed.
 
 Lemma eirred_abind {ty} (a : arg ty) : 
   eirred (E_abind a) <-> eirred a.
-Proof. split ; intros H H' ; apply H ; triv. now inv H'. Qed.
+Proof. split ; intros H H' ; apply H ; triv. now depelim H'. Qed.
 
 Lemma eirred_ren {k} (e : expr k) r : ~eirred (E_ren r e).
 Proof. intros H ; apply H. triv. Qed.
@@ -313,14 +319,14 @@ Proof.
 split ; intros H.
 - split5 ; intros H' ; apply H ; triv.
   destruct e ; triv. destruct q ; triv. destruct s ; triv.
-- intros H' ; inv H' ; triv.
-  + destruct H2 ; triv.
+- intros H' ; depelim H' ; triv.
+  + destruct H0 ; triv.
   + destruct s ; triv.
     destruct H as (_ & _ & _ & H & _). triv.
 Qed.     
 
 Lemma sirred_mvar m : sirred (S_mvar m).
-Proof. intros H. inv H. Qed.
+Proof. intros H. depelim H. Qed.
 
 Lemma sirred_cons t s : 
   sirred (S_cons t s) <-> 
@@ -331,14 +337,14 @@ split ; intros H.
   + constructor ; now left.
   + constructor ; now right.
   + destruct H' ; subst. now constructor. 
-- intros H'. inv H'. destruct H1 ; triv. destruct H as (_ & _ & H). triv.
+- intros H'. depelim H'. destruct H0 ; triv. destruct H as (_ & _ & H). triv.
 Qed.   
 
 Lemma sirred_ren r : sirred (S_ren r) <-> is_rmvar r.
 Proof.
 split ; intros H.
 - destruct r ; triv. all: exfalso ; apply H ; now constructor.
-- intros H' ; inv H' ; triv. destruct r ; triv.
+- intros H' ; depelim H' ; triv. destruct r ; triv.
 Qed.
 
 Lemma sirred_comp s1 s2 : 
@@ -351,8 +357,8 @@ split ; intros H.
   + destruct s1 ; triv.
   + destruct s1 ; triv.
   + destruct H' as [-> H']. destruct s2 ; triv.
-- intros H' ; inv H' ; triv.
-  + destruct H1 ; triv.
+- intros H' ; depelim H' ; triv.
+  + destruct H0 ; triv.
   + destruct H as (_ & _ & H & _) ; triv.
   + destruct H as (_ & _ & _ & H & _) ; triv.
   + destruct s2 ; triv. destruct H as (_ & _ & _ & _ & _ & _ & H). triv.
