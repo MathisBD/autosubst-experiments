@@ -77,6 +77,20 @@ struct
     | App (f, [| s1; s2 |]) when is_const sigma P.ops0.scomp f -> (sigma, Some (s1, s2))
     | _ -> (sigma, None)
 
+  (** Pattern which matches [rscomp ?r ?s]. *)
+  let rscomp_patt : (EConstr.t * EConstr.t) patt =
+   fun s env sigma ->
+    match EConstr.kind sigma s with
+    | App (f, [| r; s |]) when is_const sigma P.ops0.rscomp f -> (sigma, Some (r, s))
+    | _ -> (sigma, None)
+
+  (** Pattern which matches [srcomp ?s ?r]. *)
+  let srcomp_patt : (EConstr.t * EConstr.t) patt =
+   fun s env sigma ->
+    match EConstr.kind sigma s with
+    | App (f, [| s; r |]) when is_const sigma P.ops0.srcomp f -> (sigma, Some (s, r))
+    | _ -> (sigma, None)
+
   (**************************************************************************************)
   (** *** Reify terms and substitutions. *)
   (**************************************************************************************)
@@ -200,6 +214,26 @@ struct
       let* p = apps_ev (Lazy.force Consts.transitivity) 6 [| p1; p2 |] in
       ret (s', p)
     in
+    (* Match [rscomp ?r ?s2]. *)
+    let rscomp_branch (r, s2) =
+      let* p_r = apps_ev (Lazy.force Consts.reflexivity) 3 [| r |] in
+      let* s2', p_s2 = reify_subst s2 in
+      let s' = apps (mkconst P.ops1.rscomp) [| r; s2' |] in
+      let p1 = apps (mkconst P.pe.seval_rscomp) [| r; s2' |] in
+      let* p2 = apps_ev (mkconst P.congr.congr_rscomp) 4 [| p_r; p_s2 |] in
+      let* p = apps_ev (Lazy.force Consts.transitivity) 6 [| p1; p2 |] in
+      ret (s', p)
+    in
+    (* Match [srcomp ?s1 ?r]. *)
+    let srcomp_branch (s1, r) =
+      let* s1', p_s1 = reify_subst s1 in
+      let* p_r = apps_ev (Lazy.force Consts.reflexivity) 3 [| r |] in
+      let s' = apps (mkconst P.ops1.srcomp) [| s1'; r |] in
+      let p1 = apps (mkconst P.pe.seval_srcomp) [| s1'; r |] in
+      let* p2 = apps_ev (mkconst P.congr.congr_srcomp) 4 [| p_s1; p_r |] in
+      let* p = apps_ev (Lazy.force Consts.transitivity) 6 [| p1; p2 |] in
+      ret (s', p)
+    in
     (* Default branch. *)
     let default_branch s =
       let s' = app (mkconst P.re.sreify) s in
@@ -212,6 +246,8 @@ struct
       ; Case (sshift_patt, sshift_branch)
       ; Case (scons_patt, scons_branch)
       ; Case (scomp_patt, scomp_branch)
+      ; Case (rscomp_patt, rscomp_branch)
+      ; Case (srcomp_patt, srcomp_branch)
       ]
       default_branch
 end

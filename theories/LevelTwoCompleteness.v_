@@ -14,6 +14,9 @@ Print qnat.
 
 ?i[0 . (?i . rshift^2)] =q= ?i[0 . rshift] =q= ?i
 
+
+(Var ?i)[Var ?i . s] =t= (Var ?i)[Var 0 . s]
+
 *)
 
 

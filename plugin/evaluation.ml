@@ -112,6 +112,25 @@ struct
     | App (f, [| s1; s2 |]) when is_const sigma P.ops1.scomp f -> (sigma, Some (s1, s2))
     | _ -> (sigma, None)
 
+  (** Pattern which matches [O.rscomp ?r ?s]. *)
+  let rscomp_patt : (EConstr.t * EConstr.t) patt =
+   fun s env sigma ->
+    match EConstr.kind sigma s with
+    | App (f, [| r; s |]) when is_const sigma P.ops1.rscomp f -> (sigma, Some (r, s))
+    | _ -> (sigma, None)
+
+  (** Pattern which matches [O.srcomp ?s ?r]. *)
+  let srcomp_patt : (EConstr.t * EConstr.t) patt =
+   fun s env sigma ->
+    match EConstr.kind sigma s with
+    | App (f, [| s; r |]) when is_const sigma P.ops1.srcomp f -> (sigma, Some (s, r))
+    | _ -> (sigma, None)
+
+  (** Pattern which matches [O.E_var]. *)
+  let var_patt_no_args : unit patt =
+   fun s env sigma ->
+    if is_ctor sigma P.ops1.e_var s then (sigma, Some ()) else (sigma, None)
+
   (** Pattern which matches [O.sreify ?s]. *)
   let sreify_patt : EConstr.t patt =
    fun s env sigma ->
@@ -220,6 +239,32 @@ struct
       let* p = apps_ev (Lazy.force Consts.transitivity) 6 [| p1; p2 |] in
       ret (s, p)
     in
+    (* Match [O.rscomp ?r ?s2']. *)
+    let rscomp_branch (r, s2') =
+      let* p_r = apps_ev (Lazy.force Consts.reflexivity) 3 [| r |] in
+      let* s2, p_s2 = eval_subst s2' in
+      let s = apps (mkconst P.ops0.rscomp) [| r; s2 |] in
+      let p1 = apps (mkconst P.pe.seval_rscomp) [| r; s2' |] in
+      let* p2 = apps_ev (mkconst P.congr.congr_rscomp) 4 [| p_r; p_s2 |] in
+      let* p = apps_ev (Lazy.force Consts.transitivity) 6 [| p1; p2 |] in
+      ret (s, p)
+    in
+    (* Match [O.srcomp ?s1' ?r]. *)
+    let srcomp_branch (s1', r) =
+      let* s1, p_s1 = eval_subst s1' in
+      let* p_r = apps_ev (Lazy.force Consts.reflexivity) 3 [| r |] in
+      let s = apps (mkconst P.ops0.srcomp) [| s1; r |] in
+      let p1 = apps (mkconst P.pe.seval_srcomp) [| s1'; r |] in
+      let* p2 = apps_ev (mkconst P.congr.congr_srcomp) 4 [| p_s1; p_r |] in
+      let* p = apps_ev (Lazy.force Consts.transitivity) 6 [| p1; p2 |] in
+      ret (s, p)
+    in
+    (* Match [O.E_var]. *)
+    let var_branch () =
+      let s = mkctor (P.ops0.term, 1) in
+      let* p = apps_ev (Lazy.force Consts.reflexivity) 4 [||] in
+      ret (s, p)
+    in
     (* Match [sreify ?s]. *)
     let sreify_branch s = ret (s, app (mkconst P.bij.seval_sreify_inv) s) in
     (* Default branch. *)
@@ -234,6 +279,9 @@ struct
       ; Case (sshift_patt, sshift_branch)
       ; Case (scons_patt, scons_branch)
       ; Case (scomp_patt, scomp_branch)
+      ; Case (rscomp_patt, rscomp_branch)
+      ; Case (srcomp_patt, srcomp_branch)
+      ; Case (var_patt_no_args, var_branch)
       ; Case (sreify_patt, sreify_branch)
       ]
       default_branch

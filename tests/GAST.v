@@ -1,8 +1,12 @@
 From Coq Require Import Lia String.
-From Ltac2 Require Ltac2.
-From Ltac2 Require Import Printf RedFlags.
-From Prototype Require Import Prelude Sig.
-From Prototype Require Constants LevelOne LevelTwo LevelTwoIrred LevelTwoSimp.
+From Ltac2 Require Import RedFlags Printf.
+From Prototype Require Export Prelude.
+From Prototype Require Import Sig Constants LevelOne LevelTwo LevelTwoIrred LevelTwoSimp.
+From GhostTT Require Import BasicAST. 
+
+(*********************************************************************************)
+(** *** Load the plugin. *)
+(*********************************************************************************)
 
 Declare ML Module "autosubst-experiments.plugin".
 Ltac2 @external reify_term : constr -> constr * constr := "autosubst-experiments.plugin" "reify_term".
@@ -12,8 +16,26 @@ Class TermSimplification {term} (t s : term) :=
   MkTermSimplification { term_simplification : t = s }.
 Hint Mode TermSimplification + + - : typeclass_instances.
 
-Autosubst Generate.
+(*********************************************************************************)
+(** *** Generate all operations and lemmas. *)
+(*********************************************************************************)
 
+Register level as ghost_reflection.level.
+Register mode as ghost_reflection.mode.
+
+Time Autosubst Generate.
+
+(*********************************************************************************)
+(** *** [rasimpl] *)
+(*********************************************************************************)
+
+(** Trigger for [rasimpl]. *)
+Lemma autosubst_simpl_term_rename (r : ren) (t res : term) :
+  TermSimplification (rename r t) res -> rename r t = res.
+Proof. intros H. now apply term_simplification. Qed.
+#[export] Hint Rewrite -> autosubst_simpl_term_rename : asimpl.
+
+(** Trigger for [rasimpl]. *)
 Lemma autosubst_simpl_term_substitute (s : subst) (t res : term) :
   TermSimplification (substitute s t) res -> substitute s t = res.
 Proof. intros H. now apply term_simplification. Qed.
@@ -49,6 +71,7 @@ Ltac2 build_TermSimplification (t0 : constr) : unit :=
   let env := T.build_env env in
   (* Simplify on Level 2. *)
   let t2' := Std.eval_cbv (red_flags_simp ()) constr:(T.esimp $t2) in
+  printf "t2': %t" t2';
   (* Eval Level 2 -> Level 1. *)
   let t1' := Std.eval_cbv (red_flags_eval ()) constr:(T.eeval $env $t2') in
   (* Eval Level 1 -> Level 0. *)
@@ -75,10 +98,12 @@ Ltac2 build_TermSimplification (t0 : constr) : unit :=
 (** Main simplification tactic. The call to [exact _] triggers typeclass search
     to find an instance of [TermSimplification ?t _], which in turn calls 
     [build_TermSimplification] via [Hint Extern]. *)
-Ltac rasimpl := (rewrite_strat (topdown (hints asimpl))) ; [ | (exact _) ..].
+Ltac rasimpl := 
+  (try rewrite_strat (topdown (hints asimpl))) ; 
+  [ | exact _ ..].
 
-Axiom (t t1 t2 : term).
-Axiom (s : subst).
-Lemma test : substitute sshift (Lam "x" (App t (Var 0))) = Var 0.
-Proof. rasimpl. 
-Admitted.
+Axiom r : ren.
+Axiom s : subst.
+Axiom t : term.
+Lemma test : rename r (lam mType (Var 0) t) = Var 0.
+Proof. rasimpl. Admitted.

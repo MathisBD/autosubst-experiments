@@ -219,7 +219,7 @@ Inductive ered : forall {k}, expr k -> Prop :=
 | ER_congr_ren {k} r (e : expr k) : rred r \/ ered e -> ered (E_ren r e)
 | ER_congr_subst {k} s (e : expr k) : sred s \/ ered e -> ered (E_subst s e)
 
-(** Reduce [E_tvar i[r]] into [substitute (S_ren r) (E_tvar i)]. *)
+(** Reduce [E_tvar (r i)] into [(E_tvar i)[S_ren r]]. *)
 | ER_extract_rapply r i : ered (E_tvar (Q_rapply r i))
 (** Reduce [rename r e] into [substitute (S_ren r) e]. *)
 | ER_extract_ren {k} r (e : expr k) : ered (E_ren r e)

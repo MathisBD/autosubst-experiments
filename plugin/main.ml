@@ -1,59 +1,53 @@
 open Prelude
 open Ltac2_plugin
 
-(** A testing signature.*)
-let build_signature () : signature =
-  { n_ctors = 2
-  ; base_types = [| EConstr.to_constr Evd.empty @@ Lazy.force Consts.string |]
-  ; ctor_names = [| "App"; "Lam" |]
-  ; ctor_types = [| [ AT_term; AT_term ]; [ AT_base 0; AT_bind AT_term ] |]
+(* Helper function to build a signature. *)
+let mk_sig (base : EConstr.t list) (ctors : (string * arg_ty list) list) : signature =
+  { n_ctors = List.length ctors
+  ; base_types = Array.of_list @@ List.map (EConstr.to_constr Evd.empty) base
+  ; ctor_names = Array.of_list @@ List.map fst ctors
+  ; ctor_types = Array.of_list @@ List.map snd ctors
   }
 
-(*let term n = List.init n @@ fun _ -> AT_term in
-let s =
-  { n_ctors = 16
-  ; base_types =
-      [| EConstr.to_constr Evd.empty @@ Lazy.force Consts.nat
-       ; EConstr.to_constr Evd.empty @@ Lazy.force Consts.string
-      |]
-  ; ctor_names =
-      [| "csort"
-       ; "cpi"
-       ; "clam"
-       ; "capp"
-       ; "cunit"
-       ; "ctt"
-       ; "ctop"
-       ; "cstar"
-       ; "cbot"
-       ; "cbot_elim"
-       ; "pvec"
-       ; "pvnil"
-       ; "pvcons"
-       ; "pvec_elim"
-       ; "pvec_elimG"
-       ; "pvec_elimP"
-      |]
-  ; ctor_types =
-      [| [ AT_base 0; AT_base 1 ]
-       ; [ AT_base 0; AT_term; AT_bind AT_term ]
-       ; [ AT_base 0; AT_term; AT_bind AT_term ]
-       ; term 2
-       ; []
-       ; []
-       ; []
-       ; []
-       ; []
-       ; AT_base 1 :: term 2
-       ; term 4
-       ; term 1
-       ; term 3
-       ; term 12
-       ; term 12
-       ; term 10
-      |]
-  }
-in*)
+(** A testing signature.*)
+let build_signature () : signature =
+  (*mk_sig
+    [ Lazy.force Consts.string ]
+    [ ("App", [ AT_term; AT_term ]); ("Lam", [ AT_base 0; AT_bind AT_term ]) ]*)
+  let level = AT_base 0 in
+  let mode = AT_base 1 in
+  mk_sig
+    [ Lazy.force @@ Consts.resolve "ghost_reflection.level"
+    ; Lazy.force @@ Consts.resolve "ghost_reflection.mode"
+    ]
+    [ ("Sort", [ mode; level ])
+    ; ("Pi", [ level; level; mode; mode; AT_term; AT_bind AT_term ])
+    ; ("lam", [ mode; AT_term; AT_bind AT_term ])
+    ; ("app", [ AT_term; AT_term ])
+    ; ("Erased", [ AT_term ])
+    ; ("hide", [ AT_term ])
+    ; ("reveal", [ AT_term; AT_term; AT_term ])
+    ; ("Reveal", [ AT_term; AT_term ])
+    ; ("toRev", [ AT_term; AT_term; AT_term ])
+    ; ("fromRev", [ AT_term; AT_term; AT_term ])
+    ; ("gheq", [ AT_term; AT_term; AT_term ])
+    ; ("ghrefl", [ AT_term; AT_term ])
+    ; ("ghcast", [ AT_term; AT_term; AT_term; AT_term; AT_term; AT_term ])
+    ; ("tbool", [])
+    ; ("ttrue", [])
+    ; ("tfalse", [])
+    ; ("tif", [ mode; AT_term; AT_term; AT_term; AT_term ])
+    ; ("tnat", [])
+    ; ("tzero", [])
+    ; ("tsucc", [ AT_term ])
+    ; ("tnat_elim", [ mode; AT_term; AT_term; AT_term; AT_term ])
+    ; ("tvec", [ AT_term; AT_term ])
+    ; ("tvnil", [ AT_term ])
+    ; ("tvcons", [ AT_term; AT_term; AT_term ])
+    ; ("tvec_elim", [ mode; AT_term; AT_term; AT_term; AT_term; AT_term; AT_term ])
+    ; ("bot", [])
+    ; ("bot_elim", [ mode; AT_term; AT_term ])
+    ]
 
 (** We keep track of the generated operations using the [Libobject] API. The first step is
     to create a reference using [Summary.ref]. *)
