@@ -1,0 +1,4 @@
+(coq.theory
+ (name Tests)
+ (package autosubst-experiments)
+ (theories Prototype))

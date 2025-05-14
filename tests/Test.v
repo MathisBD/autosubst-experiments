@@ -82,8 +82,3 @@ Axiom (s : subst).
 Lemma test : substitute sshift (Lam "x" (App t (Var 0))) = Var 0.
 Proof. rasimpl. 
 Admitted.
-
-(*Autosubst Reify (substitute (scomp sid (scons (Var 0) sid)) (Var 0)).*)
-(*Autosubst Reify (rename (rcomp rid rshift) (Var 0)).*)
-(*Autosubst Reify (Lam "x" (Var 0)).*)
-(*Autosubst Eval (T.O.E_var 0).*)
