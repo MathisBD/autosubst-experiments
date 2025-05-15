@@ -92,8 +92,8 @@ let generate (s : signature) (ops0 : ops_zero) : ops_one =
   let ctor = monad_run @@ M.build_ctor () in
   let ctor_type = def "ctor_type" @@ M.build_ctor_type ctor base in
   let mod_S, qualid_S = M.build_module_S base eval_base ctor ctor_type in
-  (* Declare [Module T := LevelTwoSimp.Make (S)]. *)
-  let qualid_Make = mk_qualid [ "Prototype"; "LevelTwoSimp" ] "Make" in
+  (* Declare [Module T := LevelTwoClean.Make (S)]. *)
+  let qualid_Make = mk_qualid [ "Prototype"; "RASimpl" ] "Make" in
   let mod_T =
     Declaremods.declare_module (Names.Id.of_string_soft "T") [] (Declaremods.Check [])
       [ ( CAst.make

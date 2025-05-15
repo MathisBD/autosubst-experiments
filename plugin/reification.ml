@@ -287,7 +287,7 @@ let reify_term (sign : signature) (ops : ops_all) (t : EConstr.t) :
 (** [reify_subst sign ops s] reifies the level zero substitution [s] into a pair
     [(s', p)]:
     - [s'] is a level one substitution.
-    - [p] is a proof of [seval s' = s]. *)
+    - [p] is a proof of [seval s' =₁ s]. *)
 let reify_subst (sign : signature) (ops : ops_all) (s : EConstr.t) :
     (EConstr.t * EConstr.t) m =
   let module M = Make (struct

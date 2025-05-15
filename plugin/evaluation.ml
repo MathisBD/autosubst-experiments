@@ -70,7 +70,7 @@ struct
   let rename_patt : (EConstr.t * EConstr.t) patt =
    fun t env sigma ->
     match EConstr.kind sigma t with
-    | App (f, [| r; t |]) when is_const sigma P.ops1.rename f -> (sigma, Some (r, t))
+    | App (f, [| _; r; t |]) when is_const sigma P.ops1.rename f -> (sigma, Some (r, t))
     | _ -> (sigma, None)
 
   (** Pattern which matches [O.substitute ?s ?t]. *)
@@ -291,7 +291,7 @@ end
 (** *** Putting it all together. *)
 (**************************************************************************************)
 
-(** [eval_term sign ops t'] evaluates the level zero one [t'] into a pair [(t, p)]:
+(** [eval_term sign ops t'] evaluates the level one term [t'] into a pair [(t, p)]:
     - [t] is a level zero term.
     - [p] is a proof of [eval t' = t]. *)
 let eval_term (sign : signature) (ops : ops_all) (t' : EConstr.t) :
@@ -317,3 +317,32 @@ let eval_term (sign : signature) (ops : ops_all) (t' : EConstr.t) :
   in
   let* _ = typecheck p (Some p_ty) in
   ret (t, p)
+
+(** [eval_subst sign ops s'] evaluates the level one substitution [s'] into a pair
+    [(s, p)]:
+    - [s] is a level zero substitution.
+    - [p] is a proof of [seval s' =₁ s]. *)
+let eval_subst (sign : signature) (ops : ops_all) (s' : EConstr.t) :
+    (EConstr.t * EConstr.t) m =
+  let module M = Make (struct
+    let sign = sign
+    let ops0 = ops.ops_ops0
+    let ops1 = ops.ops_ops1
+    let congr = ops.ops_congr
+    let re = ops.ops_re
+    let bij = ops.ops_bij
+    let pe = ops.ops_pe
+  end) in
+  let* s, p = M.eval_term s' in
+  (* Typecheck to resolve evars. *)
+  let* _ = typecheck s None in
+  let p_ty =
+    apps (Lazy.force Consts.point_eq)
+      [| Lazy.force Consts.nat
+       ; mkind ops.ops_ops0.term
+       ; app (mkconst ops.ops_re.seval) s'
+       ; s
+      |]
+  in
+  let* _ = typecheck p (Some p_ty) in
+  ret (s, p)

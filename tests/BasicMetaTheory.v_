@@ -53,25 +53,20 @@ Proof.
   intros Γ Δ ρ t m hρ ht.
   pose proof rscoping_shift as lem.
   induction ht in Γ, ρ, hρ, lem |- *.
-  all: try solve [ rasimpl ; econstructor ; eauto ].
-  - rasimpl. econstructor ; eauto ; admit.
-  - rasimpl. econstructor ; eauto. 
-
   all: solve [ rasimpl ; econstructor ; eauto ].
 Qed.
 
 Lemma sscoping_weak :
   ∀ Γ Δ σ m,
     sscoping Γ σ Δ →
-    sscoping (m :: Γ) (σ >> ren_term ↑) Δ.
+    sscoping (m :: Γ) (srcomp σ rshift) Δ.
 Proof.
   intros Γ Δ σ m h.
   induction h.
   - constructor.
   - constructor.
     + assumption.
-    + rasimpl. eapply scoping_ren. 2: eassumption.
-      apply rscoping_S.
+    + eapply scoping_ren. 2: eassumption. apply rscoping_S.
 Qed.
 
 Lemma scoping_subst :
@@ -83,8 +78,7 @@ Proof.
   intros Γ Δ σ t m hσ ht.
   induction ht in Γ, σ, hσ |- *.
   all: try solve [ rasimpl ; econstructor ; eauto ].
-  - rename H into hx, Γ0 into Δ.
-    rasimpl. induction hσ in x, hx |- *. 1: destruct x ; discriminate.
+  - rename H into hx, Γ0 into Δ. induction hσ in x, hx |- *. 1: destruct x ; discriminate.
     destruct x.
     + simpl in *. inversion hx. subst. assumption.
     + apply IHhσ. simpl in hx. assumption.

@@ -1,17 +1,18 @@
-From Prototype Require Import Prelude Sig LevelOne LevelTwo.
+From Prototype Require Import Prelude Sig LevelOne LevelTwo LevelTwoSimp.
 
 (** The output of simplification (LevelTwoSimp.v) is good for comparing
     terms/equations for equality, but not very nice to work with. 
-    
-    This file implements cleanup functions, which are meant to be run on irreducible terms,
-    and which do trivial transformations such as turning [Q_rapply R_shift i]
-    into [Q_succ i]. We do not require that cleanup functions produce irreducible
-    terms/substitutions. 
+    This file implements cleanup functions which do trivial transformations 
+    such as turning [Q_rapply R_shift i] into [Q_succ i]. Cleanup is
+    typically applied after simplification.
 
+    Cleanup functions can be applied to all terms (irreducible or not),
+    and do not produce irreducible terms.
+    
     For each cleanup function we prove a soundness lemma. *)
 
 Module Make (S : Sig).
-Include LevelTwo.Make (S).
+Include LevelTwoSimp.Make (S).
 
 (*********************************************************************************)
 (** *** [mk_qsucc] *)
@@ -29,6 +30,7 @@ Proof.
 funelim (mk_qsucc n i) ; simp mk_qsucc qeval ; triv.
 rewrite H. lia. 
 Qed.
+#[export] Hint Rewrite eval_mk_qsucc : qeval.
 
 (*********************************************************************************)
 (** *** [dest_rshift] *)
@@ -52,7 +54,7 @@ Proof.
 funelim (dest_rshift r) ; simp dest_rshift in * ; triv.
 - intros H. depelim H. reflexivity.
 - intros H. depelim H. simp qeval. apply (Hind e n2) in Heq. rewrite Heq. 
-  apply (Hind0 e n1) in Heq0. rewrite Heq0. cbv [rcomp]. intros i. lia.
+  apply (Hind0 e n1) in Heq0. rewrite Heq0. cbv [P.rcomp]. intros i. lia.
 Qed.
 
 (*********************************************************************************)
@@ -69,9 +71,9 @@ qclean_rapply r i with dest_rshift r := {
 Lemma qclean_rapply_sound e r i :
   qeval e (qclean_rapply r i) = qeval e (Q_rapply r i).
 Proof. 
-funelim (qclean_rapply r i ) ; triv. simp qeval. rewrite (dest_rshift_sound _ _ _ Heq).
-now rewrite eval_mk_qsucc.
+funelim (qclean_rapply r i ) ; triv. simp qeval. now rewrite (dest_rshift_sound _ _ _ Heq).
 Qed.
+#[export] Hint Rewrite qclean_rapply_sound : qeval.
 
 Equations qclean : qnat -> qnat :=
 qclean Q_zero := Q_zero ;
@@ -93,22 +95,34 @@ Proof.
 apply qclean_elim with 
   (P := fun i res => qeval e res = qeval e i)
   (P0 := fun r res => reval e res =₁ reval e r).
-all: intros ; simp qeval in * ; triv.
-- rewrite qclean_rapply_sound. simp qeval. now rewrite H, H0.
-- now rewrite H, H0.
-- now rewrite H, H0.
+all: intros ; simp qeval in * ; solve [triv | now rewrite H, H0 ].
 Qed.
+
+Lemma qclean_sound e i : qeval e (qclean i) = qeval e i.
+Proof. now apply qclean_rclean_sound. Qed.
+#[export] Hint Rewrite qclean_sound : qeval.
+
+Lemma rclean_sound e r : reval e (rclean r) =₁ reval e r.
+Proof. now apply qclean_rclean_sound. Qed.
+#[export] Hint Rewrite rclean_sound : reval.
 
 (*********************************************************************************)
 (** *** [dest_ren] *)
 (*********************************************************************************)
 
+Equations dest_var {k} (t : expr k) : option qnat :=
+dest_var (E_tvar i) := Some i ;
+dest_var _ := None.
+
+(* In the [S_cons] case, we match on [dest_var t]. This is because
+   matching [t] with [E_tvar i] directly causes Equations to use 
+   [apply_noConfusion], which is annoying to unfold completely with [cbv]. *)
 Equations dest_ren (s : subst) : option ren :=
 dest_ren S_id := Some R_id ;
 dest_ren S_shift := Some R_shift ;
-dest_ren (S_cons (E_tvar i) s) with dest_ren s := {
-  | Some r => Some (R_cons i r) 
-  | None => None 
+dest_ren (S_cons t s) with dest_var t, dest_ren s := {
+  | Some i, Some r => Some (R_cons i r) 
+  | _, _ => None 
   } ;
 dest_ren (S_comp s1 s2) with dest_ren s1, dest_ren s2 := {
   | Some r1, Some r2 => Some (R_comp r1 r2)
@@ -122,7 +136,8 @@ Lemma dest_ren_sound e s r :
 Proof.
 funelim (dest_ren s) ; triv.
 all: intros H ; depelim H ; simp eeval qeval in * ; try reflexivity.
-- rewrite (Hind e r Heq). simp eeval. intros [|] ; reflexivity.
+- depelim t ; triv. simp dest_var in Heq0. depelim Heq0. rewrite (Hind e r Heq).
+  simp eeval. intros [|] ; reflexivity.
 - rewrite (Hind e r2 Heq), (Hind0 e r1 Heq0). reflexivity.
 Qed.
 
@@ -137,10 +152,8 @@ eclean_ren r t := E_ren r t.
 
 Lemma eclean_ren_sound {k} e r (t : expr k) :
   eeval e (eclean_ren r t) = eeval e (E_ren r t).
-Proof.
-funelim (eclean_ren r t) ; triv. simp eeval. rewrite qclean_rapply_sound. 
-simp qeval. reflexivity.
-Qed.
+Proof. funelim (eclean_ren r t) ; triv. now simp eeval qeval. Qed.
+#[export] Hint Rewrite @eclean_ren_sound : eeval.
 
 (** Handle the [E_subst s e] case of [eclean]. *)
 Equations eclean_subst {k} : subst -> expr k -> expr k :=
@@ -152,9 +165,10 @@ eclean_subst s e with dest_ren s := {
 Lemma eclean_subst_sound {k} e s (t : expr k) :
   eeval e (eclean_subst s t) = eeval e (E_subst s t).
 Proof.
-funelim (eclean_subst s t) ; triv. rewrite eclean_ren_sound ; simp eeval.
+funelim (eclean_subst s t) ; simp eeval ; triv.
 rewrite (dest_ren_sound _ _ _ Heq). simp eeval. now rewrite O.ren_is_subst.
-Qed. 
+Qed.
+#[export] Hint Rewrite @eclean_subst_sound : eeval. 
   
 Equations eclean {k} : expr k -> expr k :=
 eclean (E_tvar i) := E_tvar (qclean i) ;
@@ -180,7 +194,20 @@ Lemma eclean_sclean_sound e :
   (forall k (t : expr k), eeval e (eclean t) = eeval e t) *
   (forall s, seval e (sclean s) =₁ seval e s).
 Proof.
-Admitted.
+apply eclean_elim with 
+  (P := fun k t res => eeval e res = eeval e t) 
+  (P0 := fun s res => seval e res =₁ seval e s).
+all: intros ; simp eeval qeval reval ; triv.
+all: solve [now rewrite H | now rewrite H, H0 ].
+Qed. 
+
+Lemma eclean_sound {k} e (t : expr k) : eeval e (eclean t) = eeval e t.
+Proof. now apply eclean_sclean_sound. Qed.
+#[export] Hint Rewrite @eclean_sound : eeval.
+
+Lemma sclean_sound e s : seval e (sclean s) =₁ seval e s.
+Proof. now apply eclean_sclean_sound. Qed.
+#[export] Hint Rewrite sclean_sound : seval.
 
 End Make.
 

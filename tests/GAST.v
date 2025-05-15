@@ -1,20 +1,9 @@
 From Coq Require Import Lia String.
 From Ltac2 Require Import RedFlags Printf.
 From Prototype Require Export Prelude.
-From Prototype Require Import Sig Constants LevelOne LevelTwo LevelTwoIrred LevelTwoSimp.
+From Prototype Require Import Sig Constants LevelOne LevelTwo LevelTwoIrred 
+  LevelTwoSimp LevelTwoClean RASimpl.
 From GhostTT Require Import BasicAST. 
-
-(*********************************************************************************)
-(** *** Load the plugin. *)
-(*********************************************************************************)
-
-Declare ML Module "autosubst-experiments.plugin".
-Ltac2 @external reify_term : constr -> constr * constr := "autosubst-experiments.plugin" "reify_term".
-Ltac2 @external eval_term : constr -> constr * constr := "autosubst-experiments.plugin" "eval_term".
-
-Class TermSimplification {term} (t s : term) := 
-  MkTermSimplification { term_simplification : t = s }.
-Hint Mode TermSimplification + + - : typeclass_instances.
 
 (*********************************************************************************)
 (** *** Generate all operations and lemmas. *)
@@ -26,81 +15,91 @@ Register mode as ghost_reflection.mode.
 Time Autosubst Generate.
 
 (*********************************************************************************)
-(** *** [rasimpl] *)
+(** *** Glue code (eventually should be generic). *)
 (*********************************************************************************)
+
+(** Solve a goal of the form [Simplification term t0 _]. *)
+Ltac2 solve_term_simplification () : unit :=
+  lazy_match! Control.goal () with 
+  | Simplification term ?t0 _ =>
+    (* Reify Level 0 -> Level 1. *)
+    let (t1, p1) := reify_term t0 in 
+    (* Reify Level 1 -> Level 2. *)
+    let env := T.empty_env () in
+    let (env, t2) := T.reify_expr env t1 in
+    let env := T.build_env env in
+    (* Simplify on Level 2. *)
+    let t2' := Std.eval_cbv (T.red_flags_simp ()) constr:(T.esimp $t2) in
+    let t2'' := Std.eval_cbv (T.red_flags_clean ()) constr:(T.eclean $t2') in
+    (* Eval Level 2 -> Level 1. *)
+    let t1' := Std.eval_cbv (T.red_flags_eval ()) constr:(T.eeval $env $t2'') in
+    (* Eval Level 1 -> Level 0. *)
+    let (t0', p3) := eval_term t1' in
+    (* [eq1 : t1 = t1']. *)
+    let eq1 := constr:(eq_trans 
+      (eq_sym (T.esimp_sound $env $t2))
+      (eq_sym (T.eclean_sound $env $t2'))) 
+    in
+    (* [eq0 : t0 = t0']. *)
+    let eq := constr:(eq_trans
+      (eq_sym $p1) 
+      (eq_trans (f_equal (eval Kt) $eq1) $p3)) 
+    in
+    exact (MkSimplification term $t0 $t0' $eq)
+  | _ => Control.zero (Tactic_failure None)
+  end.
+
+Lemma congr_seval {s1 s2} : 
+  s1 =₁ s2 -> seval s1 =₁ seval s2.
+Proof. intros H i. unfold seval. now rewrite H. Qed. 
+
+(** Solve a goal of the form [Simplification subst s0 _]. *)
+Ltac2 solve_subst_simplification () : unit :=
+  lazy_match! Control.goal () with 
+  | Simplification subst ?s0 _ =>
+    (* Reify Level 0 -> Level 1. *)
+    let (s1, p1) := reify_subst s0 in 
+    (* Reify Level 1 -> Level 2. *)
+    let env := T.empty_env () in
+    let (env, s2) := T.reify_subst env s1 in
+    let env := T.build_env env in
+    (* Simplify on Level 2. *)
+    let s2' := Std.eval_cbv (T.red_flags_simp ()) constr:(T.ssimp $s2) in
+    let s2'' := Std.eval_cbv (T.red_flags_clean ()) constr:(T.sclean $s2') in
+    (* Eval Level 2 -> Level 1. *)
+    let s1' := Std.eval_cbv (T.red_flags_eval ()) constr:(T.seval $env $s2'') in
+    (* Eval Level 1 -> Level 0. *)
+    let (s0', p3) := eval_subst s1' in
+    (* [eq1 : s1 =₁ s1']. *)
+    let eq1 := constr:(transitivity
+      (symmetry (T.ssimp_sound $env $s2))
+      (symmetry (T.sclean_sound $env $s2'))) 
+    in
+    (* [eq0 : s0 =₁ s0']. *)
+    let eq := constr:(transitivity
+      (symmetry $p1) 
+      (transitivity (congr_seval $eq1) $p3)) 
+    in
+    exact (MkSimplification subst $s0 $s0' $eq)
+  | _ => Control.zero (Tactic_failure None) 
+  end.
+
+(** Main simplification tactic. *)
+Ltac rasimpl := 
+  (try rewrite_strat (topdown (hints asimpl))) ; 
+  [ | solve [ltac2:(solve_term_simplification ()) | ltac2:(solve_subst_simplification ())] ..].
 
 (** Trigger for [rasimpl]. *)
 Lemma autosubst_simpl_term_rename (r : ren) (t res : term) :
-  TermSimplification (rename r t) res -> rename r t = res.
-Proof. intros H. now apply term_simplification. Qed.
+  Simplification term (rename r t) res -> rename r t = res.
+Proof. intros H. now apply simplification. Qed.
 #[export] Hint Rewrite -> autosubst_simpl_term_rename : asimpl.
 
 (** Trigger for [rasimpl]. *)
 Lemma autosubst_simpl_term_substitute (s : subst) (t res : term) :
-  TermSimplification (substitute s t) res -> substitute s t = res.
-Proof. intros H. now apply term_simplification. Qed.
+  Simplification term (substitute s t) res -> substitute s t = res.
+Proof. intros H. now apply simplification. Qed.
 #[export] Hint Rewrite -> autosubst_simpl_term_substitute : asimpl.
-
-Ltac2 red_flags_simp () : RedFlags.t := 
-  red_flags:(beta iota delta 
-    [T.esimp T.ssimp T.esimp_functional T.ssimp_functional
-     T.qsimp T.rsimp T.qsimp_functional T.rsimp_functional
-     T.substitute T.scomp T.substitute_functional T.scomp_functional
-     T.rename T.srcomp T.rename_functional T.srcomp_functional
-     T.tnat T.sren T.tnat_functional T.sren_functional
-     T.substitute_aux T.scomp_aux T.sapply_aux T.sup T.rup 
-     T.sapply T.rscomp T.sapply_functional T.rscomp_functional
-     T.rapply T.rcomp T.rapply_functional T.rcomp_functional
-     T.rcomp_aux T.rapply_aux T.rcons T.scons]).
-
-Ltac2 red_flags_eval () : RedFlags.t :=
-  red_flags:(beta iota delta   
-    [T.eeval T.seval T.eeval_functional T.seval_functional
-     T.reval T.qeval T.reval_functional T.qeval_functional
-     T.assign_qnat T.assign_ren T.assign_term T.assign_subst
-     List.nth (* TODO use something else than [List.nth]. *)
-     ]).
-
-(** Solve a goal of the form [TermSimplification t0]. *)
-Ltac2 build_TermSimplification (t0 : constr) : unit :=
-  (* Reify Level 0 -> Level 1. *)
-  let (t1, p1) := reify_term t0 in 
-  (* Reify Level 1 -> Level 2. *)
-  let env := T.empty_env () in
-  let (env, t2) := T.reify_expr env t1 in
-  let env := T.build_env env in
-  (* Simplify on Level 2. *)
-  let t2' := Std.eval_cbv (red_flags_simp ()) constr:(T.esimp $t2) in
-  printf "t2': %t" t2';
-  (* Eval Level 2 -> Level 1. *)
-  let t1' := Std.eval_cbv (red_flags_eval ()) constr:(T.eeval $env $t2') in
-  (* Eval Level 1 -> Level 0. *)
-  let (t0', p3) := eval_term t1' in
-  (* Assemble the typeclass instance. *)
-  let eq := constr:(eq_trans
-    (eq_sym $p1) 
-    (eq_trans 
-      (f_equal (eval Kt) (eq_sym (T.esimp_sound $env $t2))) 
-      $p3)) 
-  in
-  exact (MkTermSimplification term $t0 $t0' $eq).
-
-(** Hook [build_TermSimplification] into typeclass search. *)
-#[export] Hint Extern 10 (TermSimplification ?t0 _) =>
-  let tac := ltac2:(t0 |-  
-    match Ltac1.to_constr t0 with 
-    | Some t0 => build_TermSimplification t0
-    | None => Control.throw_invalid_argument "build_TermSimplification"
-    end) 
-  in 
-  tac t0 : typeclass_instances.
-    
-(** Main simplification tactic. The call to [exact _] triggers typeclass search
-    to find an instance of [TermSimplification ?t _], which in turn calls 
-    [build_TermSimplification] via [Hint Extern]. *)
-Ltac rasimpl := 
-  (try rewrite_strat (topdown (hints asimpl))) ; 
-  [ | exact _ ..].
 
 Axiom r : ren.
 Axiom s : subst.

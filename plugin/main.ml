@@ -49,6 +49,10 @@ let build_signature () : signature =
     ; ("bot_elim", [ mode; AT_term; AT_term ])
     ]
 
+(**************************************************************************************)
+(** *** Generating operations/lemmas. *)
+(**************************************************************************************)
+
 (** We keep track of the generated operations using the [Libobject] API. The first step is
     to create a reference using [Summary.ref]. *)
 let saved_ops : ops_all option ref = Summary.ref ~name:"autosubst_saved_ops_summary" None
@@ -92,30 +96,38 @@ let generate () =
   (* Save the operations. *)
   Lib.add_leaf @@ update_saved_ops (Some ops)
 
-let reify_term_tac (t : EConstr.t) : (EConstr.t * EConstr.t) Proofview.tactic =
-  let s = build_signature () in
-  let ops =
-    match !saved_ops with
-    | None -> Log.error "reify_tac: must generate operations beforehand."
-    | Some ops -> ops
-  in
-  monad_run_tactic @@ Reification.reify_term s ops t
+(**************************************************************************************)
+(** *** Expose Ltac2 reification and evaluation tactics. *)
+(**************************************************************************************)
 
-let eval_term_tac (t : EConstr.t) : (EConstr.t * EConstr.t) Proofview.tactic =
-  let s = build_signature () in
-  let ops =
-    match !saved_ops with
-    | None -> Log.error "eval_tac: must generate operations beforehand."
-    | Some ops -> ops
-  in
-  monad_run_tactic @@ Evaluation.eval_term s ops t
+(** [define_ltac2 name body] declares an Ltac2 tactic named [name], with type
+    [constr -> constr * constr], which is implemented by [body].
 
-(** Register the reification and evaluation tactics using Ltac2's FFI. *)
-let () =
+    You must write the following in a .v file before calling the tactic from Ltac2:
+    [Ltac2 @external my_tac : constr -> constr * constr := "autosubst-experiments.plugin"
+     "name"] *)
+let define_ltac2 (name : string)
+    (body : signature -> ops_all -> EConstr.t -> (EConstr.t * EConstr.t) m) : unit =
   let open Tac2externals in
   let open Tac2ffi in
-  let name s =
-    Tac2expr.{ mltac_plugin = "autosubst-experiments.plugin"; mltac_tactic = s }
+  (* We must delay fetching the saved operations [!saved_ops] until the tactic is 
+     actually called. *)
+  let ocaml_tactic x =
+    let sign = build_signature () in
+    let ops =
+      match !saved_ops with
+      | None -> Log.error "define_ltac2: must generate operations beforehand."
+      | Some ops -> ops
+    in
+    monad_run_tactic @@ body sign ops x
   in
-  define (name "reify_term") (constr @-> tac (pair constr constr)) reify_term_tac;
-  define (name "eval_term") (constr @-> tac (pair constr constr)) eval_term_tac
+  define
+    Tac2expr.{ mltac_plugin = "autosubst-experiments.plugin"; mltac_tactic = name }
+    (constr @-> tac (pair constr constr))
+    ocaml_tactic
+
+let () =
+  define_ltac2 "reify_term" Reification.reify_term;
+  define_ltac2 "reify_subst" Reification.reify_subst;
+  define_ltac2 "eval_term" Evaluation.eval_term;
+  define_ltac2 "eval_subst" Evaluation.eval_subst
