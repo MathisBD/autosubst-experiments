@@ -1,4 +1,4 @@
-From Prototype Require Import Prelude Sig LevelOne LevelTwo LevelTwoSimp.
+From Prototype Require Import Prelude Sig LevelOne LevelTwo.
 
 (** The output of simplification (LevelTwoSimp.v) is good for comparing
     terms/equations for equality, but not very nice to work with. 
@@ -12,7 +12,10 @@ From Prototype Require Import Prelude Sig LevelOne LevelTwo LevelTwoSimp.
     For each cleanup function we prove a soundness lemma. *)
 
 Module Make (S : Sig).
-Include LevelTwoSimp.Make (S).
+Include LevelTwo.Make (S).
+
+#[local] Hint Extern 5 => constructor : core.
+#[local] Hint Extern 5 => subst : core.
 
 (*********************************************************************************)
 (** *** [mk_qsucc] *)
@@ -58,6 +61,176 @@ funelim (dest_rshift r) ; simp dest_rshift in * ; triv.
 Qed.
 
 (*********************************************************************************)
+(** *** Rewriting system. *)
+(*********************************************************************************)
+
+Reserved Notation "i =q=> i'" (at level 70, no associativity). 
+Reserved Notation "r =r=> r'" (at level 70, no associativity). 
+Reserved Notation "e =e=> e'" (at level 70, no associativity). 
+Reserved Notation "s =s=> s'" (at level 70, no associativity). 
+
+Unset Elimination Schemes.
+Inductive qred : qnat -> qnat -> Prop :=
+(* Reflexivity. *)
+| qred_refl i : i =q=> i
+(* Transitivity. *)
+| qred_trans i i' i'' : i =q=> i' -> i' =q=> i'' -> i =q=> i'' 
+(* Congruence. *)
+| qred_congr_succ i i' : i =q=> i' -> Q_succ i =q=> Q_succ i'
+| qred_congr_rapply r r' i i' : r =r=> r' -> i =q=> i' -> Q_rapply r i =q=> Q_rapply r' i'
+(* Cleanup. *)
+| qred_rapply_shift r i n : dest_rshift r = Some n -> Q_rapply r i =q=> mk_qsucc n i
+
+with rred : ren -> ren -> Prop :=
+(* Reflexivity. *)
+| rred_refl r : r =r=> r
+(* Transitivity. *)
+| rred_trans r r' r'' : r =r=> r' -> r' =r=> r'' -> r =r=> r'' 
+(* Congruence. *)
+| rred_congr_cons i i' r r' : i =q=> i' -> r =r=> r' -> R_cons i r =r=> R_cons i' r'
+| rred_congr_comp r1 r1' r2 r2' : r1 =r=> r1' -> r2 =r=> r2' -> R_comp r1 r2 =r=> R_comp r1' r2'
+
+where "i =q=> i'" := (qred i i')
+  and "r =r=> r'" := (rred r r').
+Set Elimination Schemes.
+
+(** Generate (non-dependent) induction schemes for [qred] and [rred]. *)
+Scheme qred_ind := Minimality for qred Sort Prop 
+  with rred_ind := Minimality for rred Sort Prop.
+Combined Scheme qred_rred_ind from qred_ind, rred_ind.
+
+Derive Signature for qred rred.
+
+(*********************************************************************************)
+(** *** Setoid rewrite support. *)
+(*********************************************************************************)
+
+#[export] Instance qred_preorder : PreOrder qred.
+Proof.
+constructor.
+- intros ?. apply qred_refl.
+- intros ?????. eauto using qred_trans.
+Qed.
+
+#[export] Instance qred_proper_succ : Proper (qred ==> qred) Q_succ.
+Proof. intros ???. now apply qred_congr_succ. Qed.
+    
+#[export] Instance qred_proper_rapply : Proper (rred ==> qred ==> qred) Q_rapply.
+Proof. intros ??????. now apply qred_congr_rapply. Qed.
+
+#[export] Instance rred_preorder : PreOrder rred.
+Proof.
+constructor.
+- intros ?. apply rred_refl.
+- intros ?????. eauto using rred_trans.
+Qed.
+
+#[export] Instance rred_proper_cons : Proper (qred ==> rred ==> rred) R_cons.
+Proof. intros ??????. now apply rred_congr_cons. Qed.
+
+#[export] Instance rred_proper_comp : Proper (rred ==> rred ==> rred) R_comp.
+Proof. intros ??????. now apply rred_congr_comp. Qed.
+
+(*********************************************************************************)
+(** *** Soundness of the rewriting system. *)
+(*********************************************************************************)
+
+Lemma qred_rred_sound e : 
+  (forall i i', i =q=> i' -> qeval e i = qeval e i') /\
+  (forall r r', r =r=> r' -> reval e r =₁ reval e r').
+Proof.
+apply qred_rred_ind ; intros ; simp qeval ; triv.
+- now rewrite H0, H2.
+- now rewrite H0, H2.
+- now rewrite (dest_rshift_sound _ _ _ H).
+- now rewrite H0.
+- now rewrite H0, H2.
+- now rewrite H0, H2.
+Qed.         
+
+Lemma qred_sound e i i' : i =q=> i' -> qeval e i = qeval e i'.
+Proof. now apply qred_rred_sound. Qed.
+
+Lemma rred_sound e r r' : r =r=> r' -> reval e r =₁ reval e r'.
+Proof. now apply qred_rred_sound. Qed.
+
+(*********************************************************************************)
+(** *** Irreducible forms. *)
+(*********************************************************************************)
+
+Definition qirred i := forall i', i =q=> i' -> i = i'.
+Definition rirred r := forall r', r =r=> r' -> r = r'.
+
+Unset Elimination Schemes.
+Inductive qreducible : qnat -> Prop :=
+| qreducible_congr_succ i : qreducible i -> qreducible (Q_succ i)
+| qreducible_congr_rapply_1 r i : rreducible r -> qreducible (Q_rapply r i)
+| qreducible_congr_rapply_2 r i : qreducible i -> qreducible (Q_rapply r i)
+| qreducible_rapply_shift r i n : dest_rshift r = Some n -> qreducible (Q_rapply r i)
+
+with rreducible : ren -> Prop :=
+| rreducible_congr_cons_1 i r : qreducible i -> rreducible (R_cons i r)
+| rreducible_congr_cons_2 i r : rreducible r -> rreducible (R_cons i r)
+| rreducible_congr_comp_1 r1 r2 : rreducible r1 -> rreducible (R_comp r1 r2)
+| rreducible_congr_comp_2 r1 r2 : rreducible r2 -> rreducible (R_comp r1 r2).
+Set Elimination Schemes.
+
+Hint Constructors qreducible rreducible : core.
+
+Scheme qreducible_ind := Minimality for qreducible Sort Prop 
+  with rreducible_ind := Minimality for rreducible Sort Prop.
+Combined Scheme qreducible_rreducible_ind from qreducible_ind,rreducible_ind.
+
+Derive Signature for qreducible rreducible.
+
+Lemma qr_red_impl_reducible : 
+  (forall i i', i =q=> i' -> i = i' \/ qreducible i) /\ 
+  (forall r r', r =r=> r' -> r = r' \/ rreducible r).
+Proof.
+apply qred_rred_ind ; intros ; triv.
+all: try solve [ destruct H0, H2 ; triv ].
+destruct H0 ; triv.
+Qed.
+
+Lemma qr_reducible_impl_red : 
+  (forall i, qreducible i -> exists i', i =q=> i' /\ i <> i') /\
+  (forall r, rreducible r -> exists r', r =r=> r' /\ r <> r').
+Proof.
+apply qreducible_rreducible_ind ; intros.
+all: try solve [ destruct H0 as (i' & H1 & H2) ; eexists ; split ; 
+  [now rewrite H1 | intros H3 ; now depelim H3] ].
+exists (mk_qsucc n i). split ; triv. destruct n ; simp mk_qsucc ; triv.
+Qed.
+
+Lemma qirred_qreducible i : qirred i <-> ~qreducible i.
+Proof.
+split.
+- intros H H'. apply qr_reducible_impl_red in H'. destruct H' as (i' & H1 & H2). triv.
+- intros H i' Hi. apply qr_red_impl_reducible in Hi. destruct Hi ; triv.
+Qed.
+
+Lemma rirred_rreducible r : rirred r <-> ~rreducible r.
+Proof.
+split.
+- intros H H'. apply qr_reducible_impl_red in H'. destruct H' as (r' & H1 & H2). triv.
+- intros H r' Hr. apply qr_red_impl_reducible in Hr. destruct Hr ; triv.
+Qed.
+
+Lemma qirred_succ i : qirred (Q_succ i) <-> qirred i.
+Proof.
+repeat rewrite qirred_qreducible.
+split ; intros H H1 ; apply H ; clear H ; triv. now depelim H1.
+Qed.
+
+Lemma qirred_rapply r i :
+  qirred (Q_rapply r i) <-> rirred r /\ qirred i /\ dest_rshift r = None.
+Proof.
+repeat rewrite rirred_rreducible ; repeat rewrite qirred_qreducible. split ; intros H.
+- split3 ; triv.  admit.
+- intros H'. depelim H' ; triv. rewrite H0 in H ; triv.
+
+
+(*********************************************************************************)
 (** *** [qclean] and [rclean]. *)
 (*********************************************************************************)
 
@@ -68,12 +241,10 @@ qclean_rapply r i with dest_rshift r := {
   | None => Q_rapply r i
   }. 
 
-Lemma qclean_rapply_sound e r i :
-  qeval e (qclean_rapply r i) = qeval e (Q_rapply r i).
-Proof. 
-funelim (qclean_rapply r i ) ; triv. simp qeval. now rewrite (dest_rshift_sound _ _ _ Heq).
-Qed.
-#[export] Hint Rewrite qclean_rapply_sound : qeval.
+Lemma qclean_rapply_red r i : 
+  Q_rapply r i =q=> qclean_rapply r i.
+Proof. funelim (qclean_rapply r i) ; triv. now apply qred_rapply_shift. Qed.
+#[global] Hint Rewrite <-qclean_rapply_red : red.
 
 Equations qclean : qnat -> qnat :=
 qclean Q_zero := Q_zero ;
@@ -88,23 +259,26 @@ rclean (R_cons i r) := R_cons (qclean i) (rclean r) ;
 rclean (R_comp r1 r2) := R_comp (rclean r1) (rclean r2) ;
 rclean (R_mvar m) := R_mvar m.
 
-Lemma qclean_rclean_sound e : 
-  (forall i, qeval e (qclean i) = qeval e i) *
-  (forall r, reval e (rclean r) =₁ reval e r).
+Lemma qclean_rclean_sound : 
+  (forall i, i =q=> qclean i) * (forall r, r =r=> rclean r).
 Proof.
 apply qclean_elim with 
-  (P := fun i res => qeval e res = qeval e i)
-  (P0 := fun r res => reval e res =₁ reval e r).
-all: intros ; simp qeval in * ; solve [triv | now rewrite H, H0 ].
+  (P := fun i res => i =q=> res)
+  (P0 := fun r res => r =r=> res).
+all: intros ; simp red ; triv.
+- now rewrite <-H.
+- now rewrite <-H, <-H0.
+- now rewrite <-H, <-H0.
+- now rewrite <-H, <-H0.  
 Qed.
 
-Lemma qclean_sound e i : qeval e (qclean i) = qeval e i.
+Lemma qclean_sound i : i =q=> qclean i.
 Proof. now apply qclean_rclean_sound. Qed.
-#[export] Hint Rewrite qclean_sound : qeval.
+#[export] Hint Rewrite <-qclean_sound : red.
 
-Lemma rclean_sound e r : reval e (rclean r) =₁ reval e r.
+Lemma rclean_sound r : r =r=> rclean r.
 Proof. now apply qclean_rclean_sound. Qed.
-#[export] Hint Rewrite rclean_sound : reval.
+#[export] Hint Rewrite <-rclean_sound : red.
 
 (*********************************************************************************)
 (** *** [dest_ren] *)
