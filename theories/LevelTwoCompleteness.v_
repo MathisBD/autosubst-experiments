@@ -20,10 +20,6 @@ Print qnat.
 *)
 
 
-
-(** Add some power to [auto] and variants. *)
-#[local] Hint Extern 5 => exfalso : core.
-    
 Definition sem_qnat_eq (i1 i2 : qnat) : Prop :=
   forall e, qeval e i1 = qeval e i2.
 #[local] Notation "i1 '=q=' i2" := (sem_qnat_eq i1 i2) 

@@ -9,9 +9,6 @@ From Prototype Require Import Prelude Sig LevelOne LevelTwo LevelTwoIrred.
 Module Make (S : Sig).
 Include LevelTwoIrred.Make (S).
 
-(** Add some power to [auto] and variants. *)
-#[local] Hint Extern 4 => exfalso : core.
-
 (*********************************************************************************)
 (** *** [rapply_aux] *)
 (*********************************************************************************)

@@ -8,9 +8,6 @@ From Prototype Require Import Prelude Sig.
 
 Module Make (S : Sig).
 
-(** Add some power to [auto] and variants. *)
-#[local] Hint Extern 4 => f_equal : core.
-
 (*********************************************************************************)
 (** *** Terms. *)
 (*********************************************************************************)
@@ -256,8 +253,7 @@ Proof.
 funelim (substitute _ t) ; simp rename substitute in * ; auto.
 f_equal. rewrite H. apply substitute_proper ; auto.
 intros [|i] ; auto. cbv [up_subst scons srcomp].
-rewrite ren_ren, ren_ren. apply rename_proper ; auto.
-reflexivity.
+rewrite ren_ren, ren_ren. apply rename_proper ; triv.
 Qed.
 
 Lemma subst_ren {k} (t : expr k) (r : ren) (s : subst) : 

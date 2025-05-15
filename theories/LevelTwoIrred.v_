@@ -12,10 +12,6 @@ From Prototype Require Import Prelude Sig LevelOne LevelTwo.
 Module Make (S : Sig).
 Include LevelTwo.Make (S).
 
-(** Add some power to [auto] and variants. *)
-#[local] Hint Extern 6 => exfalso : core.
-#[local] Hint Extern 6 => subst : core.
-
 (*********************************************************************************)
 (** *** Discriminators. *)
 (*********************************************************************************)

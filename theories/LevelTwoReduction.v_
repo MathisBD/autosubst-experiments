@@ -1,0 +1,238 @@
+(*From Prototype Require Import Prelude Sig LevelOne LevelTwo.
+
+Module Make (S : Sig).
+Include LevelTwo.Make (S).
+
+Section Reduction.
+
+Context (qred : qnat -> qnat -> Prop).
+Context (rred : ren -> ren -> Prop).
+
+Context (qreducible : qnat -> Prop).
+Context (rreducible : ren -> Prop).
+
+(*********************************************************************************)
+(** *** Reduction relation on terms. *)
+(*********************************************************************************)
+
+#[local] Reserved Notation "i =q=> i'" (at level 70, no associativity).
+#[local] Reserved Notation "r =r=> r'" (at level 70, no associativity). 
+
+Unset Elimination Schemes.
+
+Inductive qred_clos : qnat -> qnat -> Prop := 
+(* Reflexivity. *)
+| qred_refl i : i =q=> i
+(* Transitivity. *)
+| qred_trans i i' i'' : i =q=> i' -> i' =q=> i'' -> i =q=> i'' 
+(* Congruence. *)
+| qred_congr_succ i i' : i =q=> i' -> Q_succ i =q=> Q_succ i'
+| qred_congr_rapply r r' i i' : r =r=> r' -> i =q=> i' -> Q_rapply r i =q=> Q_rapply r' i'
+(* Custom rules. *)
+| qred_custom i i' : qred i i' -> qred_clos i i'
+
+with rred_clos : ren -> ren -> Prop :=
+(* Reflexivity. *)
+| rred_refl r : r =r=> r
+(* Transitivity. *)
+| rred_trans r r' r'' : r =r=> r' -> r' =r=> r'' -> r =r=> r'' 
+(* Congruence. *)
+| rred_congr_cons i i' r r' : i =q=> i' -> r =r=> r' -> R_cons i r =r=> R_cons i' r'
+| rred_congr_comp r1 r1' r2 r2' : r1 =r=> r1' -> r2 =r=> r2' -> R_comp r1 r2 =r=> R_comp r1' r2'
+(* Custom rules. *)
+| rred_custom r r' : rred r r' -> rred_clos r r'
+
+where "i =q=> i'" := (qred_clos i i')
+  and "r =r=> r'" := (rred_clos r r').
+  
+Set Elimination Schemes.
+
+Derive Signature for qred_clos rred_clos.
+
+Scheme qred_clos_ind := Minimality for qred_clos Sort Prop 
+  with rred_clos_ind := Minimality for rred_clos Sort Prop.
+Combined Scheme qrred_clos_ind from qred_clos_ind, rred_clos_ind.
+
+#[local] Hint Constructors qred_clos rred_clos : core.
+
+(*********************************************************************************)
+(** *** Setoid rewrite support. *)
+(*********************************************************************************)
+
+#[export] Instance qred_preorder : 
+  PreOrder qred_clos.
+Proof.
+constructor.
+- intros ?. apply qred_refl.
+- intros ?????. eauto using qred_trans.
+Qed.
+
+#[export] Instance qred_proper_succ : 
+  Proper (qred_clos ==> qred_clos) Q_succ.
+Proof. intros ???. now apply qred_congr_succ. Qed.
+    
+#[export] Instance qred_proper_rapply : 
+  Proper (rred_clos ==> qred_clos ==> qred_clos) Q_rapply.
+Proof. intros ??????. now apply qred_congr_rapply. Qed.
+
+#[export] Instance rred_preorder : 
+  PreOrder rred_clos.
+Proof.
+constructor.
+- intros ?. apply rred_refl.
+- intros ?????. eauto using rred_trans.
+Qed.
+
+#[export] Instance rred_proper_cons : 
+  Proper (qred_clos ==> rred_clos ==> rred_clos) R_cons.
+Proof. intros ??????. now apply rred_congr_cons. Qed.
+
+#[export] Instance rred_proper_comp : 
+  Proper (rred_clos ==> rred_clos ==> rred_clos) R_comp.
+Proof. intros ??????. now apply rred_congr_comp. Qed.
+
+(*********************************************************************************)
+(** *** Reducible and irreducible terms. *)
+(*********************************************************************************)
+
+(** The standard definition of irreducible terms. This definition is very clear
+    but not so easy to work with. We provide an alternate (equivalent) definition
+    of irreducibility/reducibility below. *)
+Definition qirred_clos i := forall i', i =q=> i' -> i = i'.
+Definition rirred_clos r := forall r', r =r=> r' -> r = r'.
+
+(** An alternate definition of reducibility that is easy to work with,
+    but not very intuitive. *)
+Unset Elimination Schemes.
+Inductive qreducible_clos : qnat -> Prop :=
+(* Congruence. *)
+| qreducible_congr_succ i : qreducible_clos i -> qreducible_clos (Q_succ i)
+| qreducible_congr_rapply_1 r i : rreducible_clos r -> qreducible_clos (Q_rapply r i)
+| qreducible_congr_rapply_2 r i : qreducible_clos i -> qreducible_clos (Q_rapply r i)
+(* Custom rules. *)
+| qreducible_custom i : qreducible i -> qreducible_clos i
+
+with rreducible_clos : ren -> Prop :=
+(* Congruence. *)
+| rreducible_congr_cons_1 i r : qreducible_clos i -> rreducible_clos (R_cons i r)
+| rreducible_congr_cons_2 i r : rreducible_clos r -> rreducible_clos (R_cons i r)
+| rreducible_congr_comp_1 r1 r2 : rreducible_clos r1 -> rreducible_clos (R_comp r1 r2)
+| rreducible_congr_comp_2 r1 r2 : rreducible_clos r2 -> rreducible_clos (R_comp r1 r2)
+(* Custom rules. *)
+| rreducible_custom r : rreducible r -> rreducible_clos r.
+Set Elimination Schemes.
+
+Derive Signature for qreducible_clos rreducible_clos.
+
+Scheme qreducible_clos_ind := Minimality for qreducible_clos Sort Prop 
+  with rreducible_clos_ind := Minimality for rreducible_clos Sort Prop.
+Combined Scheme qrreducible_clos_ind from qreducible_clos_ind, rreducible_clos_ind.
+
+#[local] Hint Constructors qreducible_clos rreducible_clos : core.
+
+(** We prove the equivalence between both version of reducibility. *)
+Section ReducibilityEquiv.
+Context (H_qred_qreducible : forall i i', qred i i' -> qreducible_clos i \/ i = i').
+Context (H_rred_rreducible : forall r r', rred r r' -> rreducible_clos r \/ r = r').
+Context (H_qreducible_qred : forall i, qreducible i -> exists i', i <> i' /\ i =q=> i').
+Context (H_rreducible_rred : forall r, rreducible r -> exists r', r <> r' /\ r =r=> r').
+
+Lemma qr_red_impl_reducible : 
+  (forall i i', i =q=> i' -> qreducible_clos i \/ i = i') /\ 
+  (forall r r', r =r=> r' -> rreducible_clos r \/ r = r').
+Proof.
+apply qrred_clos_ind ; intros ; triv. 
+all: try solve [ destruct H0, H2 ; subst ; triv ].
+destruct H0 ; subst ; triv.
+Qed.
+
+Lemma qr_reducible_impl_red : 
+  (forall i, qreducible_clos i -> exists i', i =q=> i' /\ i <> i') /\
+  (forall r, rreducible_clos r -> exists r', r =r=> r' /\ r <> r').
+Proof.
+apply qrreducible_clos_ind ; intros.
+all: try solve [ destruct H0 as (i' & H1 & H2) ; eexists ; split ; 
+  [now rewrite H1 | intros H3 ; now depelim H3] ].
+- apply H_qreducible_qred in H. destruct H as (i' & H1 & H2). triv.
+- apply H_rreducible_rred in H. destruct H as (r' & H1 & H2). triv.
+Qed.
+
+Lemma qirred_clos_alt i : 
+  qirred_clos i <-> ~qreducible_clos i.
+Proof.
+split. 
+- intros H H'. apply qr_reducible_impl_red in H'. destruct H' as (i' & H1 & H2). triv.
+- intros H i' Hi. apply qr_red_impl_reducible in Hi. destruct Hi ; triv.
+Qed.
+
+Lemma rirred_clos_alt r : rirred_clos r <-> ~rreducible_clos r.
+Proof.
+split.
+- intros H H'. apply qr_reducible_impl_red in H'. destruct H' as (r' & H1 & H2). triv.
+- intros H r' Hr. apply qr_red_impl_reducible in Hr. destruct Hr ; triv.
+Qed.
+
+End ReducibilityEquiv.
+
+End Reduction.
+
+End Make.
+
+(** * The core of the "cleanup" rewrite system. Reflexivity, transitivity,
+      and congruence rules are added below. *)
+
+(** Reduction rules for quoted naturals. *)
+Inductive qred_core : qnat -> qnat -> Prop :=
+| qred_rapply_shift r i n : 
+    dest_rshift r = Some n -> qred_core (Q_rapply r i) (mk_qsucc n i).
+Derive Signature for qred_core.
+
+(** Reduction rules for renamings. *)
+Inductive rred_core : ren -> ren -> Prop :=.
+Derive Signature for rred_core.
+
+(** Reducible quoted naturals. *)
+Inductive qreducible_core : qnat -> Prop :=
+| qreducible_rapply_shift r i n : 
+    dest_rshift r = Some n -> qreducible_core (Q_rapply r i).
+Derive Signature for qreducible_core.
+
+(** Reducible renamings. *)
+Inductive rreducible_core : ren -> Prop :=.
+Derive Signature for rreducible_core.
+
+(** * Instantiate the machinery from [LevelTwoReduce.v]. *)
+
+Definition qred := qred_clos qred_core rred_core.
+Definition qirred := qirred_clos qred_core rred_core.
+Definition qreducible := qreducible_clos qreducible_core rreducible_core.
+Notation "i =q=> i'" := (qred i i') (at level 70, no associativity).
+
+Definition rred := rred_clos qred_core rred_core.
+Definition rirred := rirred_clos qred_core rred_core.
+Definition rreducible := rreducible_clos qreducible_core rreducible_core.
+Notation "r =r=> r'" := (rred r r') (at level 70, no associativity).
+
+(** * Prove the adequation lemma between the two formulations of irreducibility. *)
+
+Lemma qirred_alt i : qirred i <-> ~qreducible i.
+Proof.
+revert i. apply qirred_clos_alt ; triv.
+- intros i i' H. depelim H. left. apply qreducible_custom.
+  eapply qreducible_rapply_shift ; eauto.
+- intros i H. depelim H. exists (mk_qsucc n i). split.
+  + destruct n ; triv.
+  + apply qred_custom. now apply qred_rapply_shift.
+Qed.
+
+Lemma rirred_alt r : rirred r <-> ~rreducible r.
+Proof.
+revert r. apply rirred_clos_alt ; triv.
+- intros i i' H. depelim H. left. apply qreducible_custom.
+  eapply qreducible_rapply_shift ; eauto.
+- intros i H. depelim H. exists (mk_qsucc n i). split.
+  + destruct n ; triv.
+  + apply qred_custom. now apply qred_rapply_shift.
+Qed.
+
+*)

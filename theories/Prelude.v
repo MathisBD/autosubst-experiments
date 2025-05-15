@@ -17,6 +17,11 @@ Coercion is_true : bool >-> Sortclass.
 (** *** Convenience tactics. *)
 (*********************************************************************************)
 
+(** Add some power to [auto] and variants (such as [triv]). *)
+#[export] Hint Extern 5 => f_equal : core.
+#[export] Hint Extern 5 => subst : core.
+#[export] Hint Extern 10 => exfalso : core.
+
 (** Split n-ary conjunctions. *)
 Ltac split3 := split ; [|split].
 Ltac split4 := split ; [|split3].
