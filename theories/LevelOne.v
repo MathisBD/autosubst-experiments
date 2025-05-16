@@ -6,16 +6,17 @@ From Prototype Require Import Prelude Sig.
     
     We prove the main properties of substitution and renaming. *)
 
-Module Make (S : Sig).
+Section WithSignature.
+Context {sig : signature}.
 
 (*********************************************************************************)
 (** *** Terms. *)
 (*********************************************************************************)
 
 (** Notations for expressions with known kinds. *)
-Reserved Notation "'term'" (at level 0).
-Reserved Notation "'arg' ty" (at level 0, ty at level 0).
-Reserved Notation "'args' tys" (at level 0, tys at level 0).
+#[local] Reserved Notation "'term'" (at level 0).
+#[local] Reserved Notation "'arg' ty" (at level 0, ty at level 0).
+#[local] Reserved Notation "'args' tys" (at level 0, tys at level 0).
 
 (** Terms over an abstract signature. 
     Terms are indexed by a kind. *)
@@ -23,13 +24,13 @@ Inductive expr : kind -> Type :=
 | (** Term variable. *)
   E_var : nat -> term
 | (** Non-variable expr constructor, applied to a list of arguments. *)
-  E_ctor : forall c, args (ctor_type S.t c) -> term
+  E_ctor : forall c, args (ctor_type sig c) -> term
 | (** Empty argument list. *)
   E_al_nil : args []
 | (** Non-empty argument list. *)
   E_al_cons {ty tys} : arg ty -> args tys -> args (ty :: tys)
 | (** Base argument (e.g. bool or string). *)
-  E_abase : forall b, eval_base S.t b -> arg (AT_base b)
+  E_abase : forall b, eval_base sig b -> arg (AT_base b)
 | (** Term argument. *)
   E_aterm : term -> arg AT_term
 | (** Binder argument. *)
@@ -316,4 +317,4 @@ simp up_subst. apply scons_proper ; auto.
 intros i. cbv [scomp srcomp]. now rewrite rshift_sshift.
 Qed.
 
-End Make.
+End WithSignature.

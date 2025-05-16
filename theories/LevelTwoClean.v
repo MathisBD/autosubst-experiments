@@ -1,4 +1,9 @@
-From Prototype Require Import Prelude Sig LevelOne LevelTwo.
+From Prototype Require Import Prelude Sig.
+From Prototype Require LevelOne LevelTwo.
+
+Module O := LevelOne.
+Module T := LevelTwo.
+Import T.
 
 (** The output of simplification (LevelTwoSimp.v) is good for comparing
     terms/equations for equality, but not very nice to work with. 
@@ -11,8 +16,9 @@ From Prototype Require Import Prelude Sig LevelOne LevelTwo.
     
     For each cleanup function we prove a soundness lemma. *)
 
-Module Make (S : Sig).
-Include LevelTwo.Make (S).
+Section WithSignature.
+Context {sig : signature}.
+#[local] Existing Instance sig.
 
 (** Add some power to [auto] and variants (such as [triv]). *)
 #[local] Hint Extern 5 => intros ? : core.
@@ -33,11 +39,21 @@ Proof.
 funelim (mk_qsucc n i) ; simp mk_qsucc qeval ; triv.
 rewrite H. lia. 
 Qed.
-#[export] Hint Rewrite eval_mk_qsucc : qeval.
+#[local] Hint Rewrite eval_mk_qsucc : qeval.
 
 (*********************************************************************************)
 (** *** [dest_rshift] *)
 (*********************************************************************************)
+
+(** We write our own version of [Nat.add] because we need to unfold it in 
+    [RASimpl.v], and we need to avoid unfolding occurences of [add] introduced
+    by the user. *)
+Equations nat_add (n : nat) (m : nat) : nat :=
+nat_add 0 n := n ;
+nat_add (S n) m := nat_add n (S m).
+
+Lemma nat_add_spec n m : nat_add n m = n + m.
+Proof. funelim (nat_add n m) ; triv. rewrite H. lia. Qed. 
 
 (** [dest_rshift r] checks if [r] is of the form [rshift >> rshift >> rshift >> ...]
     (with at least one shift): 
@@ -46,7 +62,7 @@ Qed.
 Equations dest_rshift (r : ren) : option nat :=
 dest_rshift R_shift := Some 0 ;
 dest_rshift (R_comp r1 r2) with dest_rshift r1, dest_rshift r2 := {
-  | Some n1, Some n2 => Some (S (n1 + n2))
+  | Some n1, Some n2 => Some (S (nat_add n1 n2))
   | _, _ => None 
   } ;
 dest_rshift _ := None.
@@ -57,7 +73,8 @@ Proof.
 funelim (dest_rshift r) ; simp dest_rshift in * ; triv.
 - intros H. depelim H. reflexivity.
 - intros H. depelim H. simp qeval. apply (Hind e n2) in Heq. rewrite Heq. 
-  apply (Hind0 e n1) in Heq0. rewrite Heq0. cbv [P.rcomp]. intros i. lia.
+  apply (Hind0 e n1) in Heq0. rewrite Heq0. cbv [P.rcomp]. intros i. 
+  rewrite nat_add_spec. lia.
 Qed.
 
 (*********************************************************************************)
@@ -105,6 +122,7 @@ Qed.
 #[local] Reserved Notation "s =s=> s'" (at level 70, no associativity). 
 
 Unset Elimination Schemes.
+
 Inductive qred : qnat -> qnat -> Prop :=
 (* Preorder. *)
 | qred_refl : reflexive qnat qred
@@ -133,11 +151,11 @@ Inductive ered : forall {k}, expr k -> expr k -> Prop :=
 (* Congruence. *)
 | ered_congr_tvar : Proper (qred ==> ered) E_tvar
 | ered_congr_tctor c : Proper (ered ==> ered) (E_tctor c)
-| ered_congr_al_cons {ty tys} : Proper (ered ==> ered ==> ered) (@E_al_cons ty tys)
+| ered_congr_al_cons {ty tys} : Proper (ered ==> ered ==> ered) (@E_al_cons _ ty tys)
 | ered_congr_aterm : Proper (ered ==> ered) E_aterm
-| ered_congr_abind {ty} : Proper (ered ==> ered) (@E_abind ty)
-| ered_congr_ren {k} : Proper (rred ==> ered ==> ered) (@E_ren k)
-| ered_congr_subst {k} : Proper (sred ==> ered ==> ered) (@E_subst k)
+| ered_congr_abind {ty} : Proper (ered ==> ered) (@E_abind _ ty)
+| ered_congr_ren {k} : Proper (rred ==> ered ==> ered) (@E_ren _ k)
+| ered_congr_subst {k} : Proper (sred ==> ered ==> ered) (@E_subst _ k)
 (* Cleanup rules. *)
 | ered_ren_var r i : E_ren r (E_tvar i) =e=> E_tvar (Q_rapply r i)
 | ered_subst_ren {k} s r (t : expr k) : dest_ren s = Some r -> E_subst s t =e=> E_ren r t
@@ -158,7 +176,7 @@ Set Elimination Schemes.
 
 Derive Signature for qred rred ered sred.
 
-#[export] Hint Constructors qred rred ered sred : core.
+#[local] Hint Constructors qred rred ered sred : core.
 
 Scheme qred_ind := Minimality for qred Sort Prop 
   with rred_ind := Minimality for rred Sort Prop.
@@ -211,13 +229,32 @@ apply qred_rred_ind ; intros ; simp qeval ; triv.
 - now rewrite H0.
 - now rewrite H0, H2.
 - now rewrite H0, H2.
-Qed.         
+Qed.    
 
 Lemma qred_sound e i i' : i =q=> i' -> qeval e i = qeval e i'.
 Proof. now apply qred_rred_sound. Qed.
 
 Lemma rred_sound e r r' : r =r=> r' -> reval e r =₁ reval e r'.
 Proof. now apply qred_rred_sound. Qed.
+
+Lemma ered_sred_sound e : 
+  (forall {k} (t t' : expr k), t =e=> t' -> eeval e t = eeval e t') /\
+  (forall s s', s =s=> s' -> seval e s =₁ seval e s').
+Proof.
+apply ered_sred_ind ; intros ; simp eeval ; triv.
+all: try solve [ now rewrite H0, H2 ].
+- eapply qred_sound in H. now rewrite H.
+- eapply rred_sound in H. now rewrite H1, H.
+- eapply dest_ren_sound in H. rewrite H. simp eeval.
+  now rewrite O.ren_is_subst.
+- eapply rred_sound in H. now rewrite H.
+Qed.
+
+Lemma ered_sound {k} e (t t' : expr k) : t =e=> t' -> eeval e t = eeval e t'.
+Proof. now apply ered_sred_sound. Qed.
+
+Lemma sred_sound e s s' : s =s=> s' -> seval e s =₁ seval e s'.
+Proof. now apply ered_sred_sound. Qed.
 
 (*********************************************************************************)
 (** *** Irreducible & reducible forms. *)
@@ -254,12 +291,12 @@ Inductive ereducible : forall {k}, expr k -> Prop :=
 (* Congruence. *)
 | ereducible_congr_tvar i : qreducible i -> ereducible (E_tvar i)
 | ereducible_congr_tctor c al : ereducible al -> ereducible (E_tctor c al)
-| ereducible_congr_al_cons_1 {ty tys} (a : arg ty) (al : args tys) : 
+| ereducible_congr_al_cons_1 {ty tys} (a : expr (Ka ty)) (al : expr (Kal tys)) : 
     ereducible a -> ereducible (E_al_cons a al)
-| ereducible_congr_al_cons_2 {ty tys} (a : arg ty) (al : args tys) : 
+| ereducible_congr_al_cons_2 {ty tys} (a : expr (Ka ty)) (al : expr (Kal tys)) : 
     ereducible al -> ereducible (E_al_cons a al)
 | ereducible_congr_aterm t : ereducible t -> ereducible (E_aterm t)
-| ereducible_congr_abind {ty} (a : arg ty) : ereducible a -> ereducible (E_abind a)
+| ereducible_congr_abind {ty} (a : expr (Ka ty)) : ereducible a -> ereducible (E_abind a)
 | ereducible_congr_ren_1 {k} r (t : expr k) : rreducible r -> ereducible (E_ren r t)
 | ereducible_congr_ren_2 {k} r (t : expr k) : ereducible t -> ereducible (E_ren r t)
 | ereducible_congr_subst_1 {k} s (t : expr k) : sreducible s -> ereducible (E_subst s t)
@@ -288,7 +325,7 @@ Combined Scheme ereducible_sreducible_ind from ereducible_ind, sreducible_ind.
 
 Derive Signature for qreducible rreducible ereducible sreducible.
 
-#[export] Hint Constructors qreducible rreducible ereducible sreducible : core.
+#[local] Hint Constructors qreducible rreducible ereducible sreducible : core.
 
 (*********************************************************************************)
 (** *** Equivalence between the two notions of irreducible forms. *)
@@ -403,7 +440,7 @@ repeat rewrite rirred_rreducible. split ; intros H.
 Qed.  
 
 (*********************************************************************************)
-(** *** [qclean_rapply]. *)
+(** *** [clean_rapply]. *)
 (*********************************************************************************)
 
 (** Cleanup [Q_rapply r i]. *)
@@ -416,7 +453,7 @@ clean_rapply r i with dest_rshift r := {
 Lemma clean_rapply_red r i : 
   Q_rapply r i =q=> clean_rapply r i.
 Proof. funelim (clean_rapply r i) ; triv. Qed.
-#[global] Hint Rewrite <-clean_rapply_red : red.
+#[local] Hint Rewrite <-clean_rapply_red : red.
 
 Lemma clean_rapply_irred r i :
   rirred r -> qirred i -> qirred (clean_rapply r i).
@@ -427,68 +464,75 @@ intros H1 H2. funelim (clean_rapply r i).
 Qed.
 
 (*********************************************************************************)
-(** *** [clean_qnat] and [clean_ren]. *)
+(** *** [qclean] and [rclean]. *)
 (*********************************************************************************)
 
-Equations clean_qnat : qnat -> qnat :=
-clean_qnat Q_zero := Q_zero ;
-clean_qnat (Q_succ i) := Q_succ (clean_qnat i) ;
-clean_qnat (Q_rapply r i) := clean_rapply (clean_ren r) (clean_qnat i) ;
-clean_qnat (Q_mvar m) := Q_mvar m
+Equations qclean : qnat -> qnat :=
+qclean Q_zero := Q_zero ;
+qclean (Q_succ i) := Q_succ (qclean i) ;
+qclean (Q_rapply r i) := clean_rapply (rclean r) (qclean i) ;
+qclean (Q_mvar m) := Q_mvar m
 
-with clean_ren : ren -> ren :=
-clean_ren R_id := R_id ;
-clean_ren R_shift := R_shift ;
-clean_ren (R_cons i r) := R_cons (clean_qnat i) (clean_ren r) ;
-clean_ren (R_comp r1 r2) := R_comp (clean_ren r1) (clean_ren r2) ;
-clean_ren (R_mvar m) := R_mvar m.
+with rclean : ren -> ren :=
+rclean R_id := R_id ;
+rclean R_shift := R_shift ;
+rclean (R_cons i r) := R_cons (qclean i) (rclean r) ;
+rclean (R_comp r1 r2) := R_comp (rclean r1) (rclean r2) ;
+rclean (R_mvar m) := R_mvar m.
 
-Lemma clean_qnat_ren_red : 
-  (forall i, i =q=> clean_qnat i) * (forall r, r =r=> clean_ren r).
+Lemma qrclean_red : 
+  (forall i, i =q=> qclean i) * (forall r, r =r=> rclean r).
 Proof.
-apply clean_qnat_elim with 
+apply qclean_elim with 
   (P := fun i res => i =q=> res)
   (P0 := fun r res => r =r=> res).
 all: intros ; simp red ; triv.
+- now rewrite <-H, <-H0.
+- now rewrite <-H, <-H0.
+- now rewrite <-H, <-H0.
 Qed.
 
-Lemma clean_qnat_red i : i =q=> clean_qnat i.
-Proof. now apply clean_qnat_ren_red. Qed.
-#[export] Hint Rewrite <-clean_qnat_red : red.
+Lemma qclean_red i : i =q=> qclean i.
+Proof. now apply qrclean_red. Qed.
+#[local] Hint Rewrite <-qclean_red : red.
 
-Lemma clean_ren_red r : r =r=> clean_ren r.
-Proof. now apply clean_qnat_ren_red. Qed.
-#[export] Hint Rewrite <-clean_ren_red : red.
-
+Lemma rclean_red r : r =r=> rclean r.
+Proof. now apply qrclean_red. Qed.
+#[local] Hint Rewrite <-rclean_red : red.
 
 (*********************************************************************************)
-(** *** [eclean] and [sclean]. *)
+(** *** [clean_rename] *)
 (*********************************************************************************)
 
-(** Handle the [E_ren r t] case of [eclean]. *)
-Equations eclean_ren {k} : ren -> expr k -> expr k :=
-eclean_ren r (E_tvar i) := E_tvar (qclean_rapply r i) ;
-eclean_ren r t := E_ren r t.
+(** Cleanup [E_ren r t]. *)
+Equations clean_rename {k} : ren -> expr k -> expr k :=
+clean_rename r (E_tvar i) := E_tvar (clean_rapply r i) ;
+clean_rename r t := E_ren r t.
 
-Lemma eclean_ren_sound {k} e r (t : expr k) :
-  eeval e (eclean_ren r t) = eeval e (E_ren r t).
-Proof. funelim (eclean_ren r t) ; triv. now simp eeval qeval. Qed.
-#[export] Hint Rewrite @eclean_ren_sound : eeval.
+Lemma clean_rename_red {k} r (t : expr k) :
+  E_ren r t =e=> clean_rename r t.
+Proof. funelim (clean_rename r t) ; simp red ; triv. Qed.
+#[local] Hint Rewrite <-@clean_rename_red : red.
 
-(** Handle the [E_subst s e] case of [eclean]. *)
-Equations eclean_subst {k} : subst -> expr k -> expr k :=
-eclean_subst s e with dest_ren s := {
-  | Some r => eclean_ren r e 
-  | None => E_subst s e
+(*********************************************************************************)
+(** *** [clean_substitute] *)
+(*********************************************************************************)
+
+(** Cleanup [E_subst s t]. *)
+Equations clean_substitute {k} : subst -> expr k -> expr k :=
+clean_substitute s t with dest_ren s := {
+  | Some r => clean_rename r t 
+  | None => E_subst s t
   }.
 
-Lemma eclean_subst_sound {k} e s (t : expr k) :
-  eeval e (eclean_subst s t) = eeval e (E_subst s t).
-Proof.
-funelim (eclean_subst s t) ; simp eeval ; triv.
-rewrite (dest_ren_sound _ _ _ Heq). simp eeval. now rewrite O.ren_is_subst.
-Qed.
-#[export] Hint Rewrite @eclean_subst_sound : eeval. 
+Lemma clean_substitute_red {k} s (t : expr k) : 
+  E_subst s t =e=> clean_substitute s t.
+Proof. funelim (clean_substitute s t) ; simp red ; triv. Qed.
+#[local] Hint Rewrite <-@clean_substitute_red : red.
+
+(*********************************************************************************)
+(** *** [eclean] and [sclean] *)
+(*********************************************************************************)
   
 Equations eclean {k} : expr k -> expr k :=
 eclean (E_tvar i) := E_tvar (qclean i) ;
@@ -498,8 +542,8 @@ eclean (E_al_cons a al) := E_al_cons (eclean a) (eclean al) ;
 eclean (E_abase b x) := E_abase b x ;
 eclean (E_aterm t) := E_aterm (eclean t) ;
 eclean (E_abind a) := E_abind (eclean a) ;
-eclean (E_ren r t) := eclean_ren (clean_ren r) (eclean t) ;
-eclean (E_subst s t) := eclean_subst (sclean s) (eclean t) ;
+eclean (E_ren r t) := clean_rename (rclean r) (eclean t) ;
+eclean (E_subst s t) := clean_substitute (sclean s) (eclean t) ;
 eclean (E_mvar m) := E_mvar m
 
 with sclean : subst -> subst :=
@@ -507,27 +551,27 @@ sclean S_id := S_id ;
 sclean S_shift := S_shift ;
 sclean (S_cons t s) := S_cons (eclean t) (sclean s) ;
 sclean (S_comp s1 s2) := S_comp (sclean s1) (sclean s2) ;
-sclean (S_ren r) := S_ren (clean_ren r) ;
+sclean (S_ren r) := S_ren (rclean r) ;
 sclean (S_mvar m) := S_mvar m.
 
-Lemma eclean_sclean_sound e : 
-  (forall k (t : expr k), eeval e (eclean t) = eeval e t) *
-  (forall s, seval e (sclean s) =₁ seval e s).
+Lemma eclean_subst_red : 
+  (forall k (t : expr k), t =e=> eclean t) *
+  (forall s, s =s=> sclean s).
 Proof.
 apply eclean_elim with 
-  (P := fun k t res => eeval e res = eeval e t) 
-  (P0 := fun s res => seval e res =₁ seval e s).
-all: intros ; simp eeval qeval reval ; triv.
-all: solve [now rewrite H | now rewrite H, H0 ].
+  (P := fun k t res => t =e=> res) 
+  (P0 := fun s res => s =s=> res).
+all: intros ; simp red ; triv.
+all: solve [ now rewrite <-H | now rewrite <-H, <-H0 ].
 Qed. 
 
-Lemma eclean_sound {k} e (t : expr k) : eeval e (eclean t) = eeval e t.
-Proof. now apply eclean_sclean_sound. Qed.
-#[export] Hint Rewrite @eclean_sound : eeval.
+Lemma eclean_red {k} (t : expr k) : t =e=> eclean t.
+Proof. now apply eclean_subst_red. Qed.
+#[local] Hint Rewrite @eclean_red : red.
 
-Lemma sclean_sound e s : seval e (sclean s) =₁ seval e s.
-Proof. now apply eclean_sclean_sound. Qed.
-#[export] Hint Rewrite sclean_sound : seval.*)
+Lemma sclean_red s : s =s=> sclean s.
+Proof. now apply eclean_subst_red. Qed.
+#[local] Hint Rewrite sclean_red : red.
 
-End Make.
+End WithSignature.
 

@@ -1,4 +1,5 @@
 open Prelude
+module C = Constants
 
 module Make (P : sig
   val sign : signature
@@ -29,7 +30,7 @@ struct
     let hyps =
       List.map2
         (fun (t, t') ty ->
-          apps (Lazy.force Consts.eq)
+          apps (mkglob' C.eq)
             [| arg_ty_constr P.sign ty @@ mkind P.ops0.term; mkVar t; mkVar t' |])
         ts P.sign.ctor_types.(idx)
     in
@@ -37,24 +38,23 @@ struct
     let ctor = mkctor (P.ops0.term, idx + 2) in
     let left = apps ctor @@ Array.of_list @@ List.map mkVar @@ List.map fst ts in
     let right = apps ctor @@ Array.of_list @@ List.map mkVar @@ List.map snd ts in
-    let concl = apps (Lazy.force Consts.eq) [| mkind P.ops0.term; left; right |] in
+    let concl = apps (mkglob' C.eq) [| mkind P.ops0.term; left; right |] in
     (* Assemble everything. *)
     ret @@ arrows hyps concl
 
   (** Build [forall r r' t t', r =₁ r' -> t = t' -> rename r t = rename r' t']. *)
   let build_congr_rename () : EConstr.t m =
     let open EConstr in
-    prod "r" (Lazy.force Consts.ren) @@ fun r ->
-    prod "r'" (Lazy.force Consts.ren) @@ fun r' ->
+    prod "r" (mkglob' C.ren) @@ fun r ->
+    prod "r'" (mkglob' C.ren) @@ fun r' ->
     prod "t" (mkind P.ops0.term) @@ fun t ->
     prod "t'" (mkind P.ops0.term) @@ fun t' ->
     let hyp_r =
-      apps (Lazy.force Consts.point_eq)
-        [| Lazy.force Consts.nat; Lazy.force Consts.nat; mkVar r; mkVar r' |]
+      apps (mkglob' C.point_eq) [| mkglob' C.nat; mkglob' C.nat; mkVar r; mkVar r' |]
     in
-    let hyp_t = apps (Lazy.force Consts.eq) [| mkind P.ops0.term; mkVar t; mkVar t' |] in
+    let hyp_t = apps (mkglob' C.eq) [| mkind P.ops0.term; mkVar t; mkVar t' |] in
     let concl =
-      apps (Lazy.force Consts.eq)
+      apps (mkglob' C.eq)
         [| mkind P.ops0.term
          ; apps (mkconst P.ops0.rename) [| mkVar r; mkVar t |]
          ; apps (mkconst P.ops0.rename) [| mkVar r'; mkVar t' |]
@@ -65,21 +65,19 @@ struct
   (** Build [forall r r' s s', r =₁ r' -> s =₁ s' -> rscomp r s =₁ rscomp r' s']. *)
   let build_congr_rscomp () : EConstr.t m =
     let open EConstr in
-    prod "r" (Lazy.force Consts.ren) @@ fun r ->
-    prod "r'" (Lazy.force Consts.ren) @@ fun r' ->
+    prod "r" (mkglob' C.ren) @@ fun r ->
+    prod "r'" (mkglob' C.ren) @@ fun r' ->
     prod "s" (mkconst P.ops0.subst) @@ fun s ->
     prod "s'" (mkconst P.ops0.subst) @@ fun s' ->
     let hyp_r =
-      apps (Lazy.force Consts.point_eq)
-        [| Lazy.force Consts.nat; Lazy.force Consts.nat; mkVar r; mkVar r' |]
+      apps (mkglob' C.point_eq) [| mkglob' C.nat; mkglob' C.nat; mkVar r; mkVar r' |]
     in
     let hyp_s =
-      apps (Lazy.force Consts.point_eq)
-        [| Lazy.force Consts.nat; mkind P.ops0.term; mkVar s; mkVar s' |]
+      apps (mkglob' C.point_eq) [| mkglob' C.nat; mkind P.ops0.term; mkVar s; mkVar s' |]
     in
     let concl =
-      apps (Lazy.force Consts.point_eq)
-        [| Lazy.force Consts.nat
+      apps (mkglob' C.point_eq)
+        [| mkglob' C.nat
          ; mkind P.ops0.term
          ; apps (mkconst P.ops0.rscomp) [| mkVar r; mkVar s |]
          ; apps (mkconst P.ops0.rscomp) [| mkVar r'; mkVar s' |]
@@ -92,19 +90,17 @@ struct
     let open EConstr in
     prod "s" (mkconst P.ops0.subst) @@ fun s ->
     prod "s'" (mkconst P.ops0.subst) @@ fun s' ->
-    prod "r" (Lazy.force Consts.ren) @@ fun r ->
-    prod "r'" (Lazy.force Consts.ren) @@ fun r' ->
+    prod "r" (mkglob' C.ren) @@ fun r ->
+    prod "r'" (mkglob' C.ren) @@ fun r' ->
     let hyp_s =
-      apps (Lazy.force Consts.point_eq)
-        [| Lazy.force Consts.nat; mkind P.ops0.term; mkVar s; mkVar s' |]
+      apps (mkglob' C.point_eq) [| mkglob' C.nat; mkind P.ops0.term; mkVar s; mkVar s' |]
     in
     let hyp_r =
-      apps (Lazy.force Consts.point_eq)
-        [| Lazy.force Consts.nat; Lazy.force Consts.nat; mkVar r; mkVar r' |]
+      apps (mkglob' C.point_eq) [| mkglob' C.nat; mkglob' C.nat; mkVar r; mkVar r' |]
     in
     let concl =
-      apps (Lazy.force Consts.point_eq)
-        [| Lazy.force Consts.nat
+      apps (mkglob' C.point_eq)
+        [| mkglob' C.nat
          ; mkind P.ops0.term
          ; apps (mkconst P.ops0.srcomp) [| mkVar s; mkVar r |]
          ; apps (mkconst P.ops0.srcomp) [| mkVar s'; mkVar r' |]
@@ -119,14 +115,13 @@ struct
     prod "t'" (mkind P.ops0.term) @@ fun t' ->
     prod "s" (mkconst P.ops0.subst) @@ fun s ->
     prod "s'" (mkconst P.ops0.subst) @@ fun s' ->
-    let hyp_t = apps (Lazy.force Consts.eq) [| mkind P.ops0.term; mkVar t; mkVar t' |] in
+    let hyp_t = apps (mkglob' C.eq) [| mkind P.ops0.term; mkVar t; mkVar t' |] in
     let hyp_s =
-      apps (Lazy.force Consts.point_eq)
-        [| Lazy.force Consts.nat; mkind P.ops0.term; mkVar s; mkVar s' |]
+      apps (mkglob' C.point_eq) [| mkglob' C.nat; mkind P.ops0.term; mkVar s; mkVar s' |]
     in
     let concl =
-      apps (Lazy.force Consts.point_eq)
-        [| Lazy.force Consts.nat
+      apps (mkglob' C.point_eq)
+        [| mkglob' C.nat
          ; mkind P.ops0.term
          ; apps (mkconst P.ops0.scons) [| mkVar t; mkVar s |]
          ; apps (mkconst P.ops0.scons) [| mkVar t'; mkVar s' |]
@@ -140,12 +135,11 @@ struct
     prod "s" (mkconst P.ops0.subst) @@ fun s ->
     prod "s'" (mkconst P.ops0.subst) @@ fun s' ->
     let hyp =
-      apps (Lazy.force Consts.point_eq)
-        [| Lazy.force Consts.nat; mkind P.ops0.term; mkVar s; mkVar s' |]
+      apps (mkglob' C.point_eq) [| mkglob' C.nat; mkind P.ops0.term; mkVar s; mkVar s' |]
     in
     let concl =
-      apps (Lazy.force Consts.point_eq)
-        [| Lazy.force Consts.nat
+      apps (mkglob' C.point_eq)
+        [| mkglob' C.nat
          ; mkind P.ops0.term
          ; app (mkconst P.ops0.up_subst) (mkVar s)
          ; app (mkconst P.ops0.up_subst) (mkVar s')
@@ -161,12 +155,11 @@ struct
     prod "t" (mkind P.ops0.term) @@ fun t ->
     prod "t'" (mkind P.ops0.term) @@ fun t' ->
     let hyp_s =
-      apps (Lazy.force Consts.point_eq)
-        [| Lazy.force Consts.nat; mkind P.ops0.term; mkVar s; mkVar s' |]
+      apps (mkglob' C.point_eq) [| mkglob' C.nat; mkind P.ops0.term; mkVar s; mkVar s' |]
     in
-    let hyp_t = apps (Lazy.force Consts.eq) [| mkind P.ops0.term; mkVar t; mkVar t' |] in
+    let hyp_t = apps (mkglob' C.eq) [| mkind P.ops0.term; mkVar t; mkVar t' |] in
     let concl =
-      apps (Lazy.force Consts.eq)
+      apps (mkglob' C.eq)
         [| mkind P.ops0.term
          ; apps (mkconst P.ops0.substitute) [| mkVar s; mkVar t |]
          ; apps (mkconst P.ops0.substitute) [| mkVar s'; mkVar t' |]
@@ -183,16 +176,16 @@ struct
     prod "s2" (mkconst P.ops0.subst) @@ fun s2 ->
     prod "s2'" (mkconst P.ops0.subst) @@ fun s2' ->
     let hyp_s1 =
-      apps (Lazy.force Consts.point_eq)
-        [| Lazy.force Consts.nat; mkind P.ops0.term; mkVar s1; mkVar s1' |]
+      apps (mkglob' C.point_eq)
+        [| mkglob' C.nat; mkind P.ops0.term; mkVar s1; mkVar s1' |]
     in
     let hyp_s2 =
-      apps (Lazy.force Consts.point_eq)
-        [| Lazy.force Consts.nat; mkind P.ops0.term; mkVar s2; mkVar s2' |]
+      apps (mkglob' C.point_eq)
+        [| mkglob' C.nat; mkind P.ops0.term; mkVar s2; mkVar s2' |]
     in
     let concl =
-      apps (Lazy.force Consts.point_eq)
-        [| Lazy.force Consts.nat
+      apps (mkglob' C.point_eq)
+        [| mkglob' C.nat
          ; mkind P.ops0.term
          ; apps (mkconst P.ops0.scomp) [| mkVar s1; mkVar s2 |]
          ; apps (mkconst P.ops0.scomp) [| mkVar s1'; mkVar s2' |]
@@ -243,7 +236,7 @@ struct
     else
       (* Other constructors. *)
       let* _ = Tactics.apply @@ mkconst congr_ctors.(i - 1) in
-      auto ~lemmas:[ Lazy.force Consts.congr_up_ren ] ()
+      auto ~lemmas:[ mkglob' C.congr_up_ren ] ()
 
   (** Prove [forall r r' s s', r =₁ r' -> s =₁ s' -> rscomp r s =₁ rscomp r' s']. *)
   let prove_congr_rscomp () : unit Proofview.tactic =

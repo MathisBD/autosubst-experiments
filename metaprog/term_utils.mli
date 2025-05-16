@@ -50,6 +50,12 @@ val mkind : Names.Ind.t -> EConstr.t
 (** [mkctor cname] builds the _monomorphic_ constructor [name]. *)
 val mkctor : Names.Construct.t -> EConstr.t
 
+(** [mkglob gname] builds the _monomorphic_ global reference [gname]. *)
+val mkglob : Names.GlobRef.t -> EConstr.t
+
+(** Same as [mkglob] but with a lazy global refenrece. *)
+val mkglob' : Names.GlobRef.t Lazy.t -> EConstr.t
+
 (** [fresh_const name] builds the constant [name], instantiated with a fresh universe
     instance. *)
 val fresh_const : Names.Constant.t -> EConstr.t m

@@ -1,6 +1,7 @@
 (** This file generates lemmas which push [eval] inside level one terms. *)
 
 open Prelude
+module C = Constants
 
 module Make (P : sig
   val sign : signature
@@ -18,55 +19,57 @@ struct
   (** Build [forall r t, eval (O.rename r t) = rename r (eval t)]. *)
   let build_eval_rename () : EConstr.t m =
     let open EConstr in
-    prod "r" (Lazy.force Consts.ren) @@ fun r ->
+    prod "r" (mkglob' C.ren) @@ fun r ->
     prod "t" (term1 P.ops1) @@ fun t ->
     let lhs =
       apps (mkconst P.re.eval)
-        [| kt P.ops1; apps (mkconst P.ops1.rename) [| kt P.ops1; mkVar r; mkVar t |] |]
+        [| kt P.ops1
+         ; apps (mkglob' C.O.rename)
+             [| mkconst P.ops1.sign; kt P.ops1; mkVar r; mkVar t |]
+        |]
     in
     let rhs =
       apps (mkconst P.ops0.rename)
         [| mkVar r; apps (mkconst P.re.eval) [| kt P.ops1; mkVar t |] |]
     in
-    ret @@ apps (Lazy.force Consts.eq) [| mkind P.ops0.term; lhs; rhs |]
+    ret @@ apps (mkglob' C.eq) [| mkind P.ops0.term; lhs; rhs |]
 
   (** Build [forall r s, seval (O.rscomp r s) =₁ rscomp r (seval s)].*)
   let build_seval_rscomp () : EConstr.t m =
     let open EConstr in
-    prod "r" (Lazy.force Consts.ren) @@ fun r ->
-    prod "s" (mkconst P.ops1.subst) @@ fun s ->
+    prod "r" (mkglob' C.ren) @@ fun r ->
+    prod "s" (subst1 P.ops1) @@ fun s ->
     let lhs =
-      app (mkconst P.re.seval) @@ apps (mkconst P.ops1.rscomp) [| mkVar r; mkVar s |]
+      app (mkconst P.re.seval)
+      @@ apps (mkglob' C.O.rscomp) [| mkconst P.ops1.sign; mkVar r; mkVar s |]
     in
     let rhs =
       apps (mkconst P.ops0.rscomp) [| mkVar r; app (mkconst P.re.seval) @@ mkVar s |]
     in
-    ret
-    @@ apps (Lazy.force Consts.point_eq)
-         [| Lazy.force Consts.nat; mkind P.ops0.term; lhs; rhs |]
+    ret @@ apps (mkglob' C.point_eq) [| mkglob' C.nat; mkind P.ops0.term; lhs; rhs |]
 
   (** Build [forall s r, seval (O.srcomp s r) =₁ srcomp (seval s) r].*)
   let build_seval_srcomp () : EConstr.t m =
     let open EConstr in
-    prod "s" (mkconst P.ops1.subst) @@ fun s ->
-    prod "r" (Lazy.force Consts.ren) @@ fun r ->
+    prod "s" (subst1 P.ops1) @@ fun s ->
+    prod "r" (mkglob' C.ren) @@ fun r ->
     let lhs =
-      app (mkconst P.re.seval) @@ apps (mkconst P.ops1.srcomp) [| mkVar s; mkVar r |]
+      app (mkconst P.re.seval)
+      @@ apps (mkglob' C.O.srcomp) [| mkconst P.ops1.sign; mkVar s; mkVar r |]
     in
     let rhs =
       apps (mkconst P.ops0.srcomp) [| app (mkconst P.re.seval) @@ mkVar s; mkVar r |]
     in
-    ret
-    @@ apps (Lazy.force Consts.point_eq)
-         [| Lazy.force Consts.nat; mkind P.ops0.term; lhs; rhs |]
+    ret @@ apps (mkglob' C.point_eq) [| mkglob' C.nat; mkind P.ops0.term; lhs; rhs |]
 
   (** Build [forall t s, seval (O.scons t s) =₁ scons (eval t) (seval s)].*)
   let build_seval_scons () : EConstr.t m =
     let open EConstr in
     prod "t" (term1 P.ops1) @@ fun t ->
-    prod "s" (mkconst P.ops1.subst) @@ fun s ->
+    prod "s" (subst1 P.ops1) @@ fun s ->
     let lhs =
-      app (mkconst P.re.seval) @@ apps (mkconst P.ops1.scons) [| mkVar t; mkVar s |]
+      app (mkconst P.re.seval)
+      @@ apps (mkglob' C.O.scons) [| mkconst P.ops1.sign; mkVar t; mkVar s |]
     in
     let rhs =
       apps (mkconst P.ops0.scons)
@@ -74,29 +77,29 @@ struct
          ; app (mkconst P.re.seval) @@ mkVar s
         |]
     in
-    ret
-    @@ apps (Lazy.force Consts.point_eq)
-         [| Lazy.force Consts.nat; mkind P.ops0.term; lhs; rhs |]
+    ret @@ apps (mkglob' C.point_eq) [| mkglob' C.nat; mkind P.ops0.term; lhs; rhs |]
 
   (** Build [forall s, seval (O.up_subst s) =₁ up_subst (seval s)].*)
   let build_seval_up_subst () : EConstr.t m =
     let open EConstr in
-    prod "s" (mkconst P.ops1.subst) @@ fun s ->
-    let lhs = app (mkconst P.re.seval) @@ app (mkconst P.ops1.up_subst) @@ mkVar s in
+    prod "s" (subst1 P.ops1) @@ fun s ->
+    let lhs =
+      app (mkconst P.re.seval)
+      @@ apps (mkglob' C.O.up_subst) [| mkconst P.ops1.sign; mkVar s |]
+    in
     let rhs = app (mkconst P.ops0.up_subst) @@ app (mkconst P.re.seval) @@ mkVar s in
-    ret
-    @@ apps (Lazy.force Consts.point_eq)
-         [| Lazy.force Consts.nat; mkind P.ops0.term; lhs; rhs |]
+    ret @@ apps (mkglob' C.point_eq) [| mkglob' C.nat; mkind P.ops0.term; lhs; rhs |]
 
   (** Build [forall s t, eval (O.substitute s t) = substitute (seval s) (eval t)].*)
   let build_eval_substitute () : EConstr.t m =
     let open EConstr in
-    prod "s" (mkconst P.ops1.subst) @@ fun s ->
+    prod "s" (subst1 P.ops1) @@ fun s ->
     prod "t" (term1 P.ops1) @@ fun t ->
     let lhs =
       apps (mkconst P.re.eval)
         [| kt P.ops1
-         ; apps (mkconst P.ops1.substitute) [| kt P.ops1; mkVar s; mkVar t |]
+         ; apps (mkglob' C.O.substitute)
+             [| mkconst P.ops1.sign; kt P.ops1; mkVar s; mkVar t |]
         |]
     in
     let rhs =
@@ -105,23 +108,22 @@ struct
          ; apps (mkconst P.re.eval) [| kt P.ops1; mkVar t |]
         |]
     in
-    ret @@ apps (Lazy.force Consts.eq) [| mkind P.ops0.term; lhs; rhs |]
+    ret @@ apps (mkglob' C.eq) [| mkind P.ops0.term; lhs; rhs |]
 
   (** Build [forall s1 s2, seval (O.scomp s1 s2) =₁ scomp (seval s1) (seval s2)].*)
   let build_seval_scomp () : EConstr.t m =
     let open EConstr in
-    prod "s1" (mkconst P.ops1.subst) @@ fun s1 ->
-    prod "s2" (mkconst P.ops1.subst) @@ fun s2 ->
+    prod "s1" (subst1 P.ops1) @@ fun s1 ->
+    prod "s2" (subst1 P.ops1) @@ fun s2 ->
     let lhs =
-      app (mkconst P.re.seval) @@ apps (mkconst P.ops1.scomp) [| mkVar s1; mkVar s2 |]
+      app (mkconst P.re.seval)
+      @@ apps (mkglob' C.O.scomp) [| mkconst P.ops1.sign; mkVar s1; mkVar s2 |]
     in
     let rhs =
       apps (mkconst P.ops0.scomp)
         [| app (mkconst P.re.seval) @@ mkVar s1; app (mkconst P.re.seval) @@ mkVar s2 |]
     in
-    ret
-    @@ apps (Lazy.force Consts.point_eq)
-         [| Lazy.force Consts.nat; mkind P.ops0.term; lhs; rhs |]
+    ret @@ apps (mkglob' C.point_eq) [| mkglob' C.nat; mkind P.ops0.term; lhs; rhs |]
 
   (**************************************************************************************)
   (** *** Prove the lemmas. *)
@@ -191,9 +193,9 @@ struct
     let* _ = intro_fresh "r" in
     let* _ = intro_fresh "i" in
     (* Unfold. *)
-    let* _ = Tactics.unfold_constr (Names.GlobRef.ConstRef P.re.seval) in
-    let* _ = Tactics.unfold_constr (Names.GlobRef.ConstRef P.ops0.srcomp) in
-    let* _ = Tactics.unfold_constr (Names.GlobRef.ConstRef P.ops1.srcomp) in
+    let* _ = Tactics.unfold_constr @@ Names.GlobRef.ConstRef P.re.seval in
+    let* _ = Tactics.unfold_constr @@ Names.GlobRef.ConstRef P.ops0.srcomp in
+    let* _ = Tactics.unfold_constr @@ Lazy.force C.O.srcomp in
     (* Apply [eval_rename]. *)
     Tactics.apply (mkconst eval_rename)
 
@@ -213,10 +215,10 @@ struct
     let open PVMonad in
     let* _ = intro_fresh "s" in
     (* Unfold. *)
-    let* _ = Tactics.unfold_constr (Names.GlobRef.ConstRef P.ops0.up_subst) in
-    let* _ = Tactics.unfold_constr (Names.GlobRef.ConstRef P.ops1.up_subst) in
+    let* _ = Tactics.unfold_constr @@ Names.GlobRef.ConstRef P.ops0.up_subst in
+    let* _ = Tactics.unfold_constr @@ Lazy.force C.O.up_subst in
     (* Rewrite with [seval_scons]. *)
-    let* _ = rewrite LeftToRight (Names.GlobRef.ConstRef seval_scons) in
+    let* _ = rewrite LeftToRight @@ Names.GlobRef.ConstRef seval_scons in
     let* _ = Tactics.simpl_in_concl in
     (* Apply [congr_scons]. *)
     let* _ = Tactics.apply (mkconst P.congr.congr_scons) in
@@ -284,7 +286,7 @@ struct
     let* i = intro_fresh "i" in
     (* Unfold. *)
     let* _ = Tactics.unfold_constr @@ Names.GlobRef.ConstRef P.ops0.scomp in
-    let* _ = Tactics.unfold_constr @@ Names.GlobRef.ConstRef P.ops1.scomp in
+    let* _ = Tactics.unfold_constr @@ Lazy.force C.O.scomp in
     let* _ = Tactics.unfold_constr @@ Names.GlobRef.ConstRef P.re.seval in
     (* Rewrite with [eval_substitute]. *)
     let* _ = rewrite LeftToRight @@ Names.GlobRef.ConstRef eval_substitute in

@@ -1,4 +1,5 @@
 open Prelude
+module C = Constants
 
 module Make (P : sig
   val sign : signature
@@ -21,33 +22,40 @@ struct
     let rec reify_arg (ty : arg_ty) (arg : Names.Id.t) : EConstr.t m =
       match ty with
       | AT_base b ->
-          ret @@ apps (mkctor P.ops1.e_abase) [| mkctor (P.ops1.base, b + 1); mkVar arg |]
+          ret
+          @@ apps (mkglob' C.O.e_abase)
+               [| mkconst P.ops1.sign; mkctor (P.ops1.base, b + 1); mkVar arg |]
       | AT_term ->
-          ret @@ apps (mkctor P.ops1.e_aterm) [| app (EConstr.mkVar reify) (mkVar arg) |]
+          ret
+          @@ apps (mkglob' C.O.e_aterm)
+               [| mkconst P.ops1.sign; app (EConstr.mkVar reify) (mkVar arg) |]
       | AT_bind ty ->
           let* rarg = reify_arg ty arg in
-          apps_ev (mkctor P.ops1.e_abind) 1 [| rarg |]
+          apps_ev (app (mkglob' C.O.e_abind) (mkconst P.ops1.sign)) 1 [| rarg |]
     in
     (* Reify a list of arguments. *)
     let rec reify_args (args : (arg_ty * Names.Id.t) list) : EConstr.t m =
       match args with
-      | [] -> ret @@ mkctor P.ops1.e_al_nil
+      | [] -> ret @@ app (mkglob' C.O.e_al_nil) @@ mkconst P.ops1.sign
       | (ty, arg) :: args ->
           let* rarg = reify_arg ty arg in
           let* rargs = reify_args args in
-          apps_ev (mkctor P.ops1.e_al_cons) 2 [| rarg; rargs |]
+          apps_ev (app (mkglob' C.O.e_al_cons) (mkconst P.ops1.sign)) 2 [| rarg; rargs |]
     in
     if i = 0
     then (* Variable constructor. *)
-      ret @@ app (mkctor P.ops1.e_var) (EConstr.mkVar @@ List.hd args)
+      ret
+      @@ apps (mkglob' C.O.e_var) [| mkconst P.ops1.sign; EConstr.mkVar @@ List.hd args |]
     else (* Non-variable constructors. *)
       let* rargs = reify_args @@ List.combine P.sign.ctor_types.(i - 1) args in
-      ret @@ apps (mkctor P.ops1.e_ctor) [| mkctor (P.ops1.ctor, i); rargs |]
+      ret
+      @@ apps (mkglob' C.O.e_ctor)
+           [| mkconst P.ops1.sign; mkctor (P.ops1.ctor, i); rargs |]
 
   (** Build [sreify : susbt -> O.subst]. *)
   let build_sreify (reify : Names.Constant.t) : EConstr.t m =
     lambda "s" (mkconst P.ops0.subst) @@ fun s ->
-    lambda "i" (Lazy.force Consts.nat) @@ fun i ->
+    lambda "i" (mkglob' C.nat) @@ fun i ->
     ret @@ app (mkconst reify) @@ app (EConstr.mkVar s) (EConstr.mkVar i)
 
   (**************************************************************************************)
@@ -58,7 +66,7 @@ struct
   let build_eval_arg () : EConstr.t m =
     let open EConstr in
     let* t = fresh_type in
-    let at = app (Lazy.force Consts.arg_ty) @@ mkind P.ops1.base in
+    let at = app (mkglob' C.arg_ty) @@ mkind P.ops1.base in
     fix "eval_arg" 0 (arrow at t) @@ fun eval_arg ->
     lambda "ty" at @@ fun ty ->
     case (mkVar ty) ~return:(fun _ _ -> ret t) @@ fun i args ->
@@ -71,26 +79,24 @@ struct
   let build_eval_args (eval_arg : Names.Constant.t) : EConstr.t m =
     let open EConstr in
     let* t = fresh_type in
-    let at_list =
-      app (Lazy.force Consts.list) @@ app (Lazy.force Consts.arg_ty) @@ mkind P.ops1.base
-    in
+    let at_list = app (mkglob' C.list) @@ app (mkglob' C.arg_ty) @@ mkind P.ops1.base in
     fix "eval_args" 0 (arrow at_list t) @@ fun eval_args ->
     lambda "tys" at_list @@ fun tys ->
     case (mkVar tys) ~return:(fun _ _ -> ret t) @@ fun i args ->
     match i with
-    | 0 -> ret @@ Lazy.force Consts.unit
+    | 0 -> ret @@ mkglob' C.unit
     | _ ->
         let ty = List.hd args in
         let tys = List.hd @@ List.tl args in
         ret
-        @@ apps (Lazy.force Consts.prod)
+        @@ apps (mkglob' C.prod)
              [| app (mkconst eval_arg) @@ mkVar ty; app (mkVar eval_args) @@ mkVar tys |]
 
   (** Build [eval_kind : kind -> Type]. *)
   let build_eval_kind (eval_arg : Names.Constant.t) (eval_args : Names.Constant.t) :
       EConstr.t m =
     let open EConstr in
-    let kind = app (Lazy.force Consts.kind) @@ mkind P.ops1.base in
+    let kind = app (mkglob' C.kind) @@ mkind P.ops1.base in
     lambda "k" kind @@ fun k ->
     case (mkVar k) ~return:(fun _ _ -> fresh_type) @@ fun i args ->
     match i with
@@ -131,15 +137,15 @@ struct
       EConstr.t m =
     let open EConstr in
     let* eval_ty =
-      prod "k" (app (Lazy.force Consts.kind) @@ mkind P.ops1.base) @@ fun k ->
+      prod "k" (app (mkglob' C.kind) @@ mkind P.ops1.base) @@ fun k ->
       ret
-      @@ arrow (app (mkind P.ops1.expr) @@ mkVar k)
+      @@ arrow (apps (mkglob' C.O.expr) [| mkconst P.ops1.sign; mkVar k |])
       @@ app (mkconst eval_kind)
       @@ mkVar k
     in
     fix "eval" 1 eval_ty @@ fun eval ->
-    lambda "k" (app (Lazy.force Consts.kind) @@ mkind P.ops1.base) @@ fun k ->
-    lambda "t" (app (mkind P.ops1.expr) @@ mkVar k) @@ fun t ->
+    lambda "k" (app (mkglob' C.kind) @@ mkind P.ops1.base) @@ fun k ->
+    lambda "t" (apps (mkglob' C.O.expr) [| mkconst P.ops1.sign; mkVar k |]) @@ fun t ->
     let return indices _ = ret @@ app (mkconst eval_kind) @@ mkVar @@ List.hd indices in
     case (mkVar t) ~return @@ fun i args ->
     match (i, args) with
@@ -147,11 +153,11 @@ struct
     | 1, [ c; al ] ->
         let* al' = apps_ev (mkVar eval) 1 [| mkVar al |] in
         ret @@ apps (mkconst eval_ctor) [| mkVar c; al' |]
-    | 2, [] -> ret @@ Lazy.force Consts.tt
+    | 2, [] -> ret @@ mkglob' C.tt
     | 3, [ ty; tys; a; al ] ->
         let* a' = apps_ev (mkVar eval) 1 [| mkVar a |] in
         let* al' = apps_ev (mkVar eval) 1 [| mkVar al |] in
-        apps_ev (Lazy.force Consts.pair) 2 [| a'; al' |]
+        apps_ev (mkglob' C.pair) 2 [| a'; al' |]
     | 4, [ b; x ] -> ret @@ mkVar x
     | 5, [ t ] -> apps_ev (mkVar eval) 1 [| mkVar t |]
     | 6, [ ty; a ] -> apps_ev (mkVar eval) 1 [| mkVar a |]
@@ -159,10 +165,10 @@ struct
 
   (** Build [seval : O.subst -> subst]. *)
   let build_seval (eval : Names.Constant.t) : EConstr.t m =
-    lambda "s" (mkconst P.ops1.subst) @@ fun s ->
-    lambda "i" (Lazy.force Consts.nat) @@ fun i ->
+    lambda "s" (app (mkglob' C.O.subst) (mkconst P.ops1.sign)) @@ fun s ->
+    lambda "i" (mkglob' C.nat) @@ fun i ->
     let si = app (EConstr.mkVar s) (EConstr.mkVar i) in
-    ret @@ apps (mkconst eval) [| app (Lazy.force Consts.k_t) @@ mkind P.ops1.base; si |]
+    ret @@ apps (mkconst eval) [| app (mkglob' C.k_t) @@ mkind P.ops1.base; si |]
 end
 
 (**************************************************************************************)

@@ -1,9 +1,12 @@
 From Coq Require Import Lia String.
 From Ltac2 Require Import RedFlags Printf.
 From Prototype Require Export Prelude.
-From Prototype Require Import Sig Constants LevelOne LevelTwo LevelTwoIrred 
-  LevelTwoSimp LevelTwoClean RASimpl.
+From Prototype Require Import RASimpl.
 From GhostTT Require Import BasicAST. 
+
+Module O := LevelOne.
+Module T := LevelTwo.
+Module Clean := LevelTwoClean.
 
 (*********************************************************************************)
 (** *** Generate all operations and lemmas. *)
@@ -24,32 +27,37 @@ Ltac2 solve_term_simplification () : unit :=
   | Simplification term ?t0 _ =>
     (* Reify Level 0 -> Level 1. *)
     let (t1, p1) := reify_term t0 in 
+    printf "t1: %t" t1;
     (* Reify Level 1 -> Level 2. *)
     let env := T.empty_env () in
-    let (env, t2) := T.reify_expr env t1 in
-    let env := T.build_env env in
+    let (env, t2) := T.reify_expr constr:(signature) env t1 in
+    printf "t2: %t" t2;
+    let env := T.build_env constr:(signature) env in
     (* Simplify on Level 2. *)
-    let t2' := Std.eval_cbv (T.red_flags_simp ()) constr:(T.esimp $t2) in
-    let t2'' := Std.eval_cbv (T.red_flags_clean ()) constr:(T.eclean $t2') in
+    (*let t2' := Std.eval_cbv (T.red_flags_simp ()) constr:(T.esimp $t2) in*)
+    let t2'' := Std.eval_cbv (red_flags_clean ()) constr:(Clean.eclean $t2) in
+    printf "t2'': %t" t2'';
     (* Eval Level 2 -> Level 1. *)
-    let t1' := Std.eval_cbv (T.red_flags_eval ()) constr:(T.eeval $env $t2'') in
+    let t1' := Std.eval_cbv (red_flags_eval ()) constr:(T.eeval $env $t2'') in
+    printf "t1': %t" t1';
     (* Eval Level 1 -> Level 0. *)
     let (t0', p3) := eval_term t1' in
+    printf "t0': %t" t0';
     (* [eq1 : t1 = t1']. *)
-    let eq1 := constr:(eq_trans 
-      (eq_sym (T.esimp_sound $env $t2))
-      (eq_sym (T.eclean_sound $env $t2'))) 
+    let eq1 := constr:(
+      (*(eq_sym (T.esimp_sound $env $t2))*)
+      (Clean.ered_sound $env _ _ (Clean.eclean_red $t2''))) 
     in
     (* [eq0 : t0 = t0']. *)
     let eq := constr:(eq_trans
       (eq_sym $p1) 
-      (eq_trans (f_equal (eval Kt) $eq1) $p3)) 
+      (eq_trans (f_equal (eval Sig.Kt) $eq1) $p3)) 
     in
     exact (MkSimplification term $t0 $t0' $eq)
   | _ => Control.zero (Tactic_failure None)
   end.
 
-Lemma congr_seval {s1 s2} : 
+(*Lemma congr_seval {s1 s2} : 
   s1 =₁ s2 -> seval s1 =₁ seval s2.
 Proof. intros H i. unfold seval. now rewrite H. Qed. 
 
@@ -82,12 +90,12 @@ Ltac2 solve_subst_simplification () : unit :=
     in
     exact (MkSimplification subst $s0 $s0' $eq)
   | _ => Control.zero (Tactic_failure None) 
-  end.
+  end.*)
 
 (** Main simplification tactic. *)
 Ltac rasimpl := 
   (try rewrite_strat (topdown (hints asimpl))) ; 
-  [ | solve [ltac2:(solve_term_simplification ()) | ltac2:(solve_subst_simplification ())] ..].
+  [ |ltac2:(solve_term_simplification ()) (*| ltac2:(solve_subst_simplification ()*) ..].
 
 (** Trigger for [rasimpl]. *)
 Lemma autosubst_simpl_term_rename (r : ren) (t res : term) :
@@ -104,5 +112,6 @@ Proof. intros H. now apply simplification. Qed.
 Axiom r : ren.
 Axiom s : subst.
 Axiom t : term.
-Lemma test : rename r (lam mType (Var 0) t) = Var 0.
+Axiom i : nat.
+Lemma test : rename (rcomp rshift (rcomp rshift rshift)) (Var  i) = Var 0.
 Proof. rasimpl. Admitted.

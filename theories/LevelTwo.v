@@ -1,6 +1,7 @@
 From Prototype Require Import Prelude Sig.
 From Prototype Require LevelOne.
 Module P := Prelude.
+Module O := LevelOne.
 
 (** This file defines a generic term grammar with _explicit_ renamings 
     and substitutions. Quoted naturals, terms, renamings, and substitutions
@@ -9,8 +10,9 @@ Module P := Prelude.
     This file also implements _reification_ (mapping from level one to 
     level two) and _evaluation_ (mapping from level two to level one). *)
 
-Module Make (S : Sig).
-Module O := LevelOne.Make (S).
+Section WithSignature.
+Context {sig : signature}.
+#[local] Existing Instance sig.
 
 (** Meta-variables are represented by an index (a natural)
     into an environment (a list of level one expressions). *)
@@ -62,7 +64,7 @@ Inductive expr : kind -> Type :=
 (** Variable term constructor (de Bruijn index). *)
 | E_tvar : qnat -> term
 (** Non-variable term constructor, applied to a list of arguments. *)
-| E_tctor : forall c, args (ctor_type S.t c) -> term
+| E_tctor : forall c, args (ctor_type sig c) -> term
 (** Term metavariable. We don't need argument or argument-list metavariables. *)
 | E_mvar : mvar -> term
 
@@ -72,7 +74,7 @@ Inductive expr : kind -> Type :=
 | E_al_cons {ty tys} : arg ty -> args tys -> args (ty :: tys)
 
 (** Base argument (e.g. bool or string). *)
-| E_abase : forall b, eval_base S.t b -> arg (AT_base b)
+| E_abase : forall b, eval_base sig b -> arg (AT_base b)
 (** Term argument. *)
 | E_aterm : term -> arg AT_term
 (** Binder argument. *)
@@ -170,6 +172,9 @@ destruct s1 ; destruct s2 ; simp eeval ; try now reflexivity.
 all: try (intros i ; cbv [O.srcomp O.scomp] ; now rewrite O.ren_is_subst).
 - intros i. cbv [O.srcomp O.scomp]. now rewrite O.ren_is_subst.
 Qed.
+
+End WithSignature.
+
 #[global] Remove Hints seval_equation_4 : eeval seval.
 #[global] Hint Rewrite @seval_comp_aux : eeval seval.
 
@@ -283,64 +288,64 @@ with reify_ren (e : env) (t : constr) : env * constr :=
     e, constr:(R_mvar $idx)
   end.
 
-Ltac2 rec reify_expr (e : env) (t : constr) : env * constr :=
+Ltac2 rec reify_expr (sig : constr) (e : env) (t : constr) : env * constr :=
   lazy_match! t with 
   | O.E_var ?i => 
     let (e, i) := reify_nat e i in
-    e, constr:(E_tvar $i)
+    e, constr:(@E_tvar $sig $i)
   | O.E_ctor ?c ?al => 
-    let (e, al) := reify_expr e al in
-    e, constr:(E_tctor $c $al)
-  | O.E_al_nil => e, constr:(E_al_nil)
+    let (e, al) := reify_expr sig e al in
+    e, constr:(@E_tctor $sig $c $al)
+  | O.E_al_nil => e, constr:(@E_al_nil $sig)
   | O.E_al_cons ?a ?al => 
-    let (e, a) := reify_expr e a in
-    let (e, al) := reify_expr e al in
-    e, constr:(E_al_cons $a $al)
-  | O.E_abase ?b ?x => e, constr:(E_abase $b $x)
+    let (e, a) := reify_expr sig e a in
+    let (e, al) := reify_expr sig e al in
+    e, constr:(@E_al_cons $sig _ _ $a $al)
+  | O.E_abase ?b ?x => e, constr:(@E_abase $sig $b $x)
   | O.E_aterm ?t => 
-    let (e, t) := reify_expr e t in
-    e, constr:(E_aterm $t)
+    let (e, t) := reify_expr sig e t in
+    e, constr:(@E_aterm $sig $t)
   | O.E_abind ?a =>
-    let (e, a) := reify_expr e a in
-    e, constr:(E_abind $a)
+    let (e, a) := reify_expr sig e a in
+    e, constr:(@E_abind $sig _ $a)
   | O.rename ?r ?t =>
     let (e, r) := reify_ren e r in
-    let (e, t) := reify_expr e t in
-    e, constr:(E_ren $r $t)
+    let (e, t) := reify_expr sig e t in
+    e, constr:(@E_ren $sig _ $r $t)
   | O.substitute ?s ?t =>
-    let (e, s) := reify_subst e s in
-    let (e, t) := reify_expr e t in
-    e, constr:(E_subst $s $t)
+    let (e, s) := reify_subst sig e s in
+    let (e, t) := reify_expr sig e t in
+    e, constr:(@E_subst $sig _ $s $t)
   | ?t => 
     let (idx, e) := add_term_mvar t e in
     let idx := nat_of_int idx in
-    e, constr:(E_mvar $idx)
+    e, constr:(@E_mvar $sig $idx)
   end
 
-with reify_subst (e : env) (s : constr) : env * constr :=
+with reify_subst (sig : constr) (e : env) (s : constr) : env * constr :=
   lazy_match! s with 
-  | O.sid => e, constr:(S_id)
-  | O.sshift => e, constr:(S_shift)
+  | O.sid => e, constr:(@S_id $sig)
+  | O.sshift => e, constr:(@S_shift $sig)
   | O.scons ?t ?s =>
-    let (e, t) := reify_expr e t in 
-    let (e, s) := reify_subst e s in 
-    e, constr:(S_cons $t $s)
+    let (e, t) := reify_expr sig e t in 
+    let (e, s) := reify_subst sig e s in 
+    e, constr:(@S_cons $sig $t $s)
   | O.scomp ?s1 ?s2 =>
-    let (e, s1) := reify_subst e s1 in 
-    let (e, s2) := reify_subst e s2 in 
-    e, constr:(S_comp $s1 $s2)
+    let (e, s1) := reify_subst sig e s1 in 
+    let (e, s2) := reify_subst sig e s2 in 
+    e, constr:(@S_comp $sig $s1 $s2)
   | O.srcomp ?s ?r =>
-    let (e, s) := reify_subst e s in 
+    let (e, s) := reify_subst sig e s in 
     let (e, r) := reify_ren e r in
-    e, constr:(S_comp $s (S_ren $r))
+    e, constr:(@S_comp $sig $s (@S_ren $sig $r))
   | O.rscomp ?r ?s =>
     let (e, r) := reify_ren e r in
-    let (e, s) := reify_subst e s in 
-    e, constr:(S_comp (S_ren $r) $s)
+    let (e, s) := reify_subst sig e s in 
+    e, constr:(@S_comp $sig (@S_ren $sig $r) $s)
   | ?s => 
     let (idx, e) := add_subst_mvar s e in
     let idx := nat_of_int idx in
-    e, constr:(S_mvar $idx)
+    e, constr:(@S_mvar $sig $idx)
   end.
 
 (** Turn a list of [constr] into a Rocq list. 
@@ -354,18 +359,25 @@ Ltac2 rec coq_list (ty : constr) (xs : constr list) : constr :=
     constr:(@cons $ty $x $xs)
   end.
 
+(** We define our own version of [List.nth], because we need to 
+    unfold this in [RASimpl.v], and we don't want to inadvertendly unfold
+    occurences of [List.nth] which were not introduced by [build_env]. *)
+Fixpoint list_nth {A} (n : nat) (xs : list A) (default : A) : A :=
+  match xs with 
+  | [] => default 
+  | x :: xs => match n with 0 => x | S n => list_nth n xs default end
+  end.
+  
 (** Turn the Ltac2 representation of the environment into the equivalent
     Rocq representation. *)
-Ltac2 build_env (e : env) : constr :=
+Ltac2 build_env (sig : constr) (e : env) : constr :=
   let e1 := coq_list constr:(nat) (e.(qnat_mvars)) in 
   let e2 := coq_list constr:(P.ren) (e.(ren_mvars)) in 
-  let e3 := coq_list constr:(O.expr Kt) (e.(term_mvars)) in 
-  let e4 := coq_list constr:(O.subst) (e.(subst_mvars)) in 
+  let e3 := coq_list constr:(@O.expr $sig Kt) (e.(term_mvars)) in 
+  let e4 := coq_list constr:(@O.subst $sig) (e.(subst_mvars)) in 
   constr:(
-    Build_env 
-      (fun n => List.nth n $e1 0)
-      (fun n => List.nth n $e2 rid)
-      (fun n => List.nth n $e3 (O.E_var 0))
-      (fun n => List.nth n $e4 O.sid)).
-
-End Make.
+    @Build_env $sig 
+      (fun n => list_nth n $e1 0)
+      (fun n => list_nth n $e2 rid)
+      (fun n => list_nth n $e3 (O.E_var 0))
+      (fun n => list_nth n $e4 O.sid)).

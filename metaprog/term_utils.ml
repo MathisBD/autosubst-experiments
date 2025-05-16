@@ -47,6 +47,15 @@ let mkind (name : Names.Ind.t) : EConstr.t = EConstr.UnsafeMonomorphic.mkInd nam
 let mkctor (name : Names.Construct.t) : EConstr.t =
   EConstr.UnsafeMonomorphic.mkConstruct name
 
+let mkglob (name : Names.GlobRef.t) : EConstr.t =
+  match name with
+  | ConstRef cname -> mkconst cname
+  | IndRef iname -> mkind iname
+  | ConstructRef cname -> mkctor cname
+  | VarRef vname -> EConstr.mkVar vname
+
+let mkglob' (name : Names.GlobRef.t Lazy.t) : EConstr.t = mkglob @@ Lazy.force name
+
 let fresh_ind (ind : Names.Ind.t) : EConstr.t m =
  fun env sigma ->
   let sigma, (_, uinst) = Evd.fresh_inductive_instance env sigma ind in

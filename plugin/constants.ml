@@ -1,13 +1,9 @@
 (** This module defines Rocq constants we need to access from OCaml. Rocq constants are
     registered in [theories/Constants.v] using the command [Register ... as ...]. *)
 
-let resolve (ref : string) : EConstr.t Lazy.t =
-  lazy
-    begin
-      EConstr.of_constr
-      @@ UnivGen.constr_of_monomorphic_global (Global.env ())
-      @@ Coqlib.lib_ref ref
-    end
+(** Before calling [Coqlib.lib_ref], we have to wait until Rocq is initialized: we use
+    [Lazy.t] to do this. *)
+let resolve (ref : string) : Names.GlobRef.t Lazy.t = lazy (Coqlib.lib_ref ref)
 
 (**************************************************************************************)
 (** *** Basic constants. *)
@@ -59,3 +55,35 @@ let k_a = resolve "autosubst.kind.a"
 let k_al = resolve "autosubst.kind.al"
 let signature = resolve "autosubst.signature.type"
 let build_signature = resolve "autosubst.signature.ctor"
+
+(**************************************************************************************)
+(** *** Level One. *)
+(**************************************************************************************)
+
+module O = struct
+  let expr = resolve "autosubst.levelone.expr.type"
+  let e_var = resolve "autosubst.levelone.expr.var"
+  let e_ctor = resolve "autosubst.levelone.expr.ctor"
+  let e_al_nil = resolve "autosubst.levelone.expr.al_nil"
+  let e_al_cons = resolve "autosubst.levelone.expr.al_cons"
+  let e_abase = resolve "autosubst.levelone.expr.abase"
+  let e_aterm = resolve "autosubst.levelone.expr.aterm"
+  let e_abind = resolve "autosubst.levelone.expr.abind"
+  let subst = resolve "autosubst.levelone.subst"
+  let esize = resolve "autosubst.levelone.esize"
+  let rename = resolve "autosubst.levelone.rename"
+  let substitute = resolve "autosubst.levelone.substitute"
+  let sid = resolve "autosubst.levelone.sid"
+  let sshift = resolve "autosubst.levelone.sshift"
+  let scons = resolve "autosubst.levelone.scons"
+  let up_subst = resolve "autosubst.levelone.up_subst"
+  let scomp = resolve "autosubst.levelone.scomp"
+  let rscomp = resolve "autosubst.levelone.rscomp"
+  let srcomp = resolve "autosubst.levelone.srcomp"
+  let inv_Kt = resolve "autosubst.levelone.inv_Kt"
+  let inv_Kal_nil = resolve "autosubst.levelone.inv_Kal_nil"
+  let inv_Kal_cons = resolve "autosubst.levelone.inv_Kal_cons"
+  let inv_Ka_term = resolve "autosubst.levelone.inv_Ka_term"
+  let inv_Ka_base = resolve "autosubst.levelone.inv_Ka_base"
+  let inv_Ka_bind = resolve "autosubst.levelone.inv_Ka_bind"
+end

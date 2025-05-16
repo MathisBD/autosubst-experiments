@@ -1,4 +1,5 @@
 open Prelude
+module C = Constants
 
 module Make (P : sig
   val sign : signature
@@ -12,7 +13,7 @@ struct
     (* Constructor names and types. We add an extra constructor for variables. *)
     let ctor_names = "Var" :: Array.to_list P.sign.ctor_names in
     let ctor_types =
-      (fun ind -> ret @@ arrow (Lazy.force Consts.nat) (EConstr.mkVar ind))
+      (fun ind -> ret @@ arrow (mkglob' C.nat) (EConstr.mkVar ind))
       :: Array.to_list
            (Array.map
               (fun ty ind -> ret @@ ctor_ty_constr P.sign ty (EConstr.mkVar ind))
@@ -27,16 +28,15 @@ struct
     | AT_base _ -> arg
     | AT_term -> apps rename [| r; arg |]
     | AT_bind ty ->
-        let r' = app (Lazy.force Consts.up_ren) r in
+        let r' = app (mkglob' C.up_ren) r in
         rename_arg rename r' arg ty
 
   (** Build [rename : ren -> term -> term]. *)
   let build_rename (term : Names.Ind.t) : EConstr.t m =
     let open EConstr in
     (* Bind the input parameters. *)
-    fix "rename" 1 (arrows [ Lazy.force Consts.ren; mkind term ] (mkind term))
-    @@ fun rename ->
-    lambda "r" (Lazy.force Consts.ren) @@ fun r ->
+    fix "rename" 1 (arrows [ mkglob' C.ren; mkind term ] (mkind term)) @@ fun rename ->
+    lambda "r" (mkglob' C.ren) @@ fun r ->
     lambda "t" (mkind term) @@ fun t ->
     (* Build the case expression. *)
     case (mkVar t) @@ fun i args ->
@@ -56,42 +56,41 @@ struct
 
   (** Build [subst : Type := nat -> term]. *)
   let build_subst (term : Names.Ind.t) : EConstr.t m =
-    ret @@ arrow (Lazy.force Consts.nat) (mkind term)
+    ret @@ arrow (mkglob' C.nat) (mkind term)
 
   (** Build [srcomp : subst -> ren -> subst]. *)
   let build_srcomp (ind : Names.Ind.t) (subst : Names.Constant.t)
       (rename : Names.Constant.t) : EConstr.t m =
     let open EConstr in
     lambda "s" (mkconst subst) @@ fun s ->
-    lambda "r" (Lazy.force Consts.ren) @@ fun r ->
-    lambda "i" (Lazy.force Consts.nat) @@ fun i ->
+    lambda "r" (mkglob' C.ren) @@ fun r ->
+    lambda "i" (mkglob' C.nat) @@ fun i ->
     ret @@ apps (mkconst rename) [| mkVar r; app (mkVar s) (mkVar i) |]
 
   (** Build [rscomp : ren -> subst -> subst]. *)
   let build_rscomp (term : Names.Ind.t) (subst : Names.Constant.t) : EConstr.t m =
     let open EConstr in
-    lambda "r" (Lazy.force Consts.ren) @@ fun r ->
+    lambda "r" (mkglob' C.ren) @@ fun r ->
     lambda "s" (mkconst subst) @@ fun s ->
-    lambda "i" (Lazy.force Consts.nat) @@ fun i ->
-    ret @@ app (mkVar s) @@ app (mkVar r) (mkVar i)
+    lambda "i" (mkglob' C.nat) @@ fun i -> ret @@ app (mkVar s) @@ app (mkVar r) (mkVar i)
 
   (** Build [sid : subst]. *)
   let build_sid (term : Names.Ind.t) (subst : Names.Constant.t) : EConstr.t m =
     let open EConstr in
-    lambda "i" (Lazy.force Consts.nat) @@ fun i -> ret @@ app (mkctor (term, 1)) (mkVar i)
+    lambda "i" (mkglob' C.nat) @@ fun i -> ret @@ app (mkctor (term, 1)) (mkVar i)
 
   (** Build [sshift : subst]. *)
   let build_sshift (term : Names.Ind.t) (subst : Names.Constant.t) : EConstr.t m =
     let open EConstr in
-    lambda "i" (Lazy.force Consts.nat) @@ fun i ->
-    ret @@ app (mkctor (term, 1)) @@ app (Lazy.force Consts.succ) (mkVar i)
+    lambda "i" (mkglob' C.nat) @@ fun i ->
+    ret @@ app (mkctor (term, 1)) @@ app (mkglob' C.succ) (mkVar i)
 
   (** Build [scons : term -> subst -> subst]. *)
   let build_scons (term : Names.Ind.t) (subst : Names.Constant.t) : EConstr.t m =
     let open EConstr in
     lambda "t" (mkind term) @@ fun t ->
     lambda "s" (mkconst subst) @@ fun s ->
-    lambda "i" (Lazy.force Consts.nat) @@ fun i ->
+    lambda "i" (mkglob' C.nat) @@ fun i ->
     case (mkVar i) @@ fun idx args ->
     if idx = 0 then ret (mkVar t) else ret @@ app (mkVar s) (mkVar @@ List.hd args)
 
@@ -102,8 +101,8 @@ struct
     lambda "s" (mkconst subst) @@ fun s ->
     ret
     @@ apps (mkconst scons)
-         [| app (mkctor (term, 1)) (Lazy.force Consts.zero)
-          ; apps (mkconst srcomp) [| mkVar s; Lazy.force Consts.rshift |]
+         [| app (mkctor (term, 1)) (mkglob' C.zero)
+          ; apps (mkconst srcomp) [| mkVar s; mkglob' C.rshift |]
          |]
 
   let rec substitute_arg (substitute : EConstr.t) (up_subst : EConstr.t) (s : EConstr.t)
@@ -143,7 +142,7 @@ struct
     let open EConstr in
     lambda "s1" (mkconst subst) @@ fun s1 ->
     lambda "s2" (mkconst subst) @@ fun s2 ->
-    lambda "i" (Lazy.force Consts.nat) @@ fun i ->
+    lambda "i" (mkglob' C.nat) @@ fun i ->
     ret @@ apps (mkconst substitute) [| mkVar s2; app (mkVar s1) (mkVar i) |]
 end
 

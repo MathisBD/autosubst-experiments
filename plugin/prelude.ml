@@ -55,48 +55,25 @@ type ops_zero =
   ; up_subst : Names.Constant.t
   }
 
-(** Level one signature, and level one constants specialized to this signature. *)
+(** Level one signature. *)
 type ops_one =
-  { (* Signature. *)
-    base : Names.Ind.t
+  { base : Names.Ind.t
   ; eval_base : Names.Constant.t
   ; ctor : Names.Ind.t
   ; ctor_type : Names.Constant.t
-  ; (* Expressions and substitutions. *)
-    expr : Names.Ind.t
-  ; e_var : Names.Construct.t
-  ; e_ctor : Names.Construct.t
-  ; e_al_nil : Names.Construct.t
-  ; e_al_cons : Names.Construct.t
-  ; e_abase : Names.Construct.t
-  ; e_aterm : Names.Construct.t
-  ; e_abind : Names.Construct.t
-  ; subst : Names.Constant.t
-  ; (* Operations on expressions and substitutions. *)
-    sid : Names.Constant.t
-  ; sshift : Names.Constant.t
-  ; scons : Names.Constant.t
-  ; up_subst : Names.Constant.t
-  ; rscomp : Names.Constant.t
-  ; srcomp : Names.Constant.t
-  ; scomp : Names.Constant.t
-  ; rename : Names.Constant.t
-  ; substitute : Names.Constant.t
-  ; (* Other constants. *)
-    esize : Names.Constant.t
-  ; inv_Kt : Names.Constant.t
-  ; inv_Kal_nil : Names.Constant.t
-  ; inv_Kal_cons : Names.Constant.t
-  ; inv_Ka_base : Names.Constant.t
-  ; inv_Ka_term : Names.Constant.t
-  ; inv_Ka_bind : Names.Constant.t
+  ; sign : Names.Constant.t
   }
 
-(** Helper function to build the kind of level one terms [Kt]. *)
-let kt (ops1 : ops_one) : EConstr.t = app (Lazy.force Consts.k_t) @@ mkind ops1.base
+(** Helper function to build the kind of terms [Kt]. *)
+let kt (ops1 : ops_one) : EConstr.t = app (mkglob' Constants.k_t) @@ mkind ops1.base
 
 (** Helper function to build the type of level one terms [O.expr Kt]. *)
-let term1 (ops1 : ops_one) : EConstr.t = app (mkind ops1.expr) @@ kt ops1
+let term1 (ops1 : ops_one) : EConstr.t =
+  apps (mkglob' Constants.O.expr) [| mkconst ops1.sign; kt ops1 |]
+
+(** Helper function to build the type of level one substitutions [O.subst]. *)
+let subst1 (ops1 : ops_one) : EConstr.t =
+  app (mkglob' Constants.O.subst) (mkconst ops1.sign)
 
 (** Congruence lemmas. [congr_ctor] contains congruence lemmas for all non-variable
     constructors. *)
@@ -157,22 +134,35 @@ type ops_all =
 (** *** Utility functions. *)
 (**************************************************************************************)
 
-(** [is_const sigma cname t] checks if [t] is a constant with name [cname]. *)
-let is_const (sigma : Evd.evar_map) (c : Names.Constant.t) (t : EConstr.t) : bool =
+(** [is_const env sigma cname t] checks if [t] is a constant with name [cname]. *)
+let is_const (env : Environ.env) (sigma : Evd.evar_map) (c : Names.Constant.t)
+    (t : EConstr.t) : bool =
   match EConstr.kind sigma t with
-  | Constr.Const (c', _) when Names.Constant.UserOrd.equal c c' -> true
+  | Const (c', _) when Environ.QConstant.equal env c c' -> true
   | _ -> false
 
-(** [is_ind sigma iname t] checks if [t] is an inductive with name [iname]. *)
-let is_ind (sigma : Evd.evar_map) (i : Names.Ind.t) (t : EConstr.t) : bool =
+(** [is_ind env sigma iname t] checks if [t] is an inductive with name [iname]. *)
+let is_ind (env : Environ.env) (sigma : Evd.evar_map) (i : Names.Ind.t) (t : EConstr.t) :
+    bool =
   match EConstr.kind sigma t with
-  | Constr.Ind (i', _) when Names.Ind.UserOrd.equal i i' -> true
+  | Ind (i', _) when Environ.QInd.equal env i i' -> true
   | _ -> false
 
-(** [is_ctor sigma cname t] checks if [t] is a constructor with name [cname]. *)
-let is_ctor (sigma : Evd.evar_map) (c : Names.Construct.t) (t : EConstr.t) : bool =
+(** [is_ctor env sigma cname t] checks if [t] is a constructor with name [cname]. *)
+let is_ctor (env : Environ.env) (sigma : Evd.evar_map) (c : Names.Construct.t)
+    (t : EConstr.t) : bool =
   match EConstr.kind sigma t with
-  | Constr.Construct (c', _) when Names.Construct.UserOrd.equal c c' -> true
+  | Construct (c', _) when Environ.QConstruct.equal env c c' -> true
+  | _ -> false
+
+(** [is_glob env sigma gname t] checks if [t] is a global reference with name [gname]. *)
+let is_glob (env : Environ.env) (sigma : Evd.evar_map) (g : Names.GlobRef.t)
+    (t : EConstr.t) : bool =
+  match (g, EConstr.kind sigma t) with
+  | ConstRef c, Const (c', _) when Environ.QConstant.equal env c c' -> true
+  | IndRef i, Constr.Ind (i', _) when Environ.QInd.equal env i i' -> true
+  | ConstructRef c, Construct (c', _) when Environ.QConstruct.equal env c c' -> true
+  | VarRef v, Var v' when Names.Id.equal v v' -> true
   | _ -> false
 
 (** Helper function to declare a definition. *)

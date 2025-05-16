@@ -1,7 +1,8 @@
 From Prototype Require Import Prelude Sig.
+From Prototype Require LevelOne.
 
 (** This module exposes various constants to the OCaml plugin.
-    Constants are accessed in the plugin from [plugin/consts.ml]. *)
+    Constants are accessed in the plugin from [plugin/constants.ml]. *)
 
 (** *** Basic constants. *)
 
@@ -57,3 +58,33 @@ Register Kal as autosubst.kind.al.
 
 Register signature as autosubst.signature.type.
 Register Build_signature as autosubst.signature.ctor.
+
+(** *** Level One. *)
+
+Register LevelOne.expr as autosubst.levelone.expr.type.
+Register LevelOne.E_var as autosubst.levelone.expr.var.
+Register LevelOne.E_ctor as autosubst.levelone.expr.ctor.
+Register LevelOne.E_al_nil as autosubst.levelone.expr.al_nil.
+Register LevelOne.E_al_cons as autosubst.levelone.expr.al_cons.
+Register LevelOne.E_abase as autosubst.levelone.expr.abase.
+Register LevelOne.E_aterm as autosubst.levelone.expr.aterm.
+Register LevelOne.E_abind as autosubst.levelone.expr.abind.
+Register LevelOne.subst as autosubst.levelone.subst.
+Register LevelOne.esize as autosubst.levelone.esize.
+
+Register LevelOne.rename as autosubst.levelone.rename.
+Register LevelOne.substitute as autosubst.levelone.substitute.
+Register LevelOne.sid as autosubst.levelone.sid.
+Register LevelOne.sshift as autosubst.levelone.sshift.
+Register LevelOne.scons as autosubst.levelone.scons.
+Register LevelOne.up_subst as autosubst.levelone.up_subst.
+Register LevelOne.scomp as autosubst.levelone.scomp.
+Register LevelOne.rscomp as autosubst.levelone.rscomp.
+Register LevelOne.srcomp as autosubst.levelone.srcomp.
+
+Register LevelOne.inv_Kt as autosubst.levelone.inv_Kt.
+Register LevelOne.inv_Kal_nil as autosubst.levelone.inv_Kal_nil.
+Register LevelOne.inv_Kal_cons as autosubst.levelone.inv_Kal_cons.
+Register LevelOne.inv_Ka_term as autosubst.levelone.inv_Ka_term.
+Register LevelOne.inv_Ka_base as autosubst.levelone.inv_Ka_base.
+Register LevelOne.inv_Ka_bind as autosubst.levelone.inv_Ka_bind.
