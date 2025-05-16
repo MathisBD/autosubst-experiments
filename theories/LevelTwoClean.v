@@ -1,9 +1,7 @@
-From Prototype Require Import Prelude Sig.
-From Prototype Require LevelOne LevelTwo.
-
+From Prototype Require Import Prelude Sig LevelTwo.
+From Prototype Require LevelOne.
 Module O := LevelOne.
-Module T := LevelTwo.
-Import T.
+
 
 (** The output of simplification (LevelTwoSimp.v) is good for comparing
     terms/equations for equality, but not very nice to work with. 
