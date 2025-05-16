@@ -107,6 +107,46 @@ Derive Signature NoConfusion NoConfusionHom for expr.
 Derive NoConfusion for subst.
 
 (*********************************************************************************)
+(** *** Compute the size of expressions. *)
+(*********************************************************************************)
+
+(** We define functions which compute the size of expressions/substitutions. 
+    This is useful to prove inequations of the form [S_cons t s <> s]. *)
+
+Equations qsize : qnat -> nat :=
+qsize Q_zero := 0 ;
+qsize (Q_succ i) := S (qsize i) ;
+qsize (Q_rapply r i) := S (rsize r + qsize i) ;
+qsize (Q_mvar _) := 0 
+
+with rsize : ren -> nat :=
+rsize R_id := 0 ;
+rsize R_shift := 0 ;
+rsize (R_cons i r) := S (qsize i + rsize r) ;
+rsize (R_comp r1 r2) := S (rsize r1 + rsize r2) ;
+rsize (R_mvar _) := 0.
+
+Equations esize {k} : expr k -> nat :=
+esize (E_tvar i) := S (qsize i) ;
+esize (E_tctor c al) := S (esize al) ;
+esize E_al_nil := 0 ;
+esize (E_al_cons a al) := S (esize a + esize al) ;
+esize (E_abase _ _) := 0 ;
+esize (E_aterm t) := S (esize t) ;
+esize (E_abind a) := S (esize a) ;
+esize (E_ren r t) := S (rsize r + esize t) ;
+esize (E_subst s t) := S (ssize s + esize t) ;
+esize (E_mvar _) := 0 
+
+with ssize : subst -> nat :=
+ssize S_id := 0 ;
+ssize S_shift := 0 ;
+ssize (S_cons t s) := S (esize t + ssize s) ;
+ssize (S_comp s1 s2) := S (ssize s1 + ssize s2) ;
+ssize (S_ren r) := S (rsize r) ;
+ssize (S_mvar _) := 0.
+
+(*********************************************************************************)
 (** *** Evaluation. *)
 (*********************************************************************************)
 

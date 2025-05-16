@@ -416,7 +416,7 @@ Lemma qirred_rapply r i :
   qirred (Q_rapply r i) <-> rirred r /\ qirred i /\ dest_rshift r = None.
 Proof.
 repeat rewrite rirred_rreducible ; repeat rewrite qirred_qreducible. split ; intros H.
-- split3 ; triv. destruct (dest_rshift r) eqn:E ; triv.
+- split3 ; triv. destruct (dest_rshift r) eqn:E ; triv. exfalso. triv.
 - intros H'. depelim H' ; triv. rewrite H0 in H ; triv.
 Qed.
 
