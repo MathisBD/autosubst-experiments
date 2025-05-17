@@ -34,8 +34,9 @@ Ltac2 solve_term_simplification () : unit :=
     printf "t2: %t" t2;
     let env := T.build_env constr:(signature) env in
     (* Simplify on Level 2. *)
-    (*let t2' := Std.eval_cbv (T.red_flags_simp ()) constr:(T.esimp $t2) in*)
-    let t2'' := Std.eval_cbv (red_flags_clean ()) constr:(Clean.eclean $t2) in
+    let t2' := Std.eval_cbv (red_flags_simp ()) constr:(Simp.esimp $t2) in
+    printf "t2': %t" t2';
+    let t2'' := Std.eval_cbv (red_flags_clean ()) constr:(Clean.eclean $t2') in
     printf "t2'': %t" t2'';
     (* Eval Level 2 -> Level 1. *)
     let t1' := Std.eval_cbv (red_flags_eval ()) constr:(T.eeval $env $t2'') in
@@ -44,9 +45,9 @@ Ltac2 solve_term_simplification () : unit :=
     let (t0', p3) := eval_term t1' in
     printf "t0': %t" t0';
     (* [eq1 : t1 = t1']. *)
-    let eq1 := constr:(
-      (*(eq_sym (T.esimp_sound $env $t2))*)
-      (Clean.ered_sound $env _ _ (Clean.eclean_red $t2''))) 
+    let eq1 := constr:(eq_trans
+      (Simp.ered_sound $env _ _ (Simp.esimp_red $t2))
+      (Clean.ered_sound $env _ _ (Clean.eclean_red $t2'))) 
     in
     (* [eq0 : t0 = t0']. *)
     let eq := constr:(eq_trans
@@ -113,5 +114,5 @@ Axiom r : ren.
 Axiom s : subst.
 Axiom t : term.
 Axiom i : nat.
-Lemma test : rename (rcomp rshift (rcomp rshift rshift)) (Var  i) = Var 0.
+Lemma test : rename (rcons (r 0) (rcomp rshift r)) (Var i) = Var 0.
 Proof. rasimpl. Admitted.

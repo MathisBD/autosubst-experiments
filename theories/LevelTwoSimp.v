@@ -713,7 +713,7 @@ rcons a b with dest_rspecial a b := {
   | Some r => r 
   | None => R_cons a b
   }.
-
+  
 Lemma rcons_red i r : R_cons i r =r=> rcons i r.
 Proof. 
 funelim (rcons i r) ; triv. remember (Q_rapply r0 q0) as a. clear Heqa.
@@ -932,6 +932,8 @@ Inductive cexpr : subst -> Prop :=
 | cexpr_extend t s : nexpr t -> cexpr s -> cexpr (S_cons t s).
 #[local] Hint Constructors cexpr : core.
 
+Derive Signature for sexpr nexpr cexpr.
+
 (*********************************************************************************)
 (** *** [scons] *)
 (*********************************************************************************)
@@ -1028,41 +1030,75 @@ intros H1 H2. depelim H1.
 Qed.
 
 (*********************************************************************************)
+(** *** [ccomp_aux] *)
+(*********************************************************************************)
+
+(** Compose a shift expression with a cons expression. *)
+Equations ccomp_aux (s1 s2 : subst) : subst :=
+ccomp_aux S_id s := s ;
+ccomp_aux S_shift s := ctail s ;
+ccomp_aux (S_comp S_shift s1) s2 := ctail (ccomp_aux s1 s2) ;
+ccomp_aux x y := S_comp x y.
+
+Lemma ccomp_aux_red s1 s2 : S_comp s1 s2 =s=> ccomp_aux s1 s2.
+Proof. 
+funelim (ccomp_aux s1 s2) ; simp red ; triv.
+now rewrite <-H.
+Qed.
+#[local] Hint Rewrite <-ccomp_aux_red : red.
+
+Lemma ccomp_aux_cexpr s1 s2 : 
+  sexpr s1 -> cexpr s2 -> cexpr (ccomp_aux s1 s2).
+Proof.
+intros H1 H2. funelim (ccomp_aux s1 s2) ; triv.
+- now apply ctail_cexpr.
+- depelim H1. apply ctail_cexpr. now apply H.
+Qed.
+
+Lemma ccomp_aux_irreducible s1 s2 :
+  sexpr s1 -> cexpr s2 -> sirreducible s1 -> sirreducible s2 ->
+  sirreducible (ccomp_aux s1 s2).
+Proof.
+intros H1 H2 H3 H4. funelim (ccomp_aux s1 s2) ; triv.
+- now apply ctail_irreducible.
+- depelim H1. rewrite sirreducible_comp in H3. apply ctail_irreducible.
+  + now apply ccomp_aux_cexpr.
+  + now apply H.
+Qed.  
+
+(*********************************************************************************)
 (** *** [ccomp] *)
 (*********************************************************************************)
 
 (** Compose two cons expressions. *)
-Equations ccomp : subst -> subst -> subst :=
-(* [s1] is a [sexpr]. *)
-ccomp S_id s := s ;
-ccomp S_shift s := ctail s ;
-ccomp (S_comp S_shift s1) s2 := ctail (ccomp s1 s2) ;
-(* [s1] is a [cexpr]. *)
-ccomp (S_cons (E_tvar Q_zero) s2) s3 :=
-   scons (capply_zero s3) (ccomp s2 s3) ;
-ccomp (S_cons (E_subst s1 t) s2) s3 with is_tvar_zero t := {
-  | true => scons (capply_zero (ccomp s1 s3)) (ccomp s2 s3)
-  | false => S_comp (S_cons (E_subst s1 t) s2) s3
-  } ;
-(* The last case should not happen. *)
-ccomp x y := S_comp x y.
+Equations ccomp (s1 s2 : subst) : subst :=
+ccomp (S_cons t s1) s2 :=
+  (* We don't use [Equations] for this inner pattern matching since
+     it would use [NoConfusion]... *)
+  match t with 
+  | E_tvar Q_zero => scons (capply_zero s2) (ccomp s1 s2)
+  | E_subst s (E_tvar Q_zero) => scons (capply_zero (ccomp_aux s s2)) (ccomp s1 s2)
+  | _ => S_comp (S_cons t s1) s2 
+  end ;
+ccomp x y := ccomp_aux x y.
 
 Lemma ccomp_red s1 s2 : S_comp s1 s2 =s=> ccomp s1 s2.
 Proof.
-funelim (ccomp s1 s2) ; simp red ; triv.
-- rewrite <-H. triv.
-- rewrite <-H. triv.
-- rewrite <-H, <-H0. depelim t ; triv. depelim q ; triv. 
-  now rewrite sred_cons_l, ered_subst_subst.
-Qed.
-#[local] Hint Rewrite <-ccomp_red : red.
+funelim (ccomp s1 s2) ; simp red ; triv. depelim t ; triv. 
+- depelim q ; triv. simp red. rewrite <-H0 ; triv. 
+  (* What the hell are these goals? *)
+  exact (E_tvar Q_zero). exact Q_zero.
+- depelim t ; triv. depelim q ; triv. simp red. rewrite <-H0 ; triv.
+  + rewrite sred_cons_l, ered_subst_subst. reflexivity. 
+  + exact (E_tvar Q_zero).
+  + exact Q_zero.
+Qed. 
+#[local] Hint Rewrite <-ccomp_red : red.   
 
 Lemma ccomp_cexpr_helper s1 s2 : sexpr s1 -> cexpr s2 -> cexpr (ccomp s1 s2).
 Proof.
-intros H1. revert s2. induction H1 ; intros s2 H ; simp ccomp.
-- now apply ctail_cexpr.
-- apply ctail_cexpr. now apply IHsexpr.
-Qed.  
+intros H1 H2. depelim H1 ; simp ccomp ; apply ccomp_aux_cexpr ; triv.
+Qed.
 
 Lemma ccomp_cexpr s1 s2 : cexpr s1 -> cexpr s2 -> cexpr (ccomp s1 s2).
 Proof.
@@ -1071,17 +1107,13 @@ intros H1. revert s2. induction H1.
 - intros s3 H2. depelim H ; simp ccomp.
   + apply scons_cexpr ; triv. now apply capply_zero_nexpr.
   + apply scons_cexpr ; triv. apply capply_zero_nexpr. 
-    now apply ccomp_cexpr_helper.
+    now apply ccomp_aux_cexpr.
 Qed.
 
 Lemma ccomp_irreducible_helper s1 s2 : 
   sexpr s1 -> cexpr s2 -> sirreducible s1 -> sirreducible s2 -> sirreducible (ccomp s1 s2).
 Proof.
-intros H1 H2 H3 H4. revert s2 H2 H4. induction H1 ; intros s2 H2 H4 ; simp ccomp.
-- apply ctail_irreducible ; triv.
-- apply ctail_irreducible.
-  + apply ccomp_cexpr ; triv.
-  + apply IHsexpr ; triv. rewrite sirreducible_comp in H3. triv.
+intros H1 H2 H3 H4. depelim H1 ; simp ccomp ; apply ccomp_aux_irreducible ; triv.
 Qed.
 
 Lemma ccomp_irreducible s1 s2 : 
@@ -1096,8 +1128,8 @@ intros H1 H2 H3 H4. revert s2 H2 H4. induction H1 ; intros s2 H2 H4.
   + rewrite sirreducible_cons in H3. destruct H3 as (H3 & H5 & H6).
     rewrite eirreducible_subst in H3. apply scons_irreducible.
     * apply capply_zero_irreducible.
-      --apply ccomp_cexpr ; triv.
-      --apply ccomp_irreducible_helper ; triv.
+      --apply ccomp_aux_cexpr ; triv.
+      --apply ccomp_aux_irreducible ; triv.
     * apply IHcexpr ; triv.
 Qed.
 
