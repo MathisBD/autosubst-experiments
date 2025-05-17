@@ -22,6 +22,8 @@ Definition mvar := nat.
 (** *** Quoted naturals and explicit renamings. *)
 (*********************************************************************************)
 
+Unset Elimination Schemes.
+
 (** Quoted natural. *)
 Inductive qnat :=
 (** Zero. *)
@@ -46,7 +48,13 @@ with ren :=
 (** Renaming meta-variable. *)
 | R_mvar : mvar -> ren.
 
+Set Elimination Schemes.
+
 Derive NoConfusion for qnat ren.
+
+Scheme qnat_ind := Induction for qnat Sort Prop 
+  with ren_ind := Induction for ren Sort Prop.
+Combined Scheme qnat_ren_ind from qnat_ind, ren_ind.
 
 (*********************************************************************************)
 (** *** Expressions and explicit substitutions. *)
@@ -56,6 +64,8 @@ Derive NoConfusion for qnat ren.
 Reserved Notation "'term'" (at level 0).
 Reserved Notation "'arg' ty" (at level 0, ty at level 0).
 Reserved Notation "'args' tys" (at level 0, tys at level 0).
+
+Unset Elimination Schemes.
 
 (** Expressions are indexed by a kind: this is to avoid having too many 
     distinct constructors for instantiation by a renaming/substitution. *)
@@ -103,8 +113,14 @@ where "'term'" := (expr Kt)
   and "'arg' ty" := (expr (Ka ty))
   and "'args' tys" := (expr (Kal tys)).
 
+Set Elimination Schemes.
+
 Derive Signature NoConfusion NoConfusionHom for expr.
 Derive NoConfusion for subst.
+
+Scheme expr_ind := Induction for expr Sort Prop 
+  with subst_ind := Induction for subst Sort Prop.
+Combined Scheme expr_subst_ind from expr_ind, subst_ind.
 
 (*********************************************************************************)
 (** *** Compute the size of expressions. *)
@@ -145,6 +161,51 @@ ssize (S_cons t s) := S (esize t + ssize s) ;
 ssize (S_comp s1 s2) := S (ssize s1 + ssize s2) ;
 ssize (S_ren r) := S (rsize r) ;
 ssize (S_mvar _) := 0.
+
+(*********************************************************************************)
+(** *** Boolean equality tests. *)
+(*********************************************************************************)
+
+(** Boolean equality test on quoted naturals. *)
+Equations eq_qnat : qnat -> qnat -> bool :=
+eq_qnat Q_zero Q_zero := true ;
+eq_qnat (Q_succ i) (Q_succ i') := eq_qnat i i' ;
+eq_qnat (Q_rapply r i) (Q_rapply r' i') := eq_ren r r' && eq_qnat i i' ;
+eq_qnat (Q_mvar m) (Q_mvar m') := Nat.eqb m m' ;
+eq_qnat _ _ := false
+
+(** Boolean equality test on renamings. *)
+with eq_ren : ren -> ren -> bool :=
+eq_ren R_id R_id := true ;
+eq_ren R_shift R_shift := true ;
+eq_ren (R_cons i r) (R_cons i' r') := eq_qnat i i' && eq_ren r r' ;
+eq_ren (R_comp r1 r2) (R_comp r1' r2') := eq_ren r1 r1' && eq_ren r2 r2' ;
+eq_ren (R_mvar m) (R_mvar m') := Nat.eqb m m' ;
+eq_ren _ _ := false.
+
+Lemma eq_qnat_ren_spec : 
+  (forall i i', reflect (i = i') (eq_qnat i i')) *
+  (forall r r', reflect (r = r') (eq_ren r r')).
+Proof.
+apply eq_qnat_elim with 
+  (P := fun i i' res => reflect (i = i') res)
+  (P0 := fun r r' res => reflect (r = r') res).
+all: intros ; try solve [ now constructor ].
+- destruct H ; [subst ; now left | right ; intros H ; now depelim H ..].
+- destruct H, H0 ; [subst ; now left | right ; intros H ; now depelim H ..].
+- destruct (PeanoNat.Nat.eqb_spec m m') ; [subst ; now left | right].
+  intros H ; now depelim H.
+- destruct H, H0 ; [subst ; now left | right ; intros H ; now depelim H..].
+- destruct H, H0 ; [subst ; now left | right ; intros H ; now depelim H ..].
+- destruct (PeanoNat.Nat.eqb_spec m m') ; [subst ; now left | right].
+  intros H ; now depelim H.
+Qed.
+
+Lemma eq_qnat_spec i i' : reflect (i = i') (eq_qnat i i').
+Proof. now apply eq_qnat_ren_spec. Qed.
+
+Lemma eq_ren_spec r r' : reflect (r = r') (eq_ren r r').
+Proof. now apply eq_qnat_ren_spec. Qed.
 
 (*********************************************************************************)
 (** *** Evaluation. *)

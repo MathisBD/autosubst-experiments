@@ -120,6 +120,7 @@ with rred : ren -> ren -> Prop :=
 | rred_cos_l i r1 r2 : R_comp (R_cons i r1) r2 =r=> R_cons (Q_rapply r2 i) (R_comp r1 r2)
 | rred_shift_cons i r : R_comp R_shift (R_cons i r) =r=> r
 | rred_zero_shift : R_cons Q_zero R_shift =r=> R_id
+| rred_special r : R_cons (Q_rapply r Q_zero) (R_comp R_shift r) =r=> r
 
 where "i =q=> i'" := (qred i i')
   and "r =r=> r'" := (rred r r').
@@ -229,6 +230,7 @@ apply qred_rred_ind ; intros ; simp qeval ; triv.
 all: try solve [ now rewrite H0, H2 ].
 - now rewrite O.rcomp_rcons_distrib.
 - intros [|] ; reflexivity.
+- intros [|] ; reflexivity. 
 Qed.    
 
 Lemma qred_sound e i i' : i =q=> i' -> qeval e i = qeval e i'.
@@ -274,6 +276,16 @@ Definition rirreducible r := forall r', r =r=> r' -> r = r'.
 Definition eirreducible {k} (t : expr k) := forall t', t =e=> t' -> t = t'.
 Definition sirreducible s := forall s', s =s=> s' -> s = s'.
 
+(** A special type of renamings in which we can apply the "special" 
+    reduction [rred_special] (for lack of a better name). *)
+Inductive rspecial : ren -> Prop :=
+| rspecial_intro r : rspecial (R_cons (Q_rapply r Q_zero) (R_comp R_shift r)).
+Derive Signature for rspecial.
+  
+(** Expressions in which we can push substitutions. *)
+Definition is_push {k} (e : expr k) : bool :=
+  match e with E_mvar _ | E_tvar _ | E_ren _ _ => false | _ => true end.
+
 Unset Elimination Schemes.
 
 (** A definition of reducible forms (terms in which we can reduce)
@@ -302,11 +314,8 @@ with rreducible : ren -> Prop :=
 | rreducible_comp_l r1 r2 r3 : rreducible (R_comp (R_comp r1 r2) r3)
 | rreducible_cons_l i r1 r2 : rreducible (R_comp (R_cons i r1) r2)
 | rreducible_shift_cons r : is_rcons r -> rreducible (R_comp R_shift r)
-| rreducible_zero_shift : rreducible (R_cons Q_zero R_shift).
-
-(** Expressions in which we can push substitutions. *)
-Definition is_push {k} (e : expr k) : bool :=
-  match e with E_mvar _ | E_tvar _ | E_ren _ _ => false | _ => true end.
+| rreducible_zero_shift : rreducible (R_cons Q_zero R_shift)
+| rreducible_special r : rspecial r -> rreducible r.
 
 Inductive ereducible : forall {k}, expr k -> Prop :=
 (* Congruence. *)
@@ -379,7 +388,8 @@ Lemma qr_red_impl_reducible :
   (forall r r', r =r=> r' -> r = r' \/ rreducible r).
 Proof.
 apply qred_rred_ind ; intros ; triv.
-all: solve [ destruct H0, H2 ; triv ].
+all: try solve [ destruct H0, H2 ; triv ].
+right. now constructor.
 Qed.
 
 Lemma qr_reducible_impl_red : 
@@ -400,6 +410,7 @@ all: try solve [ destruct H0 as (i' & H1 & H2) ; eexists ; split ;
 - exists (R_cons (Q_rapply r2 i) (R_comp r1 r2)). split ; triv.
 - destruct r ; triv. exists r. split ; triv. intros H1. inv_subterm H1.
 - exists R_id. split ; triv.
+- destruct H. exists r. split ; triv. intros H. inv_subterm H. 
 Qed.
 
 Lemma es_red_impl_reducible : 
@@ -509,21 +520,22 @@ Proof. change_irred. intros H. depelim H. Qed.
 #[local] Hint Resolve qirreducible_mvar : core.
 
 Lemma rirreducible_id : rirreducible R_id.
-Proof. change_irred. triv. Qed.
+Proof. change_irred. intros H. depelim H. depelim H. Qed.
 #[local] Hint Resolve rirreducible_id : core.
 
 Lemma rirreducible_shift : rirreducible R_shift.
-Proof. change_irred. triv. Qed.
+Proof. change_irred. intros H. depelim H. depelim H. Qed.
 #[local] Hint Resolve rirreducible_shift : core.
 
 Lemma rirreducible_cons i r : 
   rirreducible (R_cons i r) <-> 
-    qirreducible i /\ rirreducible r /\ ~(i = Q_zero /\ r = R_shift).
+    qirreducible i /\ rirreducible r /\ 
+    ~(i = Q_zero /\ r = R_shift) /\ ~rspecial (R_cons i r).
 Proof.
 change_irred. split.
-- intros H. split3 ; intros H' ; apply H ; triv.
-  destruct H' ; subst. now constructor. 
-- intros (H1 & H2 & H3) H. depelim H ; triv.
+- intros H. split4 ; intros H' ; apply H ; triv.
+  destruct H' ; subst. now constructor.
+- intros (H1 & H2 & H3 & H4) H. depelim H ; triv. 
 Qed.
 
 Lemma rirreducible_comp r1 r2 : 
@@ -543,7 +555,7 @@ change_irred. split ; intros H.
 Qed. 
 
 Lemma rirreducible_mvar m : rirreducible (R_mvar m).
-Proof. change_irred. intros H. depelim H. Qed.
+Proof. change_irred. intros H. depelim H. depelim H. Qed.
 #[local] Hint Resolve rirreducible_mvar : core.
 
 Lemma eirreducible_tvar i : 
@@ -642,12 +654,84 @@ Lemma sirreducible_ren r : sirreducible (S_ren r) <-> is_rmvar r.
 Proof.
 change_irred. split ; intros H.
 - destruct r ; triv. all: exfalso ; apply H ; now constructor.
-- intros H' ; depelim H' ; triv. destruct r ; triv.
+- intros H' ; depelim H' ; triv. destruct r ; triv. depelim H0. depelim H0.
 Qed.
 
 Lemma sirreducible_mvar m : sirreducible (S_mvar m).
 Proof. change_irred. intros H. depelim H. Qed.
 #[local] Hint Resolve sirreducible_mvar : core.
+
+(*********************************************************************************)
+(** *** [dest_rspecial]. *)
+(*********************************************************************************)
+
+(** [dest_rspecial i r] tests if we can apply the "special" reduction 
+    [rred_special] in [R_cons i r], and if so returns the result [r']
+    of the one-step reduction [R_cons i r =r=> r']. *)
+Equations dest_rspecial : qnat -> ren -> option ren :=
+dest_rspecial (Q_rapply r1 Q_zero) (R_comp R_shift r2) :=
+  if eq_ren r1 r2 then Some r1 else None ;
+dest_rspecial _ _ := None.
+
+Lemma dest_rspecial_spec i r : 
+  (exists r', dest_rspecial i r = Some r') <-> rspecial (R_cons i r).
+Proof.
+split ; intros H.
+- destruct H. destruct i ; triv. destruct i ; triv. destruct r ; triv. destruct r1 ; triv.
+  simp dest_rspecial in H. destruct (eq_ren_spec r0 r2) ; triv. subst.
+  depelim H. constructor.
+- depelim H. exists r0. simp dest_rspecial. destruct (eq_ren_spec r0 r0) ; triv.
+Qed.
+
+Lemma dest_rspecial_red i r r' : 
+  dest_rspecial i r = Some r' -> R_cons i r =r=> r'.
+Proof.
+intros H. assert (H1 : rspecial (R_cons i r)). 
+{ rewrite <-dest_rspecial_spec. eauto. }
+depelim H1. simp dest_rspecial in H. destruct (eq_ren_spec r0 r0) ; triv.
+depelim H. triv.
+Qed.
+
+Lemma dest_rspecial_irreducible i r r' : 
+  qirreducible i -> rirreducible r -> dest_rspecial i r = Some r' ->
+  rirreducible r'.
+Proof. 
+intros H1 H2 H3. assert (H4 : rspecial (R_cons i r)).
+{ rewrite <-dest_rspecial_spec. eauto. }
+depelim H4. simp dest_rspecial in H3. destruct (eq_ren_spec r0 r0) ; triv.
+depelim H3. now rewrite rirreducible_comp in H2.
+Qed.
+
+(*********************************************************************************)
+(** *** [rcons] *)
+(*********************************************************************************)
+
+(** Simplify [R_cons i r]. *)
+Equations rcons : qnat -> ren -> ren :=
+rcons Q_zero R_shift := R_id ;
+rcons a b with dest_rspecial a b := {
+  | Some r => r 
+  | None => R_cons a b
+  }.
+
+Lemma rcons_red i r : R_cons i r =r=> rcons i r.
+Proof. 
+funelim (rcons i r) ; triv. remember (Q_rapply r0 q0) as a. clear Heqa.
+rewrite dest_rspecial_red ; [|eassumption]. triv.
+Qed.
+#[local] Hint Rewrite <-rcons_red : red.
+
+Lemma rcons_irreducible i r :
+  qirreducible i -> rirreducible r -> rirreducible (rcons i r).
+Proof.
+intros H1 H2. funelim (rcons i r) ; triv.
+all: try solve [ rewrite rirreducible_cons ; triv ].
+- apply dest_rspecial_irreducible in Heq ; triv.
+- remember (Q_rapply r0 q0) as a. clear Heqa. rewrite rirreducible_cons.
+  split4 ; triv.
+  + intros (-> & ->). triv.
+  + rewrite <-dest_rspecial_spec. intros (? & H3). rewrite H3 in Heq. triv.
+Qed. 
 
 (*********************************************************************************)
 (** *** [rapply_aux] *)
@@ -700,26 +784,6 @@ intros H1 H2 H3. funelim (rcomp_aux r1 r2) ; triv.
 all: try solve [ apply H3 ; now triv ].
 now rewrite rirreducible_cons in H2.
 Qed.
-
-(*********************************************************************************)
-(** *** [rcons] *)
-(*********************************************************************************)
-
-(** Simplify [R_cons i r]. *)
-Equations rcons : qnat -> ren -> ren :=
-rcons Q_zero R_shift := R_id ;
-rcons i r := R_cons i r.
-
-Lemma rcons_red i r : R_cons i r =r=> rcons i r.
-Proof. funelim (rcons i r) ; triv. Qed.
-#[local] Hint Rewrite <-rcons_red : red.
-
-Lemma rcons_irreducible i r :
-  qirreducible i -> rirreducible r -> rirreducible (rcons i r).
-Proof.
-intros H1 H2. funelim (rcons i r) ; triv.
-all: solve [ rewrite rirreducible_cons ; triv ].
-Qed. 
 
 (*********************************************************************************)
 (** *** [rapply] and [rcomp] *)
@@ -795,9 +859,11 @@ qsimp (Q_mvar m) := Q_mvar m
 
 (** Simplify a renaming. *)
 with rsimp : ren -> ren :=
+rsimp R_id := R_id ;
+rsimp R_shift := R_shift ;
 rsimp (R_cons i r) := rcons (qsimp i) (rsimp r) ;
 rsimp (R_comp r1 r2) := rcomp (rsimp r1) (rsimp r2) ;
-rsimp r := r.
+rsimp (R_mvar m) := R_mvar m.
 
 Lemma qsimp_rsimp_red :
   (forall i, i =q=> qsimp i) * (forall r, r =r=> rsimp r).
@@ -825,7 +891,7 @@ Proof.
 apply qsimp_elim with 
   (P := fun _ res => qirreducible res) 
   (P0 := fun _ res => rirreducible res).
-all: intros ; try solve [ change_irred ; triv ].
+all: intros ; try solve [ triv | change_irred ; triv ].
 - now apply rapply_rcomp_irreducible.
 - now apply rapply_rcomp_irreducible.
 - now apply rcons_irreducible.
@@ -1381,7 +1447,8 @@ all: intros ; triv.
 - rewrite rirreducible_cons in H1. rewrite sirreducible_cons. split3 ; triv.
   + now apply H.
   + now apply H0.
-  + intros (? & ?). destruct i ; triv. destruct r ; triv. now apply H1.
+  + intros (? & ?). destruct i ; triv. destruct r ; triv.
+    destruct H1 as (_ & _ & H1 & _). now apply H1.
 - rewrite rirreducible_comp in H1. rewrite sirreducible_comp. split7 ; triv.
   + now apply H.
   + now apply H0.
