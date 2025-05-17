@@ -653,7 +653,9 @@ Proof. change_irred. intros H. depelim H. Qed.
 (** *** [rapply_aux] *)
 (*********************************************************************************)
 
-(** Helper function for [rapply] which takes care of trivial cases. *)
+(** Helper function for [rapply] which takes care of the cases:
+   - [r] is the identity.
+   - [r] is [R_cons _ _] and [i] is [Q_zero]. *)
 Equations rapply_aux (r : ren) (i : qnat) : qnat :=
 rapply_aux R_id i := i ;
 rapply_aux (R_cons k r) Q_zero := k ;
@@ -677,7 +679,9 @@ Qed.
 (** *** [rcomp_aux] *)
 (*********************************************************************************)
 
-(** Helper function for [rcomp] which takes care of trivial cases. *)
+(** Helper function for [rcomp] which takes care of the cases:
+    - [r2] is the identity.
+    - [r1] is [R_shift] and [r2] is [R_cons _ _]. *)
 Equations rcomp_aux (r1 r2 : ren) : ren :=
 rcomp_aux r R_id := r ;
 rcomp_aux R_shift (R_cons _ r) := r ;
@@ -701,6 +705,7 @@ Qed.
 (** *** [rcons] *)
 (*********************************************************************************)
 
+(** Simplify [R_cons i r]. *)
 Equations rcons : qnat -> ren -> ren :=
 rcons Q_zero R_shift := R_id ;
 rcons i r := R_cons i r.
@@ -834,32 +839,6 @@ Lemma rsimp_irreducible r : rirreducible (rsimp r).
 Proof. now apply qsimp_rsimp_irreducible. Qed.
 
 (*********************************************************************************)
-(** *** [scons] *)
-(*********************************************************************************)
-
-(** Simplify [S_cons t s].
-    We use a traditional pattern match instead of a [with] clause because 
-    we want to avoid using [NoConfusion] in the generated code. *)
-Equations scons (t : expr Kt) (s : subst) : subst :=
-scons t S_shift := match t with E_tvar Q_zero => S_id | _ => S_cons t S_shift end ;
-scons t s := S_cons t s. 
-
-Lemma scons_red t s : S_cons t s =s=> scons t s. 
-Proof.
-funelim (scons t s) ; triv. depelim t ; triv. depelim q ; triv.
-Qed.
-#[local] Hint Rewrite <-scons_red : red.
-
-Lemma scons_irreducible t s :
-  eirreducible t -> sirreducible s -> sirreducible (scons t s).
-Proof.
-intros H1 H2. 
-funelim (scons t s) ; try solve [ rewrite sirreducible_cons ; triv ].
-depelim t ; try solve [ rewrite sirreducible_cons ; triv ].
-depelim q ; try solve [ rewrite sirreducible_cons ; triv ]. triv.
-Qed. 
-
-(*********************************************************************************)
 (** *** Cons expressions. *)
 (*********************************************************************************)
 
@@ -887,17 +866,43 @@ Inductive cexpr : subst -> Prop :=
 | cexpr_extend t s : nexpr t -> cexpr s -> cexpr (S_cons t s).
 #[local] Hint Constructors cexpr : core.
 
+(*********************************************************************************)
+(** *** [scons] *)
+(*********************************************************************************)
+
+(** Simplify [S_cons t s].
+    We use a traditional pattern match instead of a [with] clause because 
+    we want to avoid using [NoConfusion] in the generated code. *)
+Equations scons (t : expr Kt) (s : subst) : subst :=
+scons t S_shift := match t with E_tvar Q_zero => S_id | _ => S_cons t S_shift end ;
+scons t s := S_cons t s. 
+
+Lemma scons_red t s : S_cons t s =s=> scons t s. 
+Proof.
+funelim (scons t s) ; triv. depelim t ; triv. depelim q ; triv.
+Qed.
+#[local] Hint Rewrite <-scons_red : red.
+
 Lemma scons_cexpr t s : 
   nexpr t -> cexpr s -> cexpr (scons t s).
 Proof.
 intros H1 H2. funelim (scons t s) ; triv. depelim t ; triv. depelim q ; triv.
 Qed.
 
+Lemma scons_irreducible t s :
+  eirreducible t -> sirreducible s -> sirreducible (scons t s).
+Proof.
+intros H1 H2. 
+funelim (scons t s) ; try solve [ rewrite sirreducible_cons ; triv ].
+depelim t ; try solve [ rewrite sirreducible_cons ; triv ].
+depelim q ; try solve [ rewrite sirreducible_cons ; triv ]. triv.
+Qed. 
+
 (*********************************************************************************)
 (** *** [ctail] *)
 (*********************************************************************************)
 
-(** Tail of a cons expression. *)
+(** Tail of a cons expression, i.e. simplify [S_comp S_shift s]. *)
 Equations ctail : subst -> subst :=
 ctail S_id := S_shift ;
 ctail (S_cons _ t) := t ;
@@ -1055,10 +1060,11 @@ apply ccomp_irreducible ; triv.
 Qed.
 
 (*********************************************************************************)
-(** *** [csubstitute] and [sccomp] *)
+(** *** [csubstitute_aux] *)
 (*********************************************************************************)
 
-(** Helper function for [csubstitute] which takes care of the cases:
+(** Helper function for [csubstitute] (and also [substitute]) 
+    which takes care of the cases:
     - [s] is the identity.
     - [e] is [E_tvar Q_zero] and [s] is [S_cons _ _]. *)
 Equations csubstitute_aux {k} : subst -> expr k -> expr k :=
@@ -1081,7 +1087,12 @@ all: try solve [ apply H3 ; triv ].
 rewrite sirreducible_cons in H1. triv.
 Qed.
 
-(** Helper function for [sccomp] which takes care of the cases:
+(*********************************************************************************)
+(** *** [sccomp_aux] *)
+(*********************************************************************************)
+
+(** Helper function for [sccomp] (and also [scomp]) which takes care 
+    of the cases:
     - [s1] is [S_shift] and [s2] is [S_cons _ _].
     - [s2] is [S_id]. *)
 Equations sccomp_aux : subst -> subst -> subst :=
@@ -1102,6 +1113,10 @@ intros H1 H2 H3. funelim (sccomp_aux s1 s2) ; triv.
 all: try solve [apply H3 ; triv ].
 rewrite sirreducible_cons in H2. triv.
 Qed.
+
+(*********************************************************************************)
+(** *** [csubstitute] and [sccomp] *)
+(*********************************************************************************)
 
 (** Substitute with a [cexpr]. *)
 Equations csubstitute {k} (s : subst) (e : expr k) : expr k by struct e :=
