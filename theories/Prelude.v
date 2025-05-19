@@ -100,14 +100,67 @@ Lemma congr_up_ren {r r'} :
   r =₁ r' -> up_ren r =₁ up_ren r'.
 Proof. intros H. simp up_ren. apply congr_rcons. now apply congr_rcomp. Qed.
 
-(*(** [fin n] represents the finite set with [n] elements [0], [1], ..., [n-1]. *)
+(*********************************************************************************)
+(** Finite sets. *)
+(*********************************************************************************)
+
+(** [fin n] represents the finite set with [n] elements [0], [1], ..., [n-1]. *)
 Inductive fin : nat -> Type :=
 | (** [0] is in [fin n] whenever [n > 0]. *)
-  fin_zero {n} : fin (S n)
+  finO {n} : fin (S n)
 | (** Injection from [fin n] to [fin (S n)], which maps [i] to [i+1]. *)
-  fin_succ {n} : fin n -> fin (S n).
+  finS {n} : fin n -> fin (S n).
 
-(** Mapping from [i] to [i + k]. *)
-Equations fin_weaken {n} (k : nat) (i : fin n) : fin (k + n) :=
-fin_weaken 0 i := i ;
-fin_weaken (S k) i := fin_succ (fin_weaken k i).*)
+Derive Signature NoConfusion NoConfusionHom for fin.
+
+(** Boolean equality test on [fin n]. We do an ugly convoy pattern by hand
+    instead of using Equations because we want [beq_fin] to unfold nicely 
+    with [cbv]. *)
+Fixpoint beq_fin {n} (i i' : fin n) : bool :=
+  match i in fin n0 return fin n0 -> bool with 
+  | finO => fun i' => match i' with finO => true | finS _ => false end
+  | finS i => fun i' => 
+    match i' in fin (S n1) return fin n1 -> bool with 
+    | finO => fun _ => false 
+    | finS i' => fun i => beq_fin i i' 
+    end i
+  end i'.
+
+Lemma beq_fin_spec {n} (i i' : fin n) : reflect (i = i') (beq_fin i i').
+Proof.
+induction i ; depelim i'.
+- now left.
+- right. intros H. depelim H.
+- right. intros H. depelim H.
+- simpl. destruct (IHi i') ; subst.
+  + now left.
+  + right. intros H. now depelim H.
+Qed.  
+
+#[export] Instance fin_EqDec n : EqDec (fin n).
+Proof. intros i i'. destruct (beq_fin_spec i i') ; triv. Qed.
+
+(*********************************************************************************)
+(** Fixed-length vectors. *)
+(*********************************************************************************)
+
+(** [vector A n] is the type of vectors of length [n] with elements in [A]. *)
+Inductive vector (A : Type) : nat -> Type :=
+| vnil : vector A 0 
+| vcons n : A -> vector A n -> vector A (S n).
+Arguments vnil {A}.
+Arguments vcons {A} {n}.
+
+Derive Signature NoConfusion NoConfusionHom for vector.
+
+(** [vector_nth i xs] looks up the [i]-th element of [xs]. Contrary to lists,
+    this does not return an [option A] or require a default element in [A]. 
+    We do a convoy pattern by hand for the same reason as in [beq_fin]. *)
+Fixpoint vector_nth {A n} (i : fin n) (xs : vector A n) := 
+  match i in fin n0 return vector A n0 -> A with 
+  | finO => fun xs => match xs with vcons x xs => x end
+  | finS i => fun xs =>
+    match xs in vector _ (S n1) return fin n1 -> A with 
+    | vcons x xs => fun i => vector_nth i xs 
+    end i
+  end xs.
