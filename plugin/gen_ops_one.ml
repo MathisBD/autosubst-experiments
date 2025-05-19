@@ -52,18 +52,28 @@ struct
     ret
     @@ mklist (app (mkglob' C.arg_ty) (mkind base))
     @@ List.map on_arg_ty P.sign.ctor_types.(i)
-
-  (** Build the signature. *)
-  let build_signature (base : Names.Ind.t) (eval_base : Names.Constant.t)
-      (ctor : Names.Ind.t) (ctor_type : Names.Constant.t) : EConstr.t m =
-    ret
-    @@ apps (mkglob' C.build_signature)
-         [| mkind base; mkconst eval_base; mkind ctor; mkconst ctor_type |]
 end
 
 (**************************************************************************************)
 (** *** Put everything together. *)
 (**************************************************************************************)
+
+(** Derive [EqDec] for an inductive using the Equations plugin, assuming no obligations
+    remain. Only works for non-mutual inductives. *)
+let derive_eqdec (ind : Names.Ind.t) : Names.Constant.t =
+  (* Derive [NoConfusion] (required by [EqDec]) and [EqDec]. *)
+  let pm =
+    Ederive.derive ~pm:Declare.OblState.empty ~poly:false [ "NoConfusion"; "EqDec" ]
+      [ Loc.tag @@ Names.GlobRef.IndRef ind ]
+  in
+  (* Check no obligations remain. *)
+  Declare.Obls.check_solved_obligations ~pm ~what_for:(Pp.str "autosubst derive_eqdec");
+  (* Get the name of the generated [EqDec] instance. *)
+  let modpath = Names.Ind.modpath ind in
+  let label =
+    Names.Label.make (Names.Label.to_string (Names.MutInd.label (fst ind)) ^ "_EqDec")
+  in
+  Names.Constant.make1 @@ Names.KerName.make modpath label
 
 (** Generate the level one signature. *)
 let generate (s : signature) (ops0 : ops_zero) : ops_one =
@@ -73,9 +83,21 @@ let generate (s : signature) (ops0 : ops_zero) : ops_one =
   end) in
   (* Build the signature. *)
   let base = monad_run @@ M.build_base () in
+  let base_eqdec = derive_eqdec base in
   let eval_base = def "eval_base" @@ M.build_eval_base base in
   let ctor = monad_run @@ M.build_ctor () in
+  let ctor_eqdec = derive_eqdec ctor in
   let ctor_type = def "ctor_type" @@ M.build_ctor_type ctor base in
-  let sign = def "signature" @@ M.build_signature base eval_base ctor ctor_type in
+  let sign =
+    def "sig" @@ ret
+    @@ apps (mkglob' C.build_signature)
+         [| mkind base
+          ; mkconst base_eqdec
+          ; mkconst eval_base
+          ; mkind ctor
+          ; mkconst ctor_eqdec
+          ; mkconst ctor_type
+         |]
+  in
   (* Assemble everything. *)
-  { base; eval_base; ctor; ctor_type; sign }
+  { base; base_eqdec; eval_base; ctor; ctor_eqdec; ctor_type; sign }

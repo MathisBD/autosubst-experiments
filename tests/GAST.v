@@ -30,9 +30,9 @@ Ltac2 solve_term_simplification () : unit :=
     printf "t1: %t" t1;
     (* Reify Level 1 -> Level 2. *)
     let env := T.empty_env () in
-    let (env, t2) := T.reify_expr constr:(signature) env t1 in
+    let (env, t2) := T.reify_expr constr:(sig) env t1 in
     printf "t2: %t" t2;
-    let env := T.build_env constr:(signature) env in
+    let env := T.build_env constr:(sig) env in
     (* Simplify on Level 2. *)
     let t2' := Std.eval_cbv (red_flags_simp ()) constr:(Simp.esimp $t2) in
     printf "t2': %t" t2';

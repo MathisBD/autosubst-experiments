@@ -24,12 +24,16 @@ Record signature :=
 { (** The set of base types, 
       e.g. [Inductive base := BUnit | BBool | BNat]. *)
   base : Type 
+; (** Decidable equality on [base]. *)
+  base_EqDec : EqDec base
 ; (** The actual type that each base type represents,
       e.g. a mapping BNat => nat ; BBool => bool ; BUnit => unit. *)
   eval_base : base -> Type
-;  (** The set of _non variable_ constructors, 
-       e.g. [Inductive ctor := CApp | CLam]. *)
+; (** The set of _non variable_ constructors, 
+      e.g. [Inductive ctor := CApp | CLam]. *)
   ctor : Type
+; (** Decidable equality on [ctor]. *)
+  ctor_EqDec : EqDec ctor
 ; (** The number and types of the arguments of each constructor. *)
   ctor_type : ctor -> list (@arg_ty base) }.
 

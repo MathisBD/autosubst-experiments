@@ -437,7 +437,10 @@ all: try solve [ destruct H0 as (i' & H1 & H2) ; eexists ; split ;
   [now rewrite H1 | intros H3 ; now depelim H3] ].
 all: try solve [ apply qr_reducible_impl_red in H ; destruct H as (i' & H1 & H2) ;
   eexists ; split ; [now rewrite H1 | intros H3 ; now depelim H3] ].
-- destruct H0 as (i' & H1 & H2). eexists. split ; [now rewrite H1 | intros H3]. admit.
+- destruct H0 as (i' & H1 & H2). eexists. split ; [now rewrite H1 | intros H3].
+  inversion H3. unshelve eapply inj_right_pair in H4.
+  + apply Sig.ctor_EqDec.
+  + triv.
 - exists (E_ren r (E_tvar i)). triv.
 - eexists ; triv.
 - destruct e ; try solve [ eexists ; triv ]. Unshelve. all: triv.
@@ -453,7 +456,7 @@ all: try solve [ apply qr_reducible_impl_red in H ; destruct H as (i' & H1 & H2)
 - destruct s ; triv. exists s. split ; triv. intros H1. inv_subterm H1.
 - exists S_id. triv.
 - destruct r ; eexists ; triv.
-Admitted.   
+Qed.   
 
 Lemma qirreducible_qreducible i : qirreducible i <-> ~qreducible i.
 Proof.

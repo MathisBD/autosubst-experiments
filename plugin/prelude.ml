@@ -58,8 +58,10 @@ type ops_zero =
 (** Level one signature. *)
 type ops_one =
   { base : Names.Ind.t
+  ; base_eqdec : Names.Constant.t
   ; eval_base : Names.Constant.t
   ; ctor : Names.Ind.t
+  ; ctor_eqdec : Names.Constant.t
   ; ctor_type : Names.Constant.t
   ; sign : Names.Constant.t
   }
