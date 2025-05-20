@@ -114,19 +114,19 @@ Inductive fin : nat -> Type :=
 Derive Signature NoConfusion NoConfusionHom for fin.
 
 (** Boolean equality test on [fin n]. We do an ugly convoy pattern by hand
-    instead of using Equations because we want [beq_fin] to unfold nicely 
+    instead of using Equations because we want [eqb_fin] to unfold nicely 
     with [cbv]. *)
-Fixpoint beq_fin {n} (i i' : fin n) : bool :=
+Fixpoint eqb_fin {n} (i i' : fin n) : bool :=
   match i in fin n0 return fin n0 -> bool with 
   | finO => fun i' => match i' with finO => true | finS _ => false end
   | finS i => fun i' => 
     match i' in fin (S n1) return fin n1 -> bool with 
     | finO => fun _ => false 
-    | finS i' => fun i => beq_fin i i' 
+    | finS i' => fun i => eqb_fin i i' 
     end i
   end i'.
 
-Lemma beq_fin_spec {n} (i i' : fin n) : reflect (i = i') (beq_fin i i').
+Lemma eqb_fin_spec {n} (i i' : fin n) : reflect (i = i') (eqb_fin i i').
 Proof.
 induction i ; depelim i'.
 - now left.
@@ -138,29 +138,40 @@ induction i ; depelim i'.
 Qed.  
 
 #[export] Instance fin_EqDec n : EqDec (fin n).
-Proof. intros i i'. destruct (beq_fin_spec i i') ; triv. Qed.
+Proof. intros i i'. destruct (eqb_fin_spec i i') ; triv. Qed.
 
 (*********************************************************************************)
-(** Fixed-length vectors. *)
+(** Homogeneous vectors. *)
 (*********************************************************************************)
 
-(** [vector A n] is the type of vectors of length [n] with elements in [A]. *)
-Inductive vector (A : Type) : nat -> Type :=
-| vnil : vector A 0 
-| vcons n : A -> vector A n -> vector A (S n).
-Arguments vnil {A}.
-Arguments vcons {A} {n}.
+(** [vector T n] is the type of vectors of length [n] with elements in [T]. *)
+Inductive vector (T : Type) : nat -> Type :=
+| vnil : vector T 0 
+| vcons n : T -> vector T n -> vector T (S n).
+Arguments vnil {T}.
+Arguments vcons {T n}.
 
 Derive Signature NoConfusion NoConfusionHom for vector.
 
 (** [vector_nth i xs] looks up the [i]-th element of [xs]. Contrary to lists,
-    this does not return an [option A] or require a default element in [A]. 
-    We do a convoy pattern by hand for the same reason as in [beq_fin]. *)
-Fixpoint vector_nth {A n} (i : fin n) (xs : vector A n) := 
-  match i in fin n0 return vector A n0 -> A with 
-  | finO => fun xs => match xs with vcons x xs => x end
+    this does not return an [option T] or require a default element in [T]. 
+    We do a convoy pattern by hand for the same reason as in [eqb_fin]. *)
+Fixpoint vector_nth {T n} (i : fin n) (xs : vector T n) : T :=
+  match i in fin n0 
+  return vector T n0 -> T 
+  with 
+  | finO => fun xs => 
+    match xs in vector _ n1
+    return match n1 with 0 => unit | S _ => T end
+    with
+    | vnil => tt 
+    | vcons x xs => x 
+    end
   | finS i => fun xs =>
-    match xs in vector _ (S n1) return fin n1 -> A with 
+    match xs in vector _ n1 
+    return match n1 with 0 => unit -> unit | S n1 => fin n1 -> T end
+    with 
+    | vnil => fun _ => tt
     | vcons x xs => fun i => vector_nth i xs 
     end i
-  end xs.
+  end xs.  
