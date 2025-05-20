@@ -75,5 +75,15 @@ Ltac2 red_flags_eval () : RedFlags.t :=
 (** [Simplification x y] expresses the fact that [x] simplifies into [y].
     Typically [x] is a ground term and [y] is an evar, and a proof of 
     [Simplification x y] instantiates [y] with a simplified version of [x]. *)
-Class Simplification T (x y : T) := 
-  MkSimplification { simplification : x = y }.
+
+Class NatSimplification (x y : nat) :=
+  MkNatSimplification { nat_simplification : x = y }.
+
+Class RenSimplification (x y : nat -> nat) :=
+  MkRenSimplification { ren_simplification : x =₁ y }.
+
+Class TermSimplification {T} (x y : T) := 
+  MkTermSimplification { term_simplification : x = y }.
+
+Class SubstSimplification {T} (x y : nat -> T) :=
+  MkSubstSimplification { subst_simplification : x =₁ y }.

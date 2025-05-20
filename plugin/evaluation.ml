@@ -371,7 +371,7 @@ let eval_subst (sign : signature) (ops : ops_all) (s' : EConstr.t) :
     let bij = ops.ops_bij
     let pe = ops.ops_pe
   end) in
-  let* s, p = M.eval_term s' in
+  let* s, p = M.eval_subst s' in
   (* Typecheck to resolve evars. *)
   let* _ = typecheck s None in
   let p_ty =

@@ -81,7 +81,7 @@ Equations up_ren (r : ren) : ren :=
 up_ren r := rcons 0 (rcomp r rshift).
 
 (*********************************************************************************)
-(** Trivial properties of renamings. *)
+(** *** Trivial properties of renamings. *)
 (*********************************************************************************)
 
 (** Pointwise equality for functions. *)
@@ -101,7 +101,7 @@ Lemma congr_up_ren {r r'} :
 Proof. intros H. simp up_ren. apply congr_rcons. now apply congr_rcomp. Qed.
 
 (*********************************************************************************)
-(** Finite sets. *)
+(** *** Finite sets. *)
 (*********************************************************************************)
 
 (** [fin n] represents the finite set with [n] elements [0], [1], ..., [n-1]. *)
@@ -141,7 +141,7 @@ Qed.
 Proof. intros i i'. destruct (eqb_fin_spec i i') ; triv. Qed.
 
 (*********************************************************************************)
-(** Homogeneous vectors. *)
+(** *** Fixed length vectors. *)
 (*********************************************************************************)
 
 (** [vector T n] is the type of vectors of length [n] with elements in [T]. *)

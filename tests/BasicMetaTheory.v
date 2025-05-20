@@ -25,6 +25,10 @@ Inductive sscoping (Γ : scope) (σ : subst) : scope → Prop :=
       scoping Γ (σ 0) m →
       sscoping Γ σ (m :: Δ).
 
+(** Trigger for [rasimpl] on [sscoping]. *)
+Lemma sscoping_rasimpl (Γ : scope) (σ σ' : subst) (Δ : scope) :
+  PSimplification term 
+
 Lemma rscoping_S :
   ∀ Γ m,
     rscoping (m :: Γ) S Γ.
