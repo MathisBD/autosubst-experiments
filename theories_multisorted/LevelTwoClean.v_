@@ -78,12 +78,19 @@ Qed.
 (** *** [dest_ren] *)
 (*********************************************************************************)
 
+Equations dest_var {k} (t : expr k) : option qnat :=
+dest_var (E_tvar i) := Some i ;
+dest_var _ := None.
+
+(* In the [S_cons] case, we match on [dest_var t]. This is because
+   matching [t] with [E_tvar i] directly causes Equations to use 
+   [apply_noConfusion], which is annoying to unfold completely with [cbv]. *)
 Equations dest_ren (s : subst) : option ren :=
 dest_ren S_id := Some R_id ;
 dest_ren S_shift := Some R_shift ;
-dest_ren (S_cons (E_tvar i) s) with dest_ren s := {
-  | Some r => Some (R_cons i r) 
-  | _ => None 
+dest_ren (S_cons t s) with dest_var t, dest_ren s := {
+  | Some i, Some r => Some (R_cons i r) 
+  | _, _ => None 
   } ;
 dest_ren (S_comp s1 s2) with dest_ren s1, dest_ren s2 := {
   | Some r1, Some r2 => Some (R_comp r1 r2)
@@ -97,7 +104,8 @@ Lemma dest_ren_sound e s r :
 Proof.
 funelim (dest_ren s) ; triv.
 all: intros H ; depelim H ; simp eeval qeval in * ; try reflexivity.
-- rewrite (Hind e r Heq). simp eeval. intros [|] ; reflexivity.
+- depelim t ; triv. simp dest_var in Heq0. depelim Heq0. rewrite (Hind e r Heq).
+  simp eeval. intros [|] ; reflexivity.
 - rewrite (Hind e r2 Heq), (Hind0 e r1 Heq0). reflexivity.
 Qed.
 

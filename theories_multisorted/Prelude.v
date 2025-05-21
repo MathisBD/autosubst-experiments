@@ -3,8 +3,6 @@ From Ltac2 Require Export Ltac2.
 From Equations Require Export Equations.
 Export ListNotations.
 
-#[export] Set Equations Transparent.
-
 (** Just to make sure. *)
 #[export] Unset Equations With UIP.
 

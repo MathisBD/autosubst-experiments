@@ -9,6 +9,7 @@ depends: [
   "dune" {>= "3.16"}
   "coq" {= "8.20.0"}
   "coq-equations"
+  "angstrom"
   "odoc" {with-doc}
 ]
 build: [
