@@ -22,7 +22,7 @@ Autosubst Generate
   lam : {{mode}} -> term -> (bind term in term) -> term
   app : term -> term -> term
   
-  Erased : term -> term
+  (*Erased : term -> term
   hide : term -> term
   reveal : term -> term -> term -> term
   Reveal : term -> term -> term
@@ -49,7 +49,7 @@ Autosubst Generate
   tvec_elim : {{mode}} -> term -> term -> term -> term -> term -> term -> term
   
   bot : term
-  bot_elim : {{mode}} -> term -> term -> term
+  bot_elim : {{mode}} -> term -> term -> term*)
 }}.
 
 (*********************************************************************************)
@@ -70,10 +70,6 @@ Ltac2 simpl_term_zero (t0 : constr) : constr * constr :=
     (transitivity (f_equal (eval Sig.Kt) $p2) $p3)) 
   in
   (t0', eq0).
-  
-Lemma congr_seval {s1 s2} : 
-  s1 =₁ s2 -> seval s1 =₁ seval s2.
-Proof. intros H i. unfold seval. now rewrite H. Qed. 
 
 (** Simplify a level zero substitution. *)
 Ltac2 simpl_subst_zero (s0 : constr) : constr * constr :=

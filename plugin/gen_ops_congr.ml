@@ -5,6 +5,8 @@ module C = Constants
 module Make (P : sig
   val sign : signature
   val ops0 : ops_zero
+  val ops1 : ops_one
+  val ops_re : ops_reify_eval
 end) =
 struct
   (**************************************************************************************)
@@ -194,6 +196,39 @@ struct
     in
     ret @@ arrows [ hyp_s1; hyp_s2 ] concl
 
+  (** Build [forall (t1 t2 : O.expr Kt), t1 = t2 -> eval Kt t1 = eval Kt t2]. *)
+  let build_congr_eval () : EConstr.t m =
+    let open EConstr in
+    prod "t1" (term1 P.ops1) @@ fun t1 ->
+    prod "t2" (term1 P.ops1) @@ fun t2 ->
+    let hyp = apps (mkglob' C.eq) [| term1 P.ops1; mkVar t1; mkVar t2 |] in
+    let concl =
+      apps (mkglob' C.eq)
+        [| mkind P.ops0.term
+         ; apps (mkconst P.ops_re.eval) [| kt P.ops1; mkVar t1 |]
+         ; apps (mkconst P.ops_re.eval) [| kt P.ops1; mkVar t2 |]
+        |]
+    in
+    ret @@ arrow hyp concl
+
+  (** Build [forall (s1 s2 : O.subst), s1 =₁ s2 -> seval s1 =₁ seval s2]. *)
+  let build_congr_seval () : EConstr.t m =
+    let open EConstr in
+    prod "s1" (subst1 P.ops1) @@ fun s1 ->
+    prod "s2" (subst1 P.ops1) @@ fun s2 ->
+    let hyp =
+      apps (mkglob' C.point_eq) [| mkglob' C.nat; term1 P.ops1; mkVar s1; mkVar s2 |]
+    in
+    let concl =
+      apps (mkglob' C.point_eq)
+        [| mkglob' C.nat
+         ; mkind P.ops0.term
+         ; app (mkconst P.ops_re.seval) (mkVar s1)
+         ; app (mkconst P.ops_re.seval) (mkVar s2)
+        |]
+    in
+    ret @@ arrow hyp concl
+
   (**************************************************************************************)
   (** *** Prove the congruence lemmas. *)
   (**************************************************************************************)
@@ -337,6 +372,23 @@ struct
     (* Apply [congr_substitute]. *)
     let* _ = Tactics.apply (mkconst congr_substitute) in
     auto ()
+
+  (** Prove [forall (t1 t2 : O.expr Kt), t1 = t2 -> eval Kt t1 = eval Kt t2]. *)
+  let prove_congr_eval () : unit Proofview.tactic =
+    let open PVMonad in
+    let* _ = intro_n 2 in
+    let* _ = intro_rewrite LeftToRight in
+    Tactics.reflexivity
+
+  (** Prove [forall (s1 s2 : O.subst), s1 =₁ s2 -> seval s1 =₁ seval s2]. *)
+  let prove_congr_seval () : unit Proofview.tactic =
+    let open PVMonad in
+    let* _ = intro_n 2 in
+    let* hyp = intro_fresh "H" in
+    let* _ = intro_fresh "i" in
+    let* _ = Tactics.unfold_constr (Names.GlobRef.ConstRef P.ops_re.seval) in
+    let* _ = rewrite LeftToRight (Names.GlobRef.VarRef hyp) in
+    Tactics.reflexivity
 end
 
 (**************************************************************************************)
@@ -344,10 +396,13 @@ end
 (**************************************************************************************)
 
 (** Generate all the congruence lemmas. *)
-let generate (s : signature) (ops0 : ops_zero) : ops_congr =
+let generate (s : signature) (ops0 : ops_zero) (ops1 : ops_one) (ops_re : ops_reify_eval)
+    : ops_congr =
   let module M = Make (struct
     let sign = s
     let ops0 = ops0
+    let ops1 = ops1
+    let ops_re = ops_re
   end) in
   let congr_ctors =
     Array.init s.n_ctors @@ fun i ->
@@ -377,6 +432,10 @@ let generate (s : signature) (ops0 : ops_zero) : ops_congr =
   let congr_scomp =
     lemma "congr_scomp" (M.build_congr_scomp ()) @@ M.prove_congr_scomp congr_substitute
   in
+  let congr_eval = lemma "congr_eval" (M.build_congr_eval ()) @@ M.prove_congr_eval () in
+  let congr_seval =
+    lemma "congr_seval" (M.build_congr_seval ()) @@ M.prove_congr_seval ()
+  in
   { congr_ctors
   ; congr_rename
   ; congr_substitute
@@ -385,4 +444,6 @@ let generate (s : signature) (ops0 : ops_zero) : ops_congr =
   ; congr_scomp
   ; congr_scons
   ; congr_up_subst
+  ; congr_eval
+  ; congr_seval
   }

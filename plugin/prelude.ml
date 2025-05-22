@@ -44,19 +44,6 @@ let term1 (ops1 : ops_one) : EConstr.t =
 let subst1 (ops1 : ops_one) : EConstr.t =
   app (mkglob' Constants.O.subst) (mkconst ops1.sign)
 
-(** Congruence lemmas. [congr_ctor] contains congruence lemmas for all non-variable
-    constructors. *)
-type ops_congr =
-  { congr_ctors : Names.Constant.t array
-  ; congr_rename : Names.Constant.t
-  ; congr_substitute : Names.Constant.t
-  ; congr_rscomp : Names.Constant.t
-  ; congr_srcomp : Names.Constant.t
-  ; congr_scomp : Names.Constant.t
-  ; congr_scons : Names.Constant.t
-  ; congr_up_subst : Names.Constant.t
-  }
-
 (** Reification functions (level zero -> level one) and evaluation functions (level one ->
     level zero). *)
 type ops_reify_eval =
@@ -68,6 +55,21 @@ type ops_reify_eval =
   ; eval_ctor : Names.Constant.t
   ; eval : Names.Constant.t
   ; seval : Names.Constant.t
+  }
+
+(** Congruence lemmas. [congr_ctor] contains congruence lemmas for all non-variable
+    constructors. *)
+type ops_congr =
+  { congr_ctors : Names.Constant.t array
+  ; congr_rename : Names.Constant.t
+  ; congr_substitute : Names.Constant.t
+  ; congr_rscomp : Names.Constant.t
+  ; congr_srcomp : Names.Constant.t
+  ; congr_scomp : Names.Constant.t
+  ; congr_scons : Names.Constant.t
+  ; congr_up_subst : Names.Constant.t
+  ; congr_eval : Names.Constant.t
+  ; congr_seval : Names.Constant.t
   }
 
 (** Proof of bijection between level zero and level one, and custom induction principle on
