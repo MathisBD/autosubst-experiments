@@ -124,10 +124,7 @@ struct
               apps (mkglob' C.O.e_abase)
                 [| mkconst P.ops1.sign; mkctor (P.ops1.base, b_idx + 1); arg |]
             in
-            let p =
-              apps (mkglob' C.eq_refl)
-                [| EConstr.of_constr P.sign.base_types.(b_idx); arg |]
-            in
+            let p = apps (mkglob' C.eq_refl) [| P.sign.base_types.(b_idx); arg |] in
             ret (arg', p)
         (* For [AT_term] we reuse the proof given by [reify_term]. *)
         | AT_term ->

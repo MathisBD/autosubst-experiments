@@ -9,13 +9,7 @@ DECLARE PLUGIN "autosubst-experiments.plugin"
 (** A single argument type, e.g. "(bind ty in term)".
     For technical reasons we have to move the rule for single identifiers to [ctor_ty]. *)
 VERNAC ARGUMENT EXTEND arg_ty 
-| [ "{{" lconstr(c) "}}" ] -> { 
-    let env = Global.env () in
-    let sigma = Evd.from_env env in
-    let c, ustate = Constrintern.interp_type env sigma c in
-    let sigma = Evd.merge_universe_context sigma ustate in
-    CAst.make ~loc (PAT_base (EConstr.to_constr sigma c))
-  }
+| [ "{{" lconstr(c) "}}" ] -> { CAst.make ~loc (PAT_base c) }
 | [ "(" "bind" ne_identref_list(ids) "in" identref(id) ")" ] -> { CAst.make (PAT_bind (ids, id)) }
 END
 
@@ -44,10 +38,14 @@ END
 
 VERNAC ARGUMENT EXTEND signature 
 | [ "{{" sort_decl(sort) ctor_decl_list(ctors) "}}" ] -> { 
+    (* We can validate a signature at parsing time. *)
     validate_psignature (CAst.make ~loc { sort ; ctors }) 
   }
 END
 
 VERNAC COMMAND EXTEND AutosubstGenerate CLASSIFIED AS SIDEFF
-| [ "Autosubst" "Generate" signature(s) ] -> { Main.generate s }
+| [ "Autosubst" "Generate" signature(s) ] -> { 
+    (* Now that we are executing the command, we can internalize the base types. *)
+    Main.generate (interp_signature_base_types s) 
+  }
 END

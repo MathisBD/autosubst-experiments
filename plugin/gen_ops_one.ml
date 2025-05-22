@@ -25,7 +25,7 @@ struct
   (** Build the function [eval_base : base -> Type]. *)
   let build_eval_base (base : Names.Ind.t) : EConstr.t m =
     lambda "b" (mkind base) @@ fun b ->
-    case (EConstr.mkVar b) @@ fun i _ -> ret @@ EConstr.of_constr P.sign.base_types.(i)
+    case (EConstr.mkVar b) @@ fun i _ -> ret P.sign.base_types.(i)
 
   (** Build the inductive [Inductive ctor := CApp | CLam | ...] which indexes non-variable
       constructors. *)
