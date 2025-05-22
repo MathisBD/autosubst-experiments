@@ -2,7 +2,7 @@ open Prelude
 open Signature
 
 (* Helper function to build a signature. *)
-let mk_sig (base : EConstr.t list) (ctors : (string * arg_ty list) list) : signature =
+(*let mk_sig (base : EConstr.t list) (ctors : (string * arg_ty list) list) : signature =
   { sort = Names.Id.of_string_soft "term"
   ; n_ctors = List.length ctors
   ; base_types = Array.of_list @@ List.map (EConstr.to_constr Evd.empty) base
@@ -48,7 +48,7 @@ let build_signature () : signature =
     ; ("tvec_elim", [ mode; AT_term; AT_term; AT_term; AT_term; AT_term; AT_term ])
     ; ("bot", [])
     ; ("bot_elim", [ mode; AT_term; AT_term ])
-    ]
+    ]*)
 
 (**************************************************************************************)
 (** *** Generating operations/lemmas. *)
@@ -56,14 +56,15 @@ let build_signature () : signature =
 
 (** We keep track of the generated operations using the [Libobject] API. The first step is
     to create a reference using [Summary.ref]. *)
-let saved_ops : ops_all option ref = Summary.ref ~name:"autosubst_saved_ops_summary" None
+let saved_ops : (signature * ops_all) option ref =
+  Summary.ref ~name:"autosubst_saved_ops_summary" None
 
 (** We declare a [Libobject.obj], which gives us a function [update_saved_ops] to update
     the contents of [saved_ops]. Accessing the contents of [saved_ops] can be done by
     simply de-referencing: [!saved_ops].
 
     It is important that we call [Libobject.declare_object] at the toplevel. *)
-let update_saved_ops : ops_all option -> Libobject.obj =
+let update_saved_ops : (signature * ops_all) option -> Libobject.obj =
   Libobject.declare_object
     { (Libobject.default_object "autosubst_saved_ops_libobject") with
       cache_function = (fun v -> saved_ops := v)
@@ -89,13 +90,11 @@ let generate_operations (sign : signature) : ops_all =
   }
 
 (** Main entry point for the plugin: generate level zero terms, operations, and lemmas. *)
-let generate () =
-  (* We use a testing signature (for the moment). *)
-  let sign = build_signature () in
+let generate (sign : signature) =
   (* Generate the operations. *)
   let ops = generate_operations sign in
   (* Save the operations. *)
-  Lib.add_leaf @@ update_saved_ops (Some ops)
+  Lib.add_leaf @@ update_saved_ops (Some (sign, ops))
 
 (**************************************************************************************)
 (** *** Expose Ltac2 reification and evaluation tactics. *)
@@ -115,11 +114,10 @@ let define_ltac2 (name : string)
   (* We must delay fetching the saved operations [!saved_ops] until the tactic is 
      actually called. *)
   let ocaml_tactic x =
-    let sign = build_signature () in
-    let ops =
+    let sign, ops =
       match !saved_ops with
       | None -> Log.error "define_ltac2: must generate operations beforehand."
-      | Some ops -> ops
+      | Some x -> x
     in
     monad_run_tactic @@ body sign ops x
   in

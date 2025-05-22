@@ -49,5 +49,5 @@ VERNAC ARGUMENT EXTEND signature
 END
 
 VERNAC COMMAND EXTEND AutosubstGenerate CLASSIFIED AS SIDEFF
-| [ "Autosubst" "Generate" signature(s) ] -> { Log.printf "done" }
+| [ "Autosubst" "Generate" signature(s) ] -> { Main.generate s }
 END

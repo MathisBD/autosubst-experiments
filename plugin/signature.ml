@@ -125,7 +125,7 @@ let empty_state (sort : Names.lident) : state = { sort; base_types = []; ctors =
 
 let validate_sort (st : state) (sort : Names.lident) : unit =
   if not (Names.Id.equal sort.v st.sort.v)
-  then Log.error ?loc:sort.loc "Undeclared sort [%s]" (Names.Id.to_string sort.v)
+  then Log.error ?loc:sort.loc "Undeclared sort %s." (Names.Id.to_string sort.v)
 
 (** Validate an argument type. *)
 let validate_arg_ty (st : state) (ty : parg_ty) : arg_ty * state =
@@ -144,7 +144,7 @@ let validate_arg_ty (st : state) (ty : parg_ty) : arg_ty * state =
 let validate_ctor_name (st : state) (name : Names.lident) : unit =
   if List.exists (fun (c, _) -> Names.Id.equal name.v c) st.ctors
   then
-    Log.error ?loc:name.loc "Constructor [%s] is already declared"
+    Log.error ?loc:name.loc "Constructor %s is already declared."
       (Names.Id.to_string name.v)
 
 (** Validate a constructor declaration. *)
