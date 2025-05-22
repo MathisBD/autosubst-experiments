@@ -13,6 +13,16 @@ Module Clean := LevelTwoClean.
 
 Declare ML Module "autosubst-experiments.plugin".
 
+Autosubst Generate {{
+  
+  term : Type
+  
+  lam : {{ nat }} -> ty -> (bind term in term) -> term
+  app : {{ nat * nat }} -> term -> term -> term
+  base : ty
+  weird : (bind ty term in ty) -> term
+}}.
+
 Ltac2 @external reify_term : constr -> constr * constr := "autosubst-experiments.plugin" "reify_term".
 Ltac2 @external reify_subst : constr -> constr * constr := "autosubst-experiments.plugin" "reify_subst".
 Ltac2 @external eval_term : constr -> constr * constr := "autosubst-experiments.plugin" "eval_term".

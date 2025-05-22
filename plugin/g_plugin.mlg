@@ -1,8 +1,51 @@
 DECLARE PLUGIN "autosubst-experiments.plugin"
 
 {
+  open Signature
+  open Pcoq.Prim
+  open Pcoq.Constr
 }
 
+(** A single argument type, e.g. "(bind ty in term)".
+    For technical reasons we have to move the rule for single identifiers to [ctor_ty]. *)
+VERNAC ARGUMENT EXTEND arg_ty 
+| [ "{{" lconstr(c) "}}" ] -> { 
+    let env = Global.env () in
+    let sigma = Evd.from_env env in
+    let c, ustate = Constrintern.interp_type env sigma c in
+    let sigma = Evd.merge_universe_context sigma ustate in
+    CAst.make ~loc (PAT_base (EConstr.to_constr sigma c))
+  }
+| [ "(" "bind" ne_identref_list(ids) "in" identref(id) ")" ] -> { CAst.make (PAT_bind (ids, id)) }
+END
+
+(** The type of a constructor, e.g. "ty -> (bind term in term) -> term". *)
+VERNAC ARGUMENT EXTEND pctor_ty
+| [ identref(i) ] -> { ([], i) }
+| [ identref(i) "->" pctor_ty(cty) ] -> { 
+    let (tys, rty) = cty in 
+    (CAst.map (fun _ -> PAT_term i) i :: tys, rty) 
+  }
+| [ arg_ty(ty) "->" pctor_ty(cty) ] -> { let (tys, rty) = cty in (ty :: tys, rty) }
+END
+
+(** A declaration for a new term sort, e.g. "term : Type". *)
+VERNAC ARGUMENT EXTEND term_decl 
+| [ identref(name) ":" "Type" ] -> { CAst.make ~loc (TermDecl name) }
+END
+
+(** A declaration for a new constructor, e.g. "app : term -> term -> term". *)
+VERNAC ARGUMENT EXTEND ctor_decl
+| [ identref(name) ":" pctor_ty(cty) ] -> { 
+    let (arg_tys, ret_ty) = cty in 
+    CAst.make ~loc (CtorDecl { name ; arg_tys ; ret_ty }) 
+  }
+END
+
+VERNAC ARGUMENT EXTEND signature 
+| [ "{{" term_decl(term) ctor_decl_list(ctors) "}}" ] -> { CAst.make ~loc { term ; ctors } }
+END
+
 VERNAC COMMAND EXTEND AutosubstGenerate CLASSIFIED AS SIDEFF
-| [ "Autosubst" "Generate" ] -> { Main.generate () }
+| [ "Autosubst" "Generate" signature(s) ] -> { Log.printf "done" }
 END

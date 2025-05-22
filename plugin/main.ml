@@ -1,4 +1,5 @@
 open Prelude
+open Signature
 
 (* Helper function to build a signature. *)
 let mk_sig (base : EConstr.t list) (ctors : (string * arg_ty list) list) : signature =

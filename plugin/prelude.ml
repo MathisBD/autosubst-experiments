@@ -1,39 +1,6 @@
 include Metaprog
 
 (**************************************************************************************)
-(** *** OCaml representation of a signature. *)
-(**************************************************************************************)
-
-(** Argument type. Base types store the index of the type in the [base_types] array. *)
-type arg_ty = AT_base of int | AT_term | AT_bind of arg_ty
-
-(** An abstract signature:
-    - [n_ctors] is the number of _non-variable_ constructors.
-    - [ctor_names] contains the name of each constructor.
-    - [ctor_sig] contains the argument types of each constructor.
-
-    The length of [ctor_names] and [ctor_sig] should be equal to [n_ctors]. *)
-type signature =
-  { n_ctors : int
-  ; base_types : Constr.t array
-  ; ctor_names : string array
-  ; ctor_types : arg_ty list array
-  }
-
-(** [arg_ty_constr sign ty ind] builds the [EConstr.t] corresponding to [ty]. We use [ind]
-    as a placeholder for the inductive type of terms. *)
-let rec arg_ty_constr (sign : signature) (ty : arg_ty) (ind : EConstr.t) : EConstr.t =
-  match ty with
-  | AT_base i -> EConstr.of_constr sign.base_types.(i)
-  | AT_term -> ind
-  | AT_bind ty -> arg_ty_constr sign ty ind
-
-(** [ctor_ty_constr sign tys ind] build the type of a constructor as a [EConstr.t]. We use
-    [ind] as a placeholder for the inductive type of terms. *)
-let ctor_ty_constr (sign : signature) (tys : arg_ty list) (ind : EConstr.t) : EConstr.t =
-  arrows (List.map (fun ty -> arg_ty_constr sign ty ind) tys) ind
-
-(**************************************************************************************)
 (** *** References to generated constants. *)
 (**************************************************************************************)
 

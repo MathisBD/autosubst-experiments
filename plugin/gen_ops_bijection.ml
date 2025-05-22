@@ -4,6 +4,7 @@
 *)
 
 open Prelude
+open Signature
 module C = Constants
 
 module Make (P : sig
