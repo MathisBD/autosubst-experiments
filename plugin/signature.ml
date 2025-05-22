@@ -163,12 +163,12 @@ let validate_psignature (s : psignature) : Constrexpr.constr_expr gen_signature 
 (** Pre-type and internalize the base types of a signature. Raises an error (using Rocq's
     error reporting mechanism) if a base type is not a well-typed term of type [Set],
     [Type], or [Prop]. *)
-let interp_signature_base_types (s : Constrexpr.constr_expr gen_signature) : signature =
-  let interp_one (c : Constrexpr.constr_expr) : EConstr.t =
-    let env = Global.env () in
-    let sigma = Evd.from_env env in
+let interp_signature_base_types (s : Constrexpr.constr_expr gen_signature) : signature m =
+  let interp_one (c : Constrexpr.constr_expr) : EConstr.t m =
+   fun env sigma ->
     let c, ustate = Constrintern.interp_type env sigma c in
     let sigma = Evd.merge_universe_context sigma ustate in
-    Evarutil.nf_evar sigma c
+    (sigma, Evarutil.nf_evar sigma c)
   in
-  { s with base_types = Array.map interp_one s.base_types }
+  let* new_base_types = List.monad_map interp_one @@ Array.to_list s.base_types in
+  ret { s with base_types = Array.of_list new_base_types }

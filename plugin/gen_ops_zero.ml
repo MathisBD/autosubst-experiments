@@ -7,21 +7,8 @@ module Make (P : sig
 end) =
 struct
   (**************************************************************************************)
-  (** *** Build the term inductive and related operations (renaming, substitution). *)
+  (** *** Build level zero operations (renaming, substitution). *)
   (**************************************************************************************)
-
-  let build_term () : Names.Ind.t m =
-    (* Constructor names and types. We add an extra constructor for variables. *)
-    let ctor_names = Names.Id.of_string_soft "Var" :: Array.to_list P.sign.ctor_names in
-    let ctor_types =
-      (fun ind -> ret @@ arrow (mkglob' C.nat) (EConstr.mkVar ind))
-      :: Array.to_list
-           (Array.map
-              (fun ty ind -> ret @@ ctor_ty_constr P.sign ty (EConstr.mkVar ind))
-              P.sign.ctor_types)
-    in
-    (* Declare the inductive. *)
-    declare_ind P.sign.sort EConstr.mkSet ctor_names ctor_types
 
   let rec rename_arg (rename : EConstr.t) (r : EConstr.t) (arg : EConstr.t) (ty : arg_ty)
       : EConstr.t =
@@ -151,12 +138,11 @@ end
 (** *** Put everything together. *)
 (**************************************************************************************)
 
-(** Generate the term inductive, along with renaming and substitution functions. *)
-let generate (s : signature) : ops_zero =
+(** Generate the renaming and substitution functions. *)
+let generate (sign : signature) (term : Names.Ind.t) : ops_zero =
   let module M = Make (struct
-    let sign = s
+    let sign = sign
   end) in
-  let term = monad_run @@ M.build_term () in
   let rename = def "rename" ~kind:Decls.Fixpoint @@ M.build_rename term in
   let subst = def "subst" @@ M.build_subst term in
   let srcomp = def "srcomp" @@ M.build_srcomp term subst rename in

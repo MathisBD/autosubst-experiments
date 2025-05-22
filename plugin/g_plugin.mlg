@@ -38,14 +38,11 @@ END
 
 VERNAC ARGUMENT EXTEND signature 
 | [ "{{" sort_decl(sort) ctor_decl_list(ctors) "}}" ] -> { 
-    (* We can validate a signature at parsing time. *)
+    (* We validate pre-signatures at parsing time. *)
     validate_psignature (CAst.make ~loc { sort ; ctors }) 
   }
 END
 
 VERNAC COMMAND EXTEND AutosubstGenerate CLASSIFIED AS SIDEFF
-| [ "Autosubst" "Generate" signature(s) ] -> { 
-    (* Now that we are executing the command, we can internalize the base types. *)
-    Main.generate (interp_signature_base_types s) 
-  }
+| [ "Autosubst" "Generate" signature(s) ] -> { Main.generate s }
 END

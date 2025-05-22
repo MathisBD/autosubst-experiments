@@ -1,57 +1,9 @@
 open Prelude
 open Signature
-
-(* Helper function to build a signature. *)
-(*let mk_sig (base : EConstr.t list) (ctors : (string * arg_ty list) list) : signature =
-  { sort = Names.Id.of_string_soft "term"
-  ; n_ctors = List.length ctors
-  ; base_types = Array.of_list @@ List.map (EConstr.to_constr Evd.empty) base
-  ; ctor_names = Array.of_list @@ List.map Names.Id.of_string_soft @@ List.map fst ctors
-  ; ctor_types = Array.of_list @@ List.map snd ctors
-  }
-
-(** A testing signature.*)
-let build_signature () : signature =
-  (*mk_sig
-    [ mkglob' Constants.string ]
-    [ ("App", [ AT_term; AT_term ]); ("Lam", [ AT_base 0; AT_bind AT_term ]) ]*)
-  let level = AT_base 0 in
-  let mode = AT_base 1 in
-  mk_sig
-    [ mkglob' (Constants.resolve "ghost_reflection.level")
-    ; mkglob' (Constants.resolve "ghost_reflection.mode")
-    ]
-    [ ("Sort", [ mode; level ])
-    ; ("Pi", [ level; level; mode; mode; AT_term; AT_bind AT_term ])
-    ; ("lam", [ mode; AT_term; AT_bind AT_term ])
-    ; ("app", [ AT_term; AT_term ])
-    ; ("Erased", [ AT_term ])
-    ; ("hide", [ AT_term ])
-    ; ("reveal", [ AT_term; AT_term; AT_term ])
-    ; ("Reveal", [ AT_term; AT_term ])
-    ; ("toRev", [ AT_term; AT_term; AT_term ])
-    ; ("fromRev", [ AT_term; AT_term; AT_term ])
-    ; ("gheq", [ AT_term; AT_term; AT_term ])
-    ; ("ghrefl", [ AT_term; AT_term ])
-    ; ("ghcast", [ AT_term; AT_term; AT_term; AT_term; AT_term; AT_term ])
-    ; ("tbool", [])
-    ; ("ttrue", [])
-    ; ("tfalse", [])
-    ; ("tif", [ mode; AT_term; AT_term; AT_term; AT_term ])
-    ; ("tnat", [])
-    ; ("tzero", [])
-    ; ("tsucc", [ AT_term ])
-    ; ("tnat_elim", [ mode; AT_term; AT_term; AT_term; AT_term ])
-    ; ("tvec", [ AT_term; AT_term ])
-    ; ("tvnil", [ AT_term ])
-    ; ("tvcons", [ AT_term; AT_term; AT_term ])
-    ; ("tvec_elim", [ mode; AT_term; AT_term; AT_term; AT_term; AT_term; AT_term ])
-    ; ("bot", [])
-    ; ("bot_elim", [ mode; AT_term; AT_term ])
-    ]*)
+module C = Constants
 
 (**************************************************************************************)
-(** *** Generating operations/lemmas. *)
+(** *** Saving the names of generated constants and lemmas. *)
 (**************************************************************************************)
 
 (** We keep track of the generated operations using the [Libobject] API. The first step is
@@ -72,10 +24,37 @@ let update_saved_ops : (signature * ops_all) option -> Libobject.obj =
     ; classify_function = (fun _ -> Keep)
     }
 
+(**************************************************************************************)
+(** *** Generating operations/lemmas. *)
+(**************************************************************************************)
+
+(** Build the inductive representing level zero terms. *)
+let build_term (sign : signature) : Names.Ind.t m =
+  (* Constructor names and types. We add an extra constructor for variables. *)
+  let ctor_names = Names.Id.of_string_soft "Var" :: Array.to_list sign.ctor_names in
+  let ctor_types =
+    (fun ind -> ret @@ arrow (mkglob' C.nat) (EConstr.mkVar ind))
+    :: Array.to_list
+         (Array.map
+            (fun ty ind -> ret @@ ctor_ty_constr sign ty (EConstr.mkVar ind))
+            sign.ctor_types)
+  in
+  (* Declare the inductive. *)
+  declare_ind sign.sort EConstr.mkSet ctor_names ctor_types
+
+(** Given a signature, generate the term inductive and internalize all base types. *)
+let generate_term (gen_sign : Constrexpr.constr_expr gen_signature) :
+    signature * Names.Ind.t =
+  monad_run
+  @@
+  let* sign = interp_signature_base_types gen_sign in
+  let* term = build_term sign in
+  ret (sign, term)
+
 (** Given a signature, generate all relevant definitions and lemmas (i.e. add them to the
     global environment), and return the names of the generated operations. *)
-let generate_operations (sign : signature) : ops_all =
-  let ops0 = Gen_ops_zero.generate sign in
+let generate_operations (sign : signature) (term : Names.Ind.t) : ops_all =
+  let ops0 = Gen_ops_zero.generate sign term in
   let ops1 = Gen_ops_one.generate sign ops0 in
   let re = Gen_ops_reify_eval.generate sign ops0 ops1 in
   let congr = Gen_ops_congr.generate sign ops0 in
@@ -89,10 +68,13 @@ let generate_operations (sign : signature) : ops_all =
   ; ops_pe = pe
   }
 
-(** Main entry point for the plugin: generate level zero terms, operations, and lemmas. *)
-let generate (sign : signature) =
+(** Main entry point for the plugin: generate the term inductive as well as level zero
+    terms, operations, and lemmas. *)
+let generate (gen_sign : Constrexpr.constr_expr gen_signature) =
+  (* Generate the term inductive. *)
+  let sign, term = generate_term gen_sign in
   (* Generate the operations. *)
-  let ops = generate_operations sign in
+  let ops = generate_operations sign term in
   (* Save the operations. *)
   Lib.add_leaf @@ update_saved_ops (Some (sign, ops))
 

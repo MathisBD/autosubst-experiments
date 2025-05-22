@@ -355,20 +355,24 @@ let declare_ind (name : Names.Id.t) (arity : EConstr.t) (ctor_names : Names.Id.t
   (* Typecheck to solve evars. *)
   let* _ = typecheck arity None in
   (* Build the constructor types. *)
-  let build_ctor_type (mk_ty : Names.Id.t -> EConstr.t m) : Constr.t m =
+  let build_ctor_type (mk_ty : Names.Id.t -> EConstr.t m) : EConstr.t m =
     with_local_decl (vass (Names.Id.to_string name) arity) @@ fun ind ->
     let* ty = mk_ty ind in
     let* _ = typecheck ty None in
     let* sigma = get_sigma in
-    ret @@ EConstr.to_constr sigma @@ EConstr.Vars.subst_var sigma ind ty
+    ret @@ EConstr.Vars.subst_var sigma ind ty
   in
   let* ctor_types = List.monad_map build_ctor_type ctor_types in
+  (* Minimize universes and get the universe context set.
+     Make sure to use the minimized evar map when using [EConstr.to_constr]. *)
+  let* sigma = get_sigma in
+  let sigma = Evd.minimize_universes sigma in
   (* Declare the inductive. *)
   let ind =
     { mind_entry_typename = name
-    ; mind_entry_arity = EConstr.to_constr Evd.empty arity
+    ; mind_entry_arity = EConstr.to_constr sigma arity
     ; mind_entry_consnames = ctor_names
-    ; mind_entry_lc = ctor_types
+    ; mind_entry_lc = List.map (EConstr.to_constr sigma) ctor_types
     }
   in
   let mind =
@@ -383,7 +387,7 @@ let declare_ind (name : Names.Id.t) (arity : EConstr.t) (ctor_names : Names.Id.t
   in
   let mind_name =
     DeclareInd.declare_mutual_inductive_with_eliminations mind
-      (Monomorphic_entry Univ.ContextSet.empty, UnivNames.empty_binders)
+      (Monomorphic_entry (Evd.universe_context_set sigma), UnivNames.empty_binders)
       []
   in
   ret (mind_name, 0)
