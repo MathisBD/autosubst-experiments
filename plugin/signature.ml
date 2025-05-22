@@ -15,15 +15,15 @@ open Prelude
 (** An argument type. *)
 type parg_ty_r =
   | PAT_base of Constr.t
-  | PAT_term of Names.lident
+  | PAT_sort of Names.lident
   | PAT_bind of Names.lident list * Names.lident
 
 and parg_ty = parg_ty_r CAst.t
 
-(** Declaration for a new sort of terms. *)
-type term_decl_r = TermDecl of Names.lident
+(** Declaration for a new sort. *)
+type sort_decl_r = SortDecl of Names.lident
 
-and term_decl = term_decl_r CAst.t
+and sort_decl = sort_decl_r CAst.t
 
 (** Declaration for a new constructor. *)
 type pctor_decl_r =
@@ -33,7 +33,7 @@ and pctor_decl = pctor_decl_r CAst.t
 
 (** A signature is a list of declarations. For now we require a single term declaration.
 *)
-type psignature_r = { term : term_decl; ctors : pctor_decl list }
+type psignature_r = { sort : sort_decl; ctors : pctor_decl list }
 
 and psignature = psignature_r CAst.t
 
@@ -80,15 +80,16 @@ let pp_psignature (fmt : formatter) (s : psignature) : unit =
 type arg_ty = AT_base of int | AT_term | AT_bind of arg_ty
 
 (** An abstract signature:
+    - [sort] is the name of the (unique) sort of terms.
+    - [base_types] contains the list of base types.
     - [n_ctors] is the number of _non-variable_ constructors.
-    - [ctor_names] contains the name of each constructor.
-    - [ctor_sig] contains the argument types of each constructor.
-
-    The length of [ctor_names] and [ctor_sig] should be equal to [n_ctors]. *)
+    - [ctor_names] (of length [n_ctors]) contains the name of each constructor.
+    - [ctor_sig] (of length [n_ctors]) contains the argument types of each constructor. *)
 type signature =
-  { n_ctors : int
+  { sort : Names.Id.t
   ; base_types : Constr.t array
-  ; ctor_names : string array
+  ; n_ctors : int
+  ; ctor_names : Names.Id.t array
   ; ctor_types : arg_ty list array
   }
 
@@ -109,10 +110,68 @@ let ctor_ty_constr (sign : signature) (tys : arg_ty list) (ind : EConstr.t) : EC
 (** *** Validating a pre-signature. *)
 (**************************************************************************************)
 
-let validate_arg_ty (term : term_decl) (ty : parg_ty) : arg_ty =
-  
+(** State we maintain while validating a pre-signature. *)
+type state =
+  { (* The (unique) sort. *)
+    sort : Names.lident
+  ; (* The list of base types, in order (i.e. most recent last). *)
+    base_types : Constr.t list
+  ; (* The list of declared constructors, in order (i.e. most recent last). *)
+    ctors : (Names.Id.t * arg_ty list) list
+  }
+
+(** The empty state, which we use when starting validation. *)
+let empty_state (sort : Names.lident) : state = { sort; base_types = []; ctors = [] }
+
+let validate_sort (st : state) (sort : Names.lident) : unit =
+  if not (Names.Id.equal sort.v st.sort.v)
+  then Log.error ?loc:sort.loc "Undeclared sort [%s]" (Names.Id.to_string sort.v)
+
+(** Validate an argument type. *)
+let validate_arg_ty (st : state) (ty : parg_ty) : arg_ty * state =
+  match ty.v with
+  | PAT_base c ->
+      let idx = List.length st.base_types in
+      (AT_base idx, { st with base_types = st.base_types @ [ c ] })
+  | PAT_sort sort ->
+      validate_sort st sort;
+      (AT_term, st)
+  | PAT_bind (ids, id) ->
+      List.iter (validate_sort st) ids;
+      (validate_sort st) id;
+      (List.fold_right (fun _ ty -> AT_bind ty) ids AT_term, st)
+
+let validate_ctor_name (st : state) (name : Names.lident) : unit =
+  if List.exists (fun (c, _) -> Names.Id.equal name.v c) st.ctors
+  then
+    Log.error ?loc:name.loc "Constructor [%s] is already declared"
+      (Names.Id.to_string name.v)
+
+(** Validate a constructor declaration. *)
+let validate_ctor_decl (st : state) (d : pctor_decl) : state =
+  let (CtorDecl d') = d.v in
+  validate_ctor_name st d'.name;
+  validate_sort st d'.ret_ty;
+  (* validate the argument types. *)
+  let rec loop (st : state) (ptys : parg_ty list) : arg_ty list * state =
+    match ptys with
+    | [] -> ([], st)
+    | pty :: ptys ->
+        let ty, st = validate_arg_ty st pty in
+        let tys, st = loop st ptys in
+        (ty :: tys, st)
+  in
+  let tys, st = loop st d'.arg_tys in
+  { st with ctors = st.ctors @ [ (d'.name.v, tys) ] }
 
 (** Validate a declaration. Raises an error (using Rocq's error reporting mechanism) if
     the pre-signature is not valid. *)
 let validate_psignature (s : psignature) : signature =
-
+  let (SortDecl sort) = s.v.sort.v in
+  let st = List.fold_left validate_ctor_decl (empty_state sort) s.v.ctors in
+  { sort = sort.v
+  ; n_ctors = List.length st.ctors
+  ; base_types = st.base_types |> Array.of_list
+  ; ctor_names = List.map fst st.ctors |> Array.of_list
+  ; ctor_types = List.map snd st.ctors |> Array.of_list
+  }

@@ -189,8 +189,8 @@ val declare_theorem :
   Decls.theorem_kind -> string -> EConstr.t -> unit Proofview.tactic -> Names.Constant.t m
 
 (** [declare_ind name arity ctor_names ctor_types] adds an inductive to the global
-    environment. It handles non-mutual inductives with no parameters, no indices, and not
-    universe polymorphic. It also generates the associated elimination & induction
+    environment. It handles non-mutual inductives with no parameters, no indices, and no
+    universe polymorphism. It also generates the associated elimination & induction
     principles.
     - [name] is the name of the inductive.
     - [ctor_names] contains the names of the constructors.
@@ -199,4 +199,8 @@ val declare_theorem :
 
     It returns the name of the newly created inductive. *)
 val declare_ind :
-  string -> EConstr.t -> string list -> (Names.Id.t -> EConstr.t m) list -> Names.Ind.t m
+     Names.Id.t
+  -> EConstr.t
+  -> Names.Id.t list
+  -> (Names.Id.t -> EConstr.t m) list
+  -> Names.Ind.t m

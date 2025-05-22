@@ -351,7 +351,7 @@ let generate (s : signature) (ops0 : ops_zero) : ops_congr =
   end) in
   let congr_ctors =
     Array.init s.n_ctors @@ fun i ->
-    let name = String.concat "_" [ "congr"; s.ctor_names.(i) ] in
+    let name = "congr_" ^ Names.Id.to_string s.ctor_names.(i) in
     lemma name (M.build_congr_ctor i) @@ M.prove_congr_ctor i
   in
   let congr_rename =

@@ -12,7 +12,7 @@ struct
 
   let build_term () : Names.Ind.t m =
     (* Constructor names and types. We add an extra constructor for variables. *)
-    let ctor_names = "Var" :: Array.to_list P.sign.ctor_names in
+    let ctor_names = Names.Id.of_string_soft "Var" :: Array.to_list P.sign.ctor_names in
     let ctor_types =
       (fun ind -> ret @@ arrow (mkglob' C.nat) (EConstr.mkVar ind))
       :: Array.to_list
@@ -21,7 +21,7 @@ struct
               P.sign.ctor_types)
     in
     (* Declare the inductive. *)
-    declare_ind "term" EConstr.mkSet ctor_names ctor_types
+    declare_ind P.sign.sort EConstr.mkSet ctor_names ctor_types
 
   let rec rename_arg (rename : EConstr.t) (r : EConstr.t) (arg : EConstr.t) (ty : arg_ty)
       : EConstr.t =

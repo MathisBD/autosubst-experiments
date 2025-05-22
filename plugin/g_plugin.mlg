@@ -24,14 +24,14 @@ VERNAC ARGUMENT EXTEND pctor_ty
 | [ identref(i) ] -> { ([], i) }
 | [ identref(i) "->" pctor_ty(cty) ] -> { 
     let (tys, rty) = cty in 
-    (CAst.map (fun _ -> PAT_term i) i :: tys, rty) 
+    (CAst.map (fun _ -> PAT_sort i) i :: tys, rty) 
   }
 | [ arg_ty(ty) "->" pctor_ty(cty) ] -> { let (tys, rty) = cty in (ty :: tys, rty) }
 END
 
-(** A declaration for a new term sort, e.g. "term : Type". *)
-VERNAC ARGUMENT EXTEND term_decl 
-| [ identref(name) ":" "Type" ] -> { CAst.make ~loc (TermDecl name) }
+(** A declaration for a new sort, e.g. "term : Type". *)
+VERNAC ARGUMENT EXTEND sort_decl 
+| [ identref(name) ":" "Type" ] -> { CAst.make ~loc (SortDecl name) }
 END
 
 (** A declaration for a new constructor, e.g. "app : term -> term -> term". *)
@@ -43,7 +43,9 @@ VERNAC ARGUMENT EXTEND ctor_decl
 END
 
 VERNAC ARGUMENT EXTEND signature 
-| [ "{{" term_decl(term) ctor_decl_list(ctors) "}}" ] -> { CAst.make ~loc { term ; ctors } }
+| [ "{{" sort_decl(sort) ctor_decl_list(ctors) "}}" ] -> { 
+    validate_psignature (CAst.make ~loc { sort ; ctors }) 
+  }
 END
 
 VERNAC COMMAND EXTEND AutosubstGenerate CLASSIFIED AS SIDEFF

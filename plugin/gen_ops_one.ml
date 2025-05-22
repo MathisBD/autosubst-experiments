@@ -14,12 +14,13 @@ struct
   (** Build the inductive [Inductive base := B0 | B1 | ...] which indexes base types. *)
   let build_base () : Names.Ind.t m =
     let names =
-      List.init (Array.length P.sign.base_types) @@ fun i -> "B" ^ string_of_int i
+      List.init (Array.length P.sign.base_types) @@ fun i ->
+      Names.Id.of_string_soft ("B" ^ string_of_int i)
     in
     let types =
       List.init (Array.length P.sign.base_types) @@ fun _ ind -> ret @@ EConstr.mkVar ind
     in
-    declare_ind "base" EConstr.mkSet names types
+    declare_ind (Names.Id.of_string_soft "base") EConstr.mkSet names types
 
   (** Build the function [eval_base : base -> Type]. *)
   let build_eval_base (base : Names.Ind.t) : EConstr.t m =
@@ -29,9 +30,12 @@ struct
   (** Build the inductive [Inductive ctor := CApp | CLam | ...] which indexes non-variable
       constructors. *)
   let build_ctor () : Names.Ind.t m =
-    let names = List.init P.sign.n_ctors @@ fun i -> "C" ^ P.sign.ctor_names.(i) in
+    let names =
+      List.init P.sign.n_ctors @@ fun i ->
+      Names.Id.of_string_soft ("C" ^ Names.Id.to_string P.sign.ctor_names.(i))
+    in
     let types = List.init P.sign.n_ctors @@ fun _ ind -> ret @@ EConstr.mkVar ind in
-    declare_ind "ctor" EConstr.mkSet names types
+    declare_ind (Names.Id.of_string_soft "ctor") EConstr.mkSet names types
 
   (** Helper function to make a Rocq list with elements [xs]. Each element must be of type
       [ty]. *)

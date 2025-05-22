@@ -3,9 +3,10 @@ open Signature
 
 (* Helper function to build a signature. *)
 let mk_sig (base : EConstr.t list) (ctors : (string * arg_ty list) list) : signature =
-  { n_ctors = List.length ctors
+  { sort = Names.Id.of_string_soft "term"
+  ; n_ctors = List.length ctors
   ; base_types = Array.of_list @@ List.map (EConstr.to_constr Evd.empty) base
-  ; ctor_names = Array.of_list @@ List.map fst ctors
+  ; ctor_names = Array.of_list @@ List.map Names.Id.of_string_soft @@ List.map fst ctors
   ; ctor_types = Array.of_list @@ List.map snd ctors
   }
 

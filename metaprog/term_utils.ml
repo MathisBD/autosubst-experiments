@@ -349,14 +349,14 @@ let declare_theorem (kind : Decls.theorem_kind) (name : string) (stmt : EConstr.
   | Names.GlobRef.ConstRef cname -> ret cname
   | _ -> failwith "declare_theorem: expected a [ConstRef]."
 
-let declare_ind (name : string) (arity : EConstr.t) (ctor_names : string list)
+let declare_ind (name : Names.Id.t) (arity : EConstr.t) (ctor_names : Names.Id.t list)
     (ctor_types : (Names.Id.t -> EConstr.t m) list) : Names.Ind.t m =
   let open Entries in
   (* Typecheck to solve evars. *)
   let* _ = typecheck arity None in
   (* Build the constructor types. *)
   let build_ctor_type (mk_ty : Names.Id.t -> EConstr.t m) : Constr.t m =
-    with_local_decl (vass name arity) @@ fun ind ->
+    with_local_decl (vass (Names.Id.to_string name) arity) @@ fun ind ->
     let* ty = mk_ty ind in
     let* _ = typecheck ty None in
     let* sigma = get_sigma in
@@ -365,9 +365,9 @@ let declare_ind (name : string) (arity : EConstr.t) (ctor_names : string list)
   let* ctor_types = List.monad_map build_ctor_type ctor_types in
   (* Declare the inductive. *)
   let ind =
-    { mind_entry_typename = Names.Id.of_string_soft name
+    { mind_entry_typename = name
     ; mind_entry_arity = EConstr.to_constr Evd.empty arity
-    ; mind_entry_consnames = List.map Names.Id.of_string_soft ctor_names
+    ; mind_entry_consnames = ctor_names
     ; mind_entry_lc = ctor_types
     }
   in

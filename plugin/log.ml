@@ -8,7 +8,8 @@
 let printf fmt = Format.ksprintf (fun res -> Feedback.msg_notice (Pp.str res)) fmt
 
 (** Same as [Log.printf] except it generates an error instead. *)
-let error fmt = Format.ksprintf (fun res -> CErrors.user_err (Pp.str res)) fmt
+let error ?(loc : Loc.t option) fmt =
+  Format.ksprintf (fun res -> CErrors.user_err ?loc (Pp.str res)) fmt
 
 (** Print an [EConstr.t] to a string. *)
 let show_econstr env sigma t : string =
