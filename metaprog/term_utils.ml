@@ -383,9 +383,13 @@ let declare_ind (name : Names.Id.t) (arity : EConstr.t) (ctor_names : Names.Id.t
     ; mind_entry_private = None
     }
   in
+  (* Don't forget to push the universe context set because [DeclareInd] does not do 
+     it for me. *)
+  let ctx_set = Evd.universe_context_set sigma in
+  Global.push_context_set ~strict:true ctx_set;
   let mind_name =
     DeclareInd.declare_mutual_inductive_with_eliminations mind
-      (Monomorphic_entry (Evd.universe_context_set sigma), UnivNames.empty_binders)
+      (Monomorphic_entry ctx_set, UnivNames.empty_binders)
       []
   in
   ret (mind_name, 0)

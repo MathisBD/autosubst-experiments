@@ -11,7 +11,7 @@ Autosubst Generate
   
   Sort : {{mode}} -> {{level}} -> term
   
-  (*Pi : {{level}} -> {{level}} -> {{mode}} -> {{mode}} -> term -> (bind term in term) -> term
+  Pi : {{level}} -> {{level}} -> {{mode}} -> {{mode}} -> term -> (bind term in term) -> term
   lam : {{mode}} -> term -> (bind term in term) -> term
   app : term -> term -> term
   
@@ -42,7 +42,7 @@ Autosubst Generate
   tvec_elim : {{mode}} -> term -> term -> term -> term -> term -> term -> term
   
   bot : term
-  bot_elim : {{mode}} -> term -> term -> term*)
+  bot_elim : {{mode}} -> term -> term -> term
 }}.
 
 (*********************************************************************************)

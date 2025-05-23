@@ -70,7 +70,7 @@ let generate_operations (sign : signature) (term : Names.Ind.t) : ops_all =
 
 (** Main entry point for the plugin: generate the term inductive as well as level zero
     terms, operations, and lemmas. *)
-let generate (gen_sign : Constrexpr.constr_expr gen_signature) =
+let generate (gen_sign : Constrexpr.constr_expr gen_signature) : unit =
   (* Generate the term inductive. *)
   let sign, term = generate_term gen_sign in
   (* Generate the operations. *)
