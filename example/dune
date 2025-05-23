@@ -1,4 +1,4 @@
 (coq.theory
- (name GhostTT)
+ (name Example)
  (package autosubst-experiments)
  (theories Prototype))
