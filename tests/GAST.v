@@ -1,7 +1,4 @@
-From Coq Require Import Lia String.
-From Ltac2 Require Import RedFlags Printf.
-From Prototype Require Export Prelude.
-From Prototype Require Import RASimpl.
+From Prototype Require Export All.
 From GhostTT Require Import BasicAST. 
 
 (*********************************************************************************)
@@ -18,7 +15,7 @@ Autosubst Generate
   lam : {{mode}} -> term -> (bind term in term) -> term
   app : term -> term -> term
   
-  (*Erased : term -> term
+  Erased : term -> term
   hide : term -> term
   reveal : term -> term -> term -> term
   Reveal : term -> term -> term
@@ -45,7 +42,7 @@ Autosubst Generate
   tvec_elim : {{mode}} -> term -> term -> term -> term -> term -> term -> term
   
   bot : term
-  bot_elim : {{mode}} -> term -> term -> term*)
+  bot_elim : {{mode}} -> term -> term -> term
 }}.
 
 (*********************************************************************************)
@@ -67,16 +64,14 @@ Proof. intros H. now apply term_simplification. Qed.
 Axiom F : subst -> term.
 
 (** Trigger [rasimpl] on a substitution occuring inside [F _]. *)
-Lemma autosubst_simpl_F (s res : subst) :
+(*Lemma autosubst_simpl_F (s res : subst) :
   SubstSimplification s res -> F s = F res.
 Proof. Admitted.
-#[export] Hint Rewrite -> autosubst_simpl_F : asimpl_outermost.
+#[export] Hint Rewrite -> autosubst_simpl_F : asimpl_outermost.*)
 
 Axiom r : ren.
 Axiom s : subst.
 Axiom t : term.
-Axiom i : nat.
-Axiom f : term -> term.
 Lemma test : substitute (scomp s (scons (substitute (rscomp r s) t) s)) t = t.
-Proof. rasimpl_topdown.
+Proof. rasimpl.
 Admitted.
