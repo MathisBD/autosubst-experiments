@@ -68,14 +68,10 @@ Ltac2 @external reify_subst : constr -> constr * constr := "autosubst-experiment
 Ltac2 @external eval_term : constr -> constr * constr := "autosubst-experiments.plugin" "eval_term".
 Ltac2 @external eval_subst : constr -> constr * constr := "autosubst-experiments.plugin" "eval_subst".
 
-Module Test. 
-
 Autosubst Generate 
 {{
   term : Type
-  app : {{nat}} -> term -> term -> term
 }}.
-
 
 (*********************************************************************************)
 (** *** [rasimpl]. *)

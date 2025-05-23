@@ -25,7 +25,11 @@ struct
   (** Build the function [eval_base : base -> Type]. *)
   let build_eval_base (base : Names.Ind.t) : EConstr.t m =
     lambda "b" (mkind base) @@ fun b ->
-    case (EConstr.mkVar b) @@ fun i _ -> ret P.sign.base_types.(i)
+    (* If there are no base types, Rocq can't infer the return type of the pattern match. *)
+    let return _ _ : EConstr.t m =
+      if Array.length P.sign.base_types = 0 then ret EConstr.mkSet else fresh_evar None
+    in
+    case (EConstr.mkVar b) ~return @@ fun i _ -> ret P.sign.base_types.(i)
 
   (** Build the inductive [Inductive ctor := CApp | CLam | ...] which indexes non-variable
       constructors. *)
@@ -53,7 +57,11 @@ struct
       | AT_bind ty -> apps (mkglob' C.at_bind) [| mkind base; on_arg_ty ty |]
     in
     lambda "c" (mkind ctor) @@ fun c ->
-    case (EConstr.mkVar c) @@ fun i _ ->
+    (* When [ctor] is empty, Rocq can't infer the return type of the pattern match. *)
+    let return _ _ : EConstr.t m =
+      ret @@ app (mkglob' C.list) @@ app (mkglob' C.arg_ty) @@ mkind base
+    in
+    case (EConstr.mkVar c) ~return @@ fun i _ ->
     ret
     @@ mklist (app (mkglob' C.arg_ty) (mkind base))
     @@ List.map on_arg_ty P.sign.ctor_types.(i)
