@@ -34,7 +34,7 @@ and [ident] stands for valid Rocq identifiers.
 
 [arg_type] ::= [ident]                      (* Just a sort. )
              | ( bind [ident]+ in [ident] ) (* Bind a list of sorts (from left to right) in a sort. *)
-             | {{ [constr] }}               (* [constr] is any Rocq constant of type [Set], [Prop], or [Type].
-                                               Universe polymorphic constants will be instantiated with
+             | {{ [constr] }}               (* [constr] is any Rocq term of type [Set], [Prop], or [Type].
+                                               Universe polymorphic terms will be instantiated with
                                                new monomorphic (global) universes. *)
 ```
