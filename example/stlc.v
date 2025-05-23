@@ -23,6 +23,14 @@ Print substitute.
 (** *** Triggers. *)
 (*********************************************************************************)
 
+(** At the moment you need to specify when [rasimpl] should trrigger  
+    (hopefully we can improve this in the future). 
+    
+    This amounts to adding rewrite hints 
+    in databases [asimpl_topdown] or [asimpl_outermost] depending on the rewrite strategy
+    you want. The rewrite lemmas should have hypotheses of the form [TermSimplification _ _]
+    or [SubstSimplification _ _]. *)
+
 (** Trigger [rasimpl] on [rename _ _]. *)
 Lemma autosubst_simpl_term_rename (r : ren) (t res : term) :
   TermSimplification (rename r t) res -> rename r t = res.
@@ -38,5 +46,4 @@ Proof. intros H. now apply term_simplification. Qed.
 (** An example. *)
 Axiom t : term.
 Lemma test : substitute (scomp sshift sid) (lam tbase (rename (rcons 0 rshift) t)) = t.
-Proof. rasimpl.
-Admitted.
+Proof. rasimpl. Admitted.
