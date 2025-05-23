@@ -11,7 +11,7 @@ Inductive type :=
 Autosubst Generate 
 {{
   term : Type
-  lam : {{ type }} -> ( bind term in term) -> term 
+  lam : {{ type }} -> (bind term in term) -> term 
   app : term -> term -> term
 }}.
 
