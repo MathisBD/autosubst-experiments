@@ -8,8 +8,7 @@
   coq-core.tactics
   coq-core.plugins.ltac2
   coq-equations.plugin
-  autosubst-experiments.metaprog
-  angstrom))
+  autosubst-experiments.metaprog))
 
 (coq.pp
  (modules g_plugin))

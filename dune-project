@@ -16,5 +16,4 @@
  (depends
   (coq
    (= 8.20.0))
-  coq-equations
-  angstrom))
+  coq-equations))
