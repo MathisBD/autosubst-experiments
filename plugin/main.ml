@@ -79,7 +79,7 @@ let generate (gen_sign : Constrexpr.constr_expr gen_signature) =
   Lib.add_leaf @@ update_saved_ops (Some (sign, ops))
 
 (**************************************************************************************)
-(** *** Expose Ltac2 reification and evaluation tactics. *)
+(** *** Expose Ltac2 simplification tactics. *)
 (**************************************************************************************)
 
 (** [define_ltac2 name body] declares an Ltac2 tactic named [name], with type
@@ -89,7 +89,8 @@ let generate (gen_sign : Constrexpr.constr_expr gen_signature) =
     [Ltac2 @external my_tac : constr -> constr * constr := "autosubst-experiments.plugin"
      "name"] *)
 let define_ltac2 (name : string)
-    (body : signature -> ops_all -> EConstr.t -> (EConstr.t * EConstr.t) m) : unit =
+    (body : signature -> ops_all -> EConstr.t -> (EConstr.t * EConstr.t) Proofview.tactic)
+    : unit =
   let open Ltac2_plugin in
   let open Tac2externals in
   let open Tac2ffi in
@@ -101,7 +102,7 @@ let define_ltac2 (name : string)
       | None -> Log.error "define_ltac2: must generate operations beforehand."
       | Some x -> x
     in
-    monad_run_tactic @@ body sign ops x
+    body sign ops x
   in
   define
     Tac2expr.{ mltac_plugin = "autosubst-experiments.plugin"; mltac_tactic = name }
@@ -109,7 +110,5 @@ let define_ltac2 (name : string)
     ocaml_tactic
 
 let () =
-  define_ltac2 "reify_term" Reification.reify_term;
-  define_ltac2 "reify_subst" Reification.reify_subst;
-  define_ltac2 "eval_term" Evaluation.eval_term;
-  define_ltac2 "eval_subst" Evaluation.eval_subst
+  define_ltac2 "simpl_term_zero" Simplification.simpl_term_zero;
+  define_ltac2 "simpl_subst_zero" Simplification.simpl_subst_zero

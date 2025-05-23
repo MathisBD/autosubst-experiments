@@ -90,6 +90,15 @@ up_ren r := rcons 0 (rcomp r rshift).
 Definition point_eq {A B} : relation (A -> B) := pointwise_relation _ eq.
 Notation "f =₁ g" := (point_eq f g) (at level 75).
 
+Lemma peq_refl {A B} {x : A -> B} : x =₁ x.
+Proof. reflexivity. Qed.
+
+Lemma peq_sym {A B} {x y : A -> B} : x =₁ y -> y =₁ x.
+Proof. now intros ->. Qed.
+
+Lemma peq_trans {A B} {x y z : A -> B} : x =₁ y -> y =₁ z -> x =₁ z.
+Proof. now intros -> ->. Qed.
+
 Lemma congr_rcons i {r r'} :
   r =₁ r' -> rcons i r =₁ rcons i r'.
 Proof. intros H [|i'] ; [reflexivity|]. now simp rcons. Qed.

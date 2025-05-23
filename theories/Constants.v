@@ -24,9 +24,13 @@ Register string as autosubst.string.type.
 
 Register eq as autosubst.eq.type.
 Register eq_refl as autosubst.eq.eq_refl.
+Register eq_sym as autosubst.eq.eq_sym.
+Register eq_trans as autosubst.eq.eq_trans.
+
 Register point_eq as autosubst.point_eq.type.
-Register reflexivity as autosubst.reflexivity.
-Register transitivity as autosubst.transitivity.
+Register peq_refl as autosubst.point_eq.peq_refl.
+Register peq_sym as autosubst.point_eq.peq_sym.
+Register peq_trans as autosubst.point_eq.peq_trans.
 
 Register PeanoNat.Nat.measure_induction as autosubst.measure_induction.
 

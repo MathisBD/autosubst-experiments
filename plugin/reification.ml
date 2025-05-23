@@ -154,12 +154,12 @@ struct
     in
     (* Branch for [rename ?r ?t1]. *)
     let rename_branch (r, t1) =
-      let* p_r = apps_ev (mkglob' C.reflexivity) 3 [| r |] in
+      let* p_r = apps_ev (mkglob' C.peq_refl) 2 [| r |] in
       let* t1', p_t1 = reify_term t1 in
       let t' = apps (mkglob' C.O.rename) [| mkconst P.ops1.sign; kt P.ops1; r; t1' |] in
       let p1 = apps (mkconst P.pe.eval_rename) [| r; t1' |] in
       let* p2 = apps_ev (mkconst P.congr.congr_rename) 4 [| p_r; p_t1 |] in
-      let* p = apps_ev (mkglob' C.transitivity) 6 [| p1; p2 |] in
+      let* p = apps_ev (mkglob' C.eq_trans) 4 [| p1; p2 |] in
       ret (t', p)
     in
     (* Branch for [substitute ?s ?t1]. *)
@@ -171,7 +171,7 @@ struct
       in
       let p1 = apps (mkconst P.pe.eval_substitute) [| s'; t1' |] in
       let* p2 = apps_ev (mkconst P.congr.congr_substitute) 4 [| p_s; p_t1 |] in
-      let* p = apps_ev (mkglob' C.transitivity) 6 [| p1; p2 |] in
+      let* p = apps_ev (mkglob' C.eq_trans) 4 [| p1; p2 |] in
       ret (t', p)
     in
     (* Default branch. *)
@@ -193,13 +193,13 @@ struct
     (* Match [sid]. *)
     let sid_branch () =
       let s' = app (mkglob' C.O.sid) (mkconst P.ops1.sign) in
-      let* p = apps_ev (mkglob' C.reflexivity) 3 [| s |] in
+      let* p = apps_ev (mkglob' C.peq_refl) 2 [| s |] in
       ret (s', p)
     in
     (* Match [sshift]. *)
     let sshift_branch () =
       let s' = app (mkglob' C.O.sshift) (mkconst P.ops1.sign) in
-      let* p = apps_ev (mkglob' C.reflexivity) 3 [| s |] in
+      let* p = apps_ev (mkglob' C.peq_refl) 2 [| s |] in
       ret (s', p)
     in
     (* Match [scons ?t ?s1]. *)
@@ -209,7 +209,7 @@ struct
       let s' = apps (mkglob' C.O.scons) [| mkconst P.ops1.sign; t'; s1' |] in
       let p1 = apps (mkconst P.pe.seval_scons) [| t'; s1' |] in
       let* p2 = apps_ev (mkconst P.congr.congr_scons) 4 [| p_t; p_s1 |] in
-      let* p = apps_ev (mkglob' C.transitivity) 6 [| p1; p2 |] in
+      let* p = apps_ev (mkglob' C.peq_trans) 5 [| p1; p2 |] in
       ret (s', p)
     in
     (* Match [scomp ?s1 ?s2]. *)
@@ -219,27 +219,27 @@ struct
       let s' = apps (mkglob' C.O.scomp) [| mkconst P.ops1.sign; s1'; s2' |] in
       let p1 = apps (mkconst P.pe.seval_scomp) [| s1'; s2' |] in
       let* p2 = apps_ev (mkconst P.congr.congr_scomp) 4 [| p_s1; p_s2 |] in
-      let* p = apps_ev (mkglob' C.transitivity) 6 [| p1; p2 |] in
+      let* p = apps_ev (mkglob' C.peq_trans) 5 [| p1; p2 |] in
       ret (s', p)
     in
     (* Match [rscomp ?r ?s2]. *)
     let rscomp_branch (r, s2) =
-      let* p_r = apps_ev (mkglob' C.reflexivity) 3 [| r |] in
+      let* p_r = apps_ev (mkglob' C.peq_refl) 2 [| r |] in
       let* s2', p_s2 = reify_subst s2 in
       let s' = apps (mkglob' C.O.rscomp) [| mkconst P.ops1.sign; r; s2' |] in
       let p1 = apps (mkconst P.pe.seval_rscomp) [| r; s2' |] in
       let* p2 = apps_ev (mkconst P.congr.congr_rscomp) 4 [| p_r; p_s2 |] in
-      let* p = apps_ev (mkglob' C.transitivity) 6 [| p1; p2 |] in
+      let* p = apps_ev (mkglob' C.peq_trans) 5 [| p1; p2 |] in
       ret (s', p)
     in
     (* Match [srcomp ?s1 ?r]. *)
     let srcomp_branch (s1, r) =
       let* s1', p_s1 = reify_subst s1 in
-      let* p_r = apps_ev (mkglob' C.reflexivity) 3 [| r |] in
+      let* p_r = apps_ev (mkglob' C.peq_refl) 2 [| r |] in
       let s' = apps (mkglob' C.O.srcomp) [| mkconst P.ops1.sign; s1'; r |] in
       let p1 = apps (mkconst P.pe.seval_srcomp) [| s1'; r |] in
       let* p2 = apps_ev (mkconst P.congr.congr_srcomp) 4 [| p_s1; p_r |] in
-      let* p = apps_ev (mkglob' C.transitivity) 6 [| p1; p2 |] in
+      let* p = apps_ev (mkglob' C.peq_trans) 5 [| p1; p2 |] in
       ret (s', p)
     in
     (* Default branch. *)

@@ -1,6 +1,7 @@
 From Prototype Require Import Prelude Sig Constants.
 From Prototype Require LevelOne LevelTwo LevelTwoClean LevelTwoSimp.
 From Ltac2 Require Import RedFlags Printf.
+From Ltac2 Require Ltac2.
 
 Module O := LevelOne.
 Module T := LevelTwo.
@@ -33,12 +34,12 @@ Ltac2 simpl_term_one (sig : constr) (t1 : constr) : constr * constr :=
   (* Eval Level 2 -> Level 1. *)
   let t1' := Std.eval_cbn (red_flags_eval ()) constr:(T.eeval $env $t2'') in
   (* [eq1 : t1 = t1']. *)
-  let eq1 := constr:(transitivity
+  let eq1 := constr:(eq_trans
     (Simp.ered_sound $env _ _ (Simp.esimp_red $t2))
     (Clean.ered_sound $env _ _ (Clean.eclean_red $t2'))) 
   in
   (t1', eq1).
-  
+
 (** Simplify a level one substitution. Returns [(s1', eq)] where [eq : s1 =₁ s1'].*)
 Ltac2 simpl_subst_one (sig : constr) (s1 : constr) : constr * constr :=
   (* Reify Level 1 -> Level 2. *)
@@ -51,7 +52,7 @@ Ltac2 simpl_subst_one (sig : constr) (s1 : constr) : constr * constr :=
   (* Eval Level 2 -> Level 1. *)
   let s1' := Std.eval_cbv (red_flags_eval ()) constr:(T.seval $env $s2'') in
   (* [eq1 : s1 =₁ s1']. *)
-  let eq1 := constr:(transitivity
+  let eq1 := constr:(peq_trans
     (Simp.sred_sound $env _ _ (Simp.ssimp_red $s2))
     (Clean.sred_sound $env _ _ (Clean.sclean_red $s2'))) 
   in
@@ -63,15 +64,8 @@ Ltac2 simpl_subst_one (sig : constr) (s1 : constr) : constr * constr :=
 
 Declare ML Module "autosubst-experiments.plugin".
 
-Ltac2 @external reify_term : constr -> constr * constr := "autosubst-experiments.plugin" "reify_term".
-Ltac2 @external reify_subst : constr -> constr * constr := "autosubst-experiments.plugin" "reify_subst".
-Ltac2 @external eval_term : constr -> constr * constr := "autosubst-experiments.plugin" "eval_term".
-Ltac2 @external eval_subst : constr -> constr * constr := "autosubst-experiments.plugin" "eval_subst".
-
-Autosubst Generate 
-{{
-  term : Type
-}}.
+Ltac2 @external simpl_term_zero : constr -> constr * constr := "autosubst-experiments.plugin" "simpl_term_zero".
+Ltac2 @external simpl_subst_zero : constr -> constr * constr := "autosubst-experiments.plugin" "simpl_subst_zero".
 
 (*********************************************************************************)
 (** *** [rasimpl]. *)
@@ -92,3 +86,30 @@ Class TermSimplification {T} (x y : T) :=
 
 Class SubstSimplification {T} (x y : nat -> T) :=
   MkSubstSimplification { subst_simplification : x =₁ y }.
+
+(** Helper function for [solve_simplification] which might leave unsolved 
+    typeclass instances as shelved goals. *)
+Ltac2 solve_simplification_aux () :=
+  lazy_match! Control.goal () with 
+  | TermSimplification ?t0 _ => 
+    let (t0', eq0) := simpl_term_zero t0 in
+    exact (MkTermSimplification _ $t0 $t0' $eq0)
+  | SubstSimplification ?s0 _ =>
+    let (s0', eq0) := simpl_subst_zero s0 in
+    exact (MkSubstSimplification _ $s0 $s0' $eq0)
+  end.
+
+(** Solve a goal of the form [TermSimplification ?t _] or [SubstSimplification ?s _]. *)
+Ltac solve_simplification := 
+  ltac2:(solve_simplification_aux ()).
+
+Ltac rasimpl_topdown := 
+  (rewrite_strat (topdown (hints asimpl_topdown))) ; [| solve_simplification ..].
+
+Ltac rasimpl_outermost := 
+  (rewrite_strat (outermost (hints asimpl_outermost))) ; [| solve_simplification ..].
+
+(** Main simplification tactic. *)
+Ltac rasimpl := 
+  repeat rasimpl_topdown ;
+  repeat rasimpl_outermost.
