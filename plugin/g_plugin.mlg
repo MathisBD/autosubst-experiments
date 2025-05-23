@@ -16,7 +16,8 @@ END
 (** The type of a constructor, e.g. "ty -> (bind term in term) -> term". *)
 VERNAC ARGUMENT EXTEND pctor_ty
 | [ identref(i) ] -> { ([], i) }
-| [ identref(i) "->" pctor_ty(cty) ] -> { 
+| [ identref(i) "->" pctor_ty(cty) ] -> 
+  { 
     let (tys, rty) = cty in 
     (CAst.map (fun _ -> PAT_sort i) i :: tys, rty) 
   }
@@ -25,19 +26,28 @@ END
 
 (** A declaration for a new sort, e.g. "term : Type". *)
 VERNAC ARGUMENT EXTEND sort_decl 
-| [ identref(name) ":" "Type" ] -> { CAst.make ~loc (SortDecl name) }
+| [ identref(sort) "(" identref(var_ctor) ")" ":" "Type" ] -> 
+  { 
+    CAst.make ~loc (SortDecl { sort ; var_ctor = Some var_ctor }) 
+  }
+| [ identref(sort) ":" "Type" ] -> 
+  { 
+    CAst.make ~loc (SortDecl { sort ; var_ctor = None }) 
+  }
 END
 
 (** A declaration for a new constructor, e.g. "app : term -> term -> term". *)
 VERNAC ARGUMENT EXTEND ctor_decl
-| [ identref(name) ":" pctor_ty(cty) ] -> { 
+| [ identref(name) ":" pctor_ty(cty) ] -> 
+  { 
     let (arg_tys, ret_ty) = cty in 
     CAst.make ~loc (CtorDecl { name ; arg_tys ; ret_ty }) 
   }
 END
 
 VERNAC ARGUMENT EXTEND signature 
-| [ "{{" sort_decl(sort) ctor_decl_list(ctors) "}}" ] -> { 
+| [ "{{" sort_decl(sort) ctor_decl_list(ctors) "}}" ] -> 
+  { 
     (* We validate pre-signatures at parsing time. *)
     validate_psignature (CAst.make ~loc { sort ; ctors }) 
   }

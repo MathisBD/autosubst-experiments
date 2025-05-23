@@ -20,8 +20,9 @@ type parg_ty_r =
 
 and parg_ty = parg_ty_r CAst.t
 
-(** Declaration for a new sort. *)
-type sort_decl_r = SortDecl of Names.lident
+(** Declaration for a new sort. [var_ctor] is the name of the variable constructor, if
+    provided by the user. *)
+type sort_decl_r = SortDecl of { sort : Names.lident; var_ctor : Names.lident option }
 
 and sort_decl = sort_decl_r CAst.t
 
@@ -46,6 +47,7 @@ type arg_ty = AT_base of int | AT_term | AT_bind of arg_ty
 
 (** An abstract signature:
     - [sort] is the name of the (unique) sort of terms.
+    - [var_ctor] is the name of the variable constructor.
     - [base_types] contains the list of base types.
     - [n_ctors] is the number of _non-variable_ constructors.
     - [ctor_names] (of length [n_ctors]) contains the name of each constructor.
@@ -55,7 +57,8 @@ type arg_ty = AT_base of int | AT_term | AT_bind of arg_ty
     parsing, ['constr] is [Constrexpr.constr_expr] but once we have access to a global
     environment we switch to [EConstr.t]. *)
 type 'constr gen_signature =
-  { sort : Names.Id.t
+  { sort_name : Names.Id.t
+  ; var_ctor_name : Names.Id.t
   ; base_types : 'constr array
   ; n_ctors : int
   ; ctor_names : Names.Id.t array
@@ -94,14 +97,13 @@ let ctor_ty_constr (sign : signature) (tys : arg_ty list) (ind : EConstr.t) : EC
 type state =
   { (* The (unique) sort. *)
     sort : Names.lident
-  ; (* The list of base types in order (i.e. most recent last). *)
-    base_types : Constrexpr.constr_expr list
+  ; (* The name of the variable constructor. *)
+    var_ctor : Names.lident
   ; (* The list of declared constructors in order (i.e. most recent last). *)
     ctors : (Names.Id.t * arg_ty list) list
+  ; (* The list of base types in order (i.e. most recent last). *)
+    base_types : Constrexpr.constr_expr list
   }
-
-(** The empty state, which we use when starting validation. *)
-let empty_state (sort : Names.lident) : state = { sort; base_types = []; ctors = [] }
 
 let validate_sort (st : state) (sort : Names.lident) : unit =
   if not (Names.Id.equal sort.v st.sort.v)
@@ -126,6 +128,12 @@ let validate_arg_ty (st : state) (ty : parg_ty) : arg_ty * state =
       (List.fold_right (fun _ ty -> AT_bind ty) ids AT_term, st)
 
 let validate_ctor_name (st : state) (name : Names.lident) : unit =
+  if Names.Id.equal name.v st.var_ctor.v
+  then
+    Log.error ?loc:name.loc
+      "Constructor %s is already declared (it is the variable constructor for sort %s)."
+      (Names.Id.to_string name.v)
+      (Names.Id.to_string st.sort.v);
   if List.exists (fun (c, _) -> Names.Id.equal name.v c) st.ctors
   then
     Log.error ?loc:name.loc "Constructor %s is already declared."
@@ -151,9 +159,18 @@ let validate_ctor_decl (st : state) (d : pctor_decl) : state =
 (** Validate a pre-signature. Raises an error (using Rocq's error reporting mechanism) if
     the pre-signature is not valid. *)
 let validate_psignature (s : psignature) : Constrexpr.constr_expr gen_signature =
-  let (SortDecl sort) = s.v.sort.v in
-  let st = List.fold_left validate_ctor_decl (empty_state sort) s.v.ctors in
-  { sort = sort.v
+  let (SortDecl sort_decl) = s.v.sort.v in
+  (* Choose a name for the variable constructor. *)
+  let var_ctor =
+    Option.default (CAst.make @@ Names.Id.of_string_soft "Var") sort_decl.var_ctor
+  in
+  (* Build the initial state. *)
+  let st = { sort = sort_decl.sort; var_ctor; base_types = []; ctors = [] } in
+  (* Validate each constructor declaration. *)
+  let st = List.fold_left validate_ctor_decl st s.v.ctors in
+  (* Build the signature. *)
+  { sort_name = sort_decl.sort.v
+  ; var_ctor_name = var_ctor.v
   ; n_ctors = List.length st.ctors
   ; base_types = st.base_types |> Array.of_list
   ; ctor_names = List.map fst st.ctors |> Array.of_list

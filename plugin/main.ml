@@ -31,7 +31,7 @@ let update_saved_ops : (signature * ops_all) option -> Libobject.obj =
 (** Build the inductive representing level zero terms. *)
 let build_term (sign : signature) : Names.Ind.t m =
   (* Constructor names and types. We add an extra constructor for variables. *)
-  let ctor_names = Names.Id.of_string_soft "Var" :: Array.to_list sign.ctor_names in
+  let ctor_names = sign.var_ctor_name :: Array.to_list sign.ctor_names in
   let ctor_types =
     (fun ind -> ret @@ arrow (mkglob' C.nat) (EConstr.mkVar ind))
     :: Array.to_list
@@ -40,7 +40,7 @@ let build_term (sign : signature) : Names.Ind.t m =
             sign.ctor_types)
   in
   (* Declare the inductive. *)
-  declare_ind sign.sort EConstr.mkSet ctor_names ctor_types
+  declare_ind sign.sort_name EConstr.mkSet ctor_names ctor_types
 
 (** Given a signature, generate the term inductive and internalize all base types. *)
 let generate_term (gen_sign : Constrexpr.constr_expr gen_signature) :
