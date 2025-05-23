@@ -176,7 +176,7 @@ val case :
     It returns the name of the newly created constant. *)
 val declare_def :
      Decls.definition_object_kind
-  -> string
+  -> Names.Id.t
   -> ?ty:EConstr.t
   -> EConstr.t
   -> Names.Constant.t m
@@ -186,7 +186,11 @@ val declare_def :
 
     It returns the name of the newly created constant. *)
 val declare_theorem :
-  Decls.theorem_kind -> string -> EConstr.t -> unit Proofview.tactic -> Names.Constant.t m
+     Decls.theorem_kind
+  -> Names.Id.t
+  -> EConstr.t
+  -> unit Proofview.tactic
+  -> Names.Constant.t m
 
 (** [declare_ind name arity ctor_names ctor_types] adds an inductive to the global
     environment. It handles non-mutual inductives with no parameters, no indices, and no

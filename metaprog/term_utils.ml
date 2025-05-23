@@ -288,7 +288,7 @@ let case (scrutinee : EConstr.t)
 (** *** Declaring definitions/indutives. *)
 (**************************************************************************************)
 
-let declare_def (kind : Decls.definition_object_kind) (name : string)
+let declare_def (kind : Decls.definition_object_kind) (name : Names.Id.t)
     ?(ty : EConstr.t option) (body : EConstr.t) : Names.Constant.t m =
   (* Typecheck to resolve evars. *)
   let* _ = typecheck body None in
@@ -304,7 +304,7 @@ let declare_def (kind : Decls.definition_object_kind) (name : string)
   let* sigma = get_sigma in
   let ref =
     Declare.declare_definition ~info
-      ~cinfo:(Declare.CInfo.make ~name:(Names.Id.of_string_soft name) ~typ:ty ())
+      ~cinfo:(Declare.CInfo.make ~name ~typ:ty ())
       ~opaque:false ~body sigma
   in
   (* Check the returned global reference is indeed a constant name. *)
@@ -316,7 +316,7 @@ let declare_def (kind : Decls.definition_object_kind) (name : string)
    where not handled properly. Instead I now use the API from [Proof]: this allows 
    me to get a hold on the final proof term, which I can manually typecheck to gather 
    universe constraints and solve any remaining evars using typing information. *)
-let declare_theorem (kind : Decls.theorem_kind) (name : string) (stmt : EConstr.t)
+let declare_theorem (kind : Decls.theorem_kind) (name : Names.Id.t) (stmt : EConstr.t)
     (tac : unit Proofview.tactic) : Names.Constant.t m =
   (* Typecheck to solve evars. *)
   let* _ = typecheck stmt None in
@@ -338,9 +338,7 @@ let declare_theorem (kind : Decls.theorem_kind) (name : string) (stmt : EConstr.
     Declare.Info.make ~kind:(Decls.IsProof kind)
       ~scope:(Locality.Global Locality.ImportDefaultBehavior) ()
   in
-  let cinfo =
-    Declare.CInfo.make ~name:(Names.Id.of_string_soft name) ~typ:(Some stmt) ()
-  in
+  let cinfo = Declare.CInfo.make ~name ~typ:(Some stmt) () in
   (* Declare the lemma. *)
   let* sigma = get_sigma in
   let ref = Declare.declare_definition ~info ~cinfo ~opaque:true ~body sigma in

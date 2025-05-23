@@ -136,20 +136,41 @@ let is_glob (env : Environ.env) (sigma : Evd.evar_map) (g : Names.GlobRef.t)
   | VarRef v, Var v' when Names.Id.equal v v' -> true
   | _ -> false
 
-(** Helper function to declare a definition. *)
-let def (name : string) ?(kind = Decls.Definition) (mk_body : EConstr.t m) :
-    Names.Constant.t =
+(** [fresh_global_id base] computes a fresh identifier [id] from [base] such that [id] can
+    be declared as a new global constants in the current module. *)
+let fresh_global_id (base : Names.Id.t) : Names.Id.t m =
+ fun env sigma ->
+  let id =
+    Namegen.next_ident_away_from base (fun id' -> Nametab.exists_cci @@ Lib.make_path id')
+  in
+  (sigma, id)
+
+(** Helper function to declare a definition. If [refresh] is [true], it will pick a fresh
+    name to avoid clashing with previously defined constants. *)
+let def (name : string) ?(refresh = false) ?(kind = Decls.Definition)
+    (mk_body : EConstr.t m) : Names.Constant.t =
   monad_run
     begin
+      let* name =
+        if refresh
+        then fresh_global_id @@ Names.Id.of_string_soft name
+        else ret @@ Names.Id.of_string_soft name
+      in
       let* body = mk_body in
       declare_def kind name body
     end
 
-(** Helper function to prove a lemma using a tactic. *)
-let lemma (name : string) (mk_stmt : EConstr.t m) (tac : unit Proofview.tactic) :
-    Names.Constant.t =
+(** Helper function to prove a lemma using a tactic. If [refresh] is [true], it will pick
+    a fresh name to avoid clashing with previously defined constants. *)
+let lemma (name : string) ?(refresh = false) (mk_stmt : EConstr.t m)
+    (tac : unit Proofview.tactic) : Names.Constant.t =
   monad_run
     begin
+      let* name =
+        if refresh
+        then fresh_global_id @@ Names.Id.of_string_soft name
+        else ret @@ Names.Id.of_string_soft name
+      in
       let* stmt = mk_stmt in
       declare_theorem Decls.Lemma name stmt tac
     end
