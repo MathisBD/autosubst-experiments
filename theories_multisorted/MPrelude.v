@@ -3,6 +3,8 @@ From Ltac2 Require Export Ltac2.
 From Equations Require Export Equations.
 Export ListNotations.
 
+#[export] Set Equations Transparent.
+
 (** Just to make sure. *)
 #[export] Unset Equations With UIP.
 
@@ -88,6 +90,15 @@ up_ren r := rcons 0 (rcomp r rshift).
 Definition point_eq {A B} : relation (A -> B) := pointwise_relation _ eq.
 Notation "f =₁ g" := (point_eq f g) (at level 75).
 
+Lemma peq_refl {A B} {x : A -> B} : x =₁ x.
+Proof. reflexivity. Qed.
+
+Lemma peq_sym {A B} {x y : A -> B} : x =₁ y -> y =₁ x.
+Proof. now intros ->. Qed.
+
+Lemma peq_trans {A B} {x y z : A -> B} : x =₁ y -> y =₁ z -> x =₁ z.
+Proof. now intros -> ->. Qed.
+
 Lemma congr_rcons i {r r'} :
   r =₁ r' -> rcons i r =₁ rcons i r'.
 Proof. intros H [|i'] ; [reflexivity|]. now simp rcons. Qed.
@@ -113,32 +124,27 @@ Inductive fin : nat -> Type :=
 
 Derive Signature NoConfusion NoConfusionHom for fin.
 
-(** Boolean equality test on [fin n]. We do an ugly convoy pattern by hand
-    instead of using Equations because we want [eqb_fin] to unfold nicely 
-    with [cbv]. *)
-Fixpoint eqb_fin {n} (i i' : fin n) : bool :=
-  match i in fin n0 return fin n0 -> bool with 
-  | finO => fun i' => match i' with finO => true | finS _ => false end
-  | finS i => fun i' => 
-    match i' in fin (S n1) return fin n1 -> bool with 
-    | finO => fun _ => false 
-    | finS i' => fun i => eqb_fin i i' 
-    end i
-  end i'.
+(** Coercion from [fin n] to [nat]. *)
+Equations fin_to_nat {n} : fin n -> nat :=
+fin_to_nat finO := 0 ;
+fin_to_nat (finS i) := S (fin_to_nat i).
+
+(** Boolean equality test on [fin n]. *)
+Equations eqb_fin {n} : fin n -> fin n -> bool :=
+eqb_fin finO finO := true ;
+eqb_fin (finS i) (finS i') := eqb_fin i i' ;
+eqb_fin _ _ := false.
 
 Lemma eqb_fin_spec {n} (i i' : fin n) : reflect (i = i') (eqb_fin i i').
 Proof.
-induction i ; depelim i'.
+funelim (eqb_fin i i').
 - now left.
 - right. intros H. depelim H.
 - right. intros H. depelim H.
-- simpl. destruct (IHi i') ; subst.
+- destruct H ; subst.
   + now left.
-  + right. intros H. now depelim H.
-Qed.  
-
-#[export] Instance fin_EqDec n : EqDec (fin n).
-Proof. intros i i'. destruct (eqb_fin_spec i i') ; triv. Qed.
+  + right. intros H. apply n. depelim H. triv.
+Qed.     
 
 (*********************************************************************************)
 (** *** Fixed length vectors. *)
