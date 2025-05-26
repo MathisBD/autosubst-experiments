@@ -359,7 +359,7 @@ Ltac2 rec reify_nat (e : env) (t : constr) : env * constr :=
   | 0 => e, constr:(Q_zero)
   | S ?i => 
     let (e, i) := reify_nat e i in
-    e, constr:(S $i)
+    e, constr:(Q_succ $i)
   | ?r ?i =>
     let (e, r) := reify_ren e r in
     let (e, i) := reify_nat e i in
