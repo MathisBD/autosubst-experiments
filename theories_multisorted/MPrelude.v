@@ -146,6 +146,26 @@ funelim (eqb_fin i i').
   + right. intros H. apply n. depelim H. triv.
 Qed.     
 
+Derive Signature for reflect.
+
+Equations fin_existsb (n : nat) (P : fin n -> bool) : bool :=
+fin_existsb 0 _ := false ;
+fin_existsb (S n) P := P finO || fin_existsb n (fun i => P (finS i)).
+
+Lemma fin_existsb_spec (n : nat) (P : fin n -> bool) :
+  reflect (exists i, P i) (fin_existsb n P).
+Proof.
+funelim (fin_existsb n P).
+- right. intros (? & H). depelim x.
+- destruct (P finO) eqn:E ; simpl.
+  + left. exists finO. now rewrite E.
+  + destruct (fin_existsb n (fun i => P (finS i))).
+    * left. depelim H. destruct e as (i & H). eauto.
+    * right. intros (i & H'). depelim H. apply n0. depelim i.
+      --now rewrite E in H'.
+      --eauto.
+Qed. 
+
 (*********************************************************************************)
 (** *** Fixed length vectors. *)
 (*********************************************************************************)
@@ -160,24 +180,18 @@ Arguments vcons {T n}.
 Derive Signature NoConfusion NoConfusionHom for vector.
 
 (** [vector_nth i xs] looks up the [i]-th element of [xs]. Contrary to lists,
-    this does not return an [option T] or require a default element in [T]. 
-    We do a convoy pattern by hand for the same reason as in [eqb_fin]. *)
-Fixpoint vector_nth {T n} (i : fin n) (xs : vector T n) : T :=
-  match i in fin n0 
-  return vector T n0 -> T 
-  with 
-  | finO => fun xs => 
-    match xs in vector _ n1
-    return match n1 with 0 => unit | S _ => T end
-    with
-    | vnil => tt 
-    | vcons x xs => x 
-    end
-  | finS i => fun xs =>
-    match xs in vector _ n1 
-    return match n1 with 0 => unit -> unit | S n1 => fin n1 -> T end
-    with 
-    | vnil => fun _ => tt
-    | vcons x xs => fun i => vector_nth i xs 
-    end i
-  end xs.  
+    this does not return an [option T] or require a default element in [T]. *)
+Equations vector_nth {T n} (i : fin n) (xs : vector T n) : T :=
+vector_nth finO (vcons x xs) := x ;
+vector_nth (finS i) (vcons x xs) := vector_nth i xs.
+
+(** Notation for vectors. *)
+
+Declare Scope vector_scope.
+Bind Scope vector_scope with vector.
+Delimit Scope vector_scope with vector.
+
+Notation "[| x ; y ; .. ; z |]" := 
+  (vcons x (vcons y .. (vcons z vnil) ..)) : vector_scope.
+  
+(* TODO : vectors of length 0 and 1 *)
