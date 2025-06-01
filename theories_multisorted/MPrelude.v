@@ -170,7 +170,8 @@ Qed.
 (** *** Fixed length vectors. *)
 (*********************************************************************************)
 
-(** [vector T n] is the type of vectors of length [n] with elements in [T]. *)
+(** [vector T n] is the type of vectors of length [n] with elements in [T].
+    It uses the standard encoding for fixed length vectors. *)
 Inductive vector (T : Type) : nat -> Type :=
 | vnil : vector T 0 
 | vcons n : T -> vector T n -> vector T (S n).
@@ -185,13 +186,52 @@ Equations vector_nth {T n} (i : fin n) (xs : vector T n) : T :=
 vector_nth finO (vcons x xs) := x ;
 vector_nth (finS i) (vcons x xs) := vector_nth i xs.
 
-(** Notation for vectors. *)
+(** [vector_map f xs] maps function [f] over vector [xs]. *)
+Equations vector_map {T U n} (f : T -> U) (xs : vector T n) : vector U n :=
+vector_map f vnil := vnil ;
+vector_map f (vcons x xs) := vcons (f x) (vector_map f xs). 
+
+(** Notation for vectors, in scope [vector]. *)
 
 Declare Scope vector_scope.
 Bind Scope vector_scope with vector.
 Delimit Scope vector_scope with vector.
 
-Notation "[| x ; y ; .. ; z |]" := 
-  (vcons x (vcons y .. (vcons z vnil) ..)) : vector_scope.
-  
-(* TODO : vectors of length 0 and 1 *)
+Notation "[-  -]" := vnil : vector_scope. 
+Notation "[-  x  -]" := (vcons x vnil) : vector_scope.
+Notation "[-  x ; y ; .. ; z  -]" := (vcons x (vcons y .. (vcons z vnil) ..)) : vector_scope.
+
+(*********************************************************************************)
+(** *** Fixed length _heterogeneous_ vectors. *)
+(*********************************************************************************)
+
+(** [hvector n T] is the type of vectors of length [n] with the [i]-th element
+    of type [T i]. Note that we use a function [fin n -> Type] to give the types
+    of the elements, instead of the standard encoding using a type [A], a vector 
+    [vector n A] and a function [A -> Type]. *)
+Polymorphic Inductive hvector : forall n, (fin n -> Type) -> Type :=
+| hnil {T} : hvector 0 T
+| hcons {n T} : T finO -> hvector n (fun i => T (finS i)) -> hvector (S n) T.
+
+Derive Signature NoConfusion NoConfusionHom for hvector.
+
+(** [hvector_nth i xs] looks up the [i]-th element of [xs], which has type [T i]. *)
+Polymorphic Equations hvector_nth {n T} (i : fin n) (h : hvector n T) : T i :=
+hvector_nth finO (hcons x xs) := x ;
+hvector_nth (finS i) (hcons x xs) := hvector_nth i xs.
+
+(** [hvector_map f xs] maps function [f] over vector [xs]. 
+    [f] has access to the index of the element as a [fin n]. *)
+Polymorphic Equations hvector_map {n T U} (f : forall i, T i -> U i) (xs : hvector n T) : hvector n U :=
+hvector_map f hnil := hnil ;
+hvector_map f (hcons x xs) := hcons (f finO x) (hvector_map (fun i => f (finS i)) xs).
+
+(** Notations for heterogeneous vectors, in scope [hvector]. *)
+
+Declare Scope hvector_scope.
+Bind Scope hvector_scope with hvector.
+Delimit Scope hvector_scope with hvector.
+
+Notation "[=  =]" := hnil : hvector_scope.
+Notation "[=  x  =]" := (hcons x hnil) : hvector_scope.
+Notation "[=  x ; y ; .. ; z  =]" := (hcons x (hcons y .. (hcons z hnil) ..)) : hvector_scope.
