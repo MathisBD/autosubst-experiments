@@ -61,9 +61,11 @@ Lemma autosubst_simpl_term_substitute (s : subst) (t res : term) :
 Proof. intros H. now apply term_simplification. Qed.
 #[export] Hint Rewrite -> autosubst_simpl_term_substitute : asimpl_topdown.
 
+Hint Unfold up_ren up_subst : asimpl_unfold.
+
 Axiom r : ren.
 Axiom t : term.
 Axiom s : subst.
-Lemma test : substitute (scons t Var) t = t.
-Proof. rasimpl.
+Lemma test (Htest : substitute (up_subst Var) t = t) : substitute sid t = t.
+Proof. 
 Admitted.

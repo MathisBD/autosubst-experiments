@@ -72,7 +72,7 @@ Ltac2 @external simpl_term_zero : constr -> constr * constr := "autosubst-experi
 Ltac2 @external simpl_subst_zero : constr -> constr * constr := "autosubst-experiments.plugin" "simpl_subst_zero".
 
 (*********************************************************************************)
-(** *** [rasimpl]. *)
+(** *** Boilerplate for [rasimpl]. *)
 (*********************************************************************************)
 
 (** [Simplification x y] expresses the fact that [x] simplifies into [y].
@@ -110,13 +110,44 @@ Ltac2 solve_simplification_aux () :=
 Ltac solve_simplification := 
   ltac2:(solve_simplification_aux ()).
 
+(*********************************************************************************)
+(** *** [rasimpl]. *)
+(*********************************************************************************)
+
+(** Unfold constants related to terms and substitutions, typically before [rasimpl]. *)
+Ltac aunfold := autounfold with asimpl_unfold.
+  
+(** Topdown version of [rasimpl]. *)
 Ltac rasimpl_topdown := 
   (rewrite_strat (topdown (hints asimpl_topdown))) ; [| solve_simplification ..].
 
+(** Outermost version of [rasimpl]. *)
 Ltac rasimpl_outermost := 
   (rewrite_strat (outermost (hints asimpl_outermost))) ; [| solve_simplification ..].
 
-(** Main simplification tactic. *)
+(** Simplify in the goal. *)
 Ltac rasimpl := 
+  repeat aunfold ;
   repeat rasimpl_topdown ;
   repeat rasimpl_outermost.
+
+(*********************************************************************************)
+(** *** [rasimpl in H]. *)
+(*********************************************************************************)
+
+(** Unfold constants related to terms and substitutions, typically before [rasimpl in H]. *)
+Tactic Notation "aunfold" "in" hyp(H) := autounfold with asimpl_unfold in H.
+  
+(** Topdown version of [rasimpl in H]. *)
+Tactic Notation "rasimpl_topdown" "in" hyp(H) := 
+  (rewrite_strat (topdown (hints asimpl_topdown)) in H) ; [| solve_simplification ..].
+
+(** Outermost version of [rasimpl in H]. *)
+Tactic Notation "rasimpl_outermost" "in" hyp(H) := 
+  (rewrite_strat (outermost (hints asimpl_outermost)) in H) ; [| solve_simplification ..].
+
+(** Simplify in a hypothesis [H]. *)
+Tactic Notation "rasimpl" "in" hyp(H) := 
+  repeat aunfold in H ;
+  repeat rasimpl_topdown in H ;
+  repeat rasimpl_outermost in H.
