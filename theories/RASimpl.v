@@ -94,6 +94,9 @@ Ltac2 solve_simplification_aux () :=
   | TermSimplification ?t0 _ => 
     let (t0', eq0) := simpl_term_zero t0 in
     exact (MkTermSimplification _ $t0 $t0' $eq0)
+  (*| RenSimplification ?r1 _ =>
+    let (r1', eq1) := simpl_ren_one r1 in
+    exact (MkRenSimplification _ $r1 $r1' $eq1)*)
   | SubstSimplification ?s0 _ =>
     let (s0', eq0) := simpl_subst_zero s0 in
     exact (MkSubstSimplification _ $s0 $s0' $eq0)

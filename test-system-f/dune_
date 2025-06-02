@@ -1,0 +1,4 @@
+(coq.theory
+ (name SystemF)
+ (package autosubst-experiments)
+ (theories Prototype))

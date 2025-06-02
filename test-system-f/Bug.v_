@@ -1,0 +1,6 @@
+From Equations Require Import Equations.
+
+Inductive test (n : nat) : unit -> Set :=
+| test_ctor : test (S n) tt -> test n tt.
+
+Fail Derive NoConfusion for test.
