@@ -24,19 +24,20 @@ Ltac2 red_flags_eval () : RedFlags.t :=
    
 (** Simplify a level one term. Returns [(t1', eq)] where [eq : t1 = t1'].  *)
 Ltac2 simpl_term_one (sig : constr) (t1 : constr) : constr * constr :=
-  (*printf "t1: %t" t1;*)
+  printf "t1: %t" t1;
   (* Reify Level 1 -> Level 2. *)
   let env := T.empty_env () in
   let (env, t2) := T.reify_expr sig env t1 in
   let env := T.build_env sig env in
-  (*printf "t2: %t" t2;*)
+  printf "t2: %t" t2;
   (* Simplify on Level 2. *)
   let t2' := Std.eval_cbn RedFlags.all constr:(Simp.esimp $t2) in
+  printf "t2': %t" t2';
   let t2'' := Std.eval_cbn RedFlags.all constr:(Clean.eclean $t2') in
-  (*printf "t2'': %t" t2'';*)
+  printf "t2'': %t" t2'';
   (* Eval Level 2 -> Level 1. *)
   let t1' := Std.eval_cbn (red_flags_eval ()) constr:(T.eeval $env $t2'') in
-  (*printf "t1': %t" t1';*)
+  printf "t1': %t" t1';
   (* [eq1 : t1 = t1']. *)
   let eq1 := constr:(eq_trans
     (Simp.ered_sound $env _ _ (Simp.esimp_red $t2))
@@ -46,15 +47,20 @@ Ltac2 simpl_term_one (sig : constr) (t1 : constr) : constr * constr :=
 
 (** Simplify a level one substitution. Returns [(s1', eq)] where [eq : s1 =₁ s1'].*)
 Ltac2 simpl_subst_one (sig : constr) (s1 : constr) : constr * constr :=
+  printf "s1: %t" s1;
   (* Reify Level 1 -> Level 2. *)
   let env := T.empty_env () in
   let (env, s2) := T.reify_subst sig env s1 in
   let env := T.build_env sig env in
+  printf "s2: %t" s2;
   (* Simplify on Level 2. *)
   let s2' := Std.eval_cbn RedFlags.all constr:(Simp.ssimp $s2) in
+  printf "s2': %t" s2';
   let s2'' := Std.eval_cbn RedFlags.all constr:(Clean.sclean $s2') in
+  printf "s2'': %t" s2'';
   (* Eval Level 2 -> Level 1. *)
   let s1' := Std.eval_cbv (red_flags_eval ()) constr:(T.seval $env $s2'') in
+  printf "s1': %t" s1';
   (* [eq1 : s1 =₁ s1']. *)
   let eq1 := constr:(peq_trans
     (Simp.sred_sound $env _ _ (Simp.ssimp_red $s2))

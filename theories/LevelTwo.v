@@ -358,7 +358,8 @@ Ltac2 add_subst_mvar (t : constr) (e : env) : int * env :=
      ; term_mvars := e.(term_mvars)
      ; subst_mvars := subst_mvars }.
 
-(* TODO: handle a renaming applied to a natural. *)
+(* TODO: should we handle a renaming applied to a natural? 
+   Might be weird e.g. for [x + y]. *)
 Ltac2 rec reify_nat (e : env) (t : constr) : env * constr := 
   lazy_match! t with 
   | 0 => e, constr:(Q_zero)
@@ -394,7 +395,21 @@ with reify_ren (e : env) (t : constr) : env * constr :=
     e, constr:(R_mvar $idx)
   end.
 
-(* TODO: handle a substitution applied to a natural. *)
+(** [convertible t1 t2] checks if [t1] and [t2] are equal modulo all reduction rules. *)
+Ltac2 convertible (t1 : constr) (t2 : constr) : bool :=
+  Control.plus (fun () => Unification.unify_with_current_ts t1 t2 ; true) (fun _ => false).
+
+(** [decompose_sapply t] checks if [t] is an application [s i] where [s] is
+    a level one substitution. *)
+Ltac2 decompose_sapply (sig : constr) (t : constr) : (constr * constr) option :=
+  match! t with 
+  | ?s ?i => 
+    if convertible (Constr.type s) constr:(@O.subst $sig) 
+    then Some (s, i)
+    else None
+  | _ => None
+  end.
+
 Ltac2 rec reify_expr (sig : constr) (e : env) (t : constr) : env * constr :=
   lazy_match! t with 
   | O.E_var ?i => 
@@ -424,9 +439,17 @@ Ltac2 rec reify_expr (sig : constr) (e : env) (t : constr) : env * constr :=
     let (e, t) := reify_expr sig e t in
     e, constr:(@E_subst $sig _ $s $t)
   | ?t => 
-    let (idx, e) := add_term_mvar t e in
-    let idx := nat_of_int idx in
-    e, constr:(@E_mvar $sig $idx)
+    (* Check if [t] is an application of a substitution to a natural. *)
+    match decompose_sapply sig t with 
+    | Some (s, i) => 
+      let (e, s) := reify_subst sig e s in 
+      let (e, i) := reify_nat e i in
+      e, constr:(E_sapply $s $i)
+    | None =>
+      let (idx, e) := add_term_mvar t e in
+      let idx := nat_of_int idx in
+      e, constr:(@E_mvar $sig $idx)
+    end
   end
 
 with reify_subst (sig : constr) (e : env) (s : constr) : env * constr :=

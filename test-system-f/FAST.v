@@ -50,7 +50,7 @@ Proof. intros H. now apply term_simplification. Qed.
 Definition scope := list sort.
 
 (** Scoping as a proposition. *)
-Inductive scoping : scope -> expr -> sort -> Type :=
+Inductive scoping : scope -> expr -> sort -> Prop :=
 
 | scoping_var Γ i s :
     nth_error Γ i = Some s -> scoping Γ (var i) s
@@ -76,7 +76,14 @@ Inductive scoping : scope -> expr -> sort -> Type :=
 | scoping_tlam Γ t :
     scoping (Sty :: Γ) t Stm -> scoping Γ (tlam t) Svl.
 
-Derive Signature NoConfusion NoConfusionHom for scoping.
+Derive Signature for scoping.
+
+(** Trigger [rasimpl] on [scoping]. *)
+Lemma rasimpl_trigger_scoping Γ t1 t2 m :
+  TermSimplification t1 t2 ->
+    scoping Γ t1 m <-> scoping Γ t2 m.
+Proof. intros H. now rewrite (@term_simplification _ t1 t2 H). Qed.
+#[export] Hint Rewrite -> rasimpl_trigger_scoping : asimpl_outermost.
 
 (** Read the sort of a (well-scoped) expression. *)
 Definition read_sort (Γ : scope) (t : expr) : sort :=
@@ -168,18 +175,50 @@ Proof.
 intros Hr Ht. induction Ht in Γ, r, Hr |- *.
 all: solve [ rasimpl ; constructor ; auto with scoping ].
 Qed.
+#[export] Hint Resolve rscoping_rename : scoping.
 
 (*********************************************************************************)
 (** *** Scoping for substitutions. *)
 (*********************************************************************************)
 
 (** [sscoping Γ s Δ] states that [s] takes inputs in [Δ] and has outputs in [Γ]. *)
-Inductive sscoping (Γ : scope) (s : subst) : scope -> Prop :=
-| sscoping_nil : sscoping Γ s []
-| sscoping_cons Δ m :
+Inductive sscoping (Γ : scope) : subst -> scope -> Prop :=
+| sscoping_nil s : sscoping Γ s []
+| sscoping_cons Δ s m :
     sscoping Γ (scomp sshift s) Δ ->
     scoping Γ (s 0) m ->
     sscoping Γ s (m :: Δ).
+
+#[export] Instance sscoping_proper : 
+  Proper (eq ==> point_eq ==> eq ==> iff) sscoping.
+Proof.
+intros ? Γ -> s1 s2 Hs ? t ->. split ; intros H.
+- induction H in s2, Hs |- * ; constructor.
+  + apply IHsscoping. now apply congr_scomp.
+  + now rewrite <-Hs.    
+- induction H in s1, Hs |- * ; constructor.
+  + apply IHsscoping. now apply congr_scomp.
+  + now rewrite Hs.    
+Qed.
+
+(** Trigger [rasimpl] on [sscoping]. *)
+Lemma rasimpl_trigger_sscoping Γ s1 s2 Δ :
+  SubstSimplification s1 s2 ->
+    sscoping Γ s1 Δ <-> sscoping Γ s2 Δ.
+Proof. intros H. now rewrite subst_simplification. Qed.
+#[export] Hint Rewrite -> rasimpl_trigger_sscoping : asimpl_outermost.
+
+Lemma sscoping_sshift_r Γ Δ s m :
+  sscoping Γ s Δ -> sscoping (m :: Γ) (scomp s sshift) Δ.
+Proof.
+intros H. induction H.
+- constructor.
+- constructor.
+  + assumption.
+  + rasimpl.  rasimpl. eapply rscoping_rename ; eauto with scoping.
+Qed.
+#[export] Hint Resolve sscoping_weak : scoping.
+
 
 Lemma sscoping_weak Γ Δ s m :
   sscoping Γ s Δ -> sscoping (m :: Γ) (srcomp s rshift) Δ.
@@ -188,7 +227,7 @@ intros H. induction H.
 - constructor.
 - constructor.
   + assumption.
-  + eapply rscoping_rename. 2: eassumption. apply rscoping_rshift.
+  + eapply rscoping_rename ; eauto with scoping.
 Qed.
 #[export] Hint Resolve sscoping_weak : scoping.
 
@@ -200,19 +239,18 @@ Lemma sscoping_substitute Γ Δ s t m :
 Proof.
 intros Hs Ht.
 induction Ht in Γ, s, Hs |- *.
-all: try solve [ rasimpl ; econstructor ; eauto ].
-- rasimpl_topdown.
-
-rename H into hx, Γ0 into Δ. induction hσ in x, hx |- *. 1: destruct x ; discriminate.
-  destruct x.
-  + simpl in *. inversion hx. subst. assumption.
-  + apply IHhσ. simpl in hx. assumption.
-- rasimpl. constructor.
-  + eauto.
-  + apply IHht2. constructor.
-    * rasimpl. apply sscoping_weak. assumption.
-    * rasimpl. constructor. reflexivity.
-- rasimpl. constructor.
+all: rasimpl.
+all: try solve [ econstructor ; eauto ].
+- induction Hs in i, H |- *.
+  + now destruct i.
+  + destruct i ; cbn in *.
+    * depelim H. assumption.
+    * apply IHHs. assumption.   
+- constructor.
+  apply IHHt. constructor.
+  + rasimpl.  apply sscoping_weak. assumption.
+  + rasimpl. constructor. reflexivity.
+- constructor.
   + eauto.
   + apply IHht2. constructor.
     * rasimpl. apply sscoping_weak. assumption.

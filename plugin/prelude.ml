@@ -105,6 +105,16 @@ type ops_all =
 (** *** Utility functions. *)
 (**************************************************************************************)
 
+(** [decompose_app2 sigma t] checks if [t] is an application [f x], and if so returns
+    [Some (f, x)]. Note that [f] can itself be an application. *)
+let decompose_app2 (sigma : Evd.evar_map) (t : EConstr.t) : (EConstr.t * EConstr.t) option
+    =
+  match EConstr.kind sigma t with
+  | App (f, args) when Array.length args > 0 ->
+      let n = Array.length args in
+      Some (apps f (Array.sub args 0 (n - 1)), args.(n - 1))
+  | _ -> None
+
 (** [is_const env sigma cname t] checks if [t] is a constant with name [cname]. *)
 let is_const (env : Environ.env) (sigma : Evd.evar_map) (c : Names.Constant.t)
     (t : EConstr.t) : bool =

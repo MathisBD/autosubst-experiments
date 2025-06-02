@@ -55,6 +55,17 @@ struct
         (sigma, Some (s, t))
     | _ -> (sigma, None)
 
+  (** Pattern which matches [?s ?i] when [?s] is a level zero substitution. *)
+  let sapply_patt : (EConstr.t * EConstr.t) patt =
+   fun t env sigma ->
+    match decompose_app2 sigma t with
+    | Some (s, i) ->
+        (* Check the type of [s] is [subst]. *)
+        let s_ty = Retyping.get_type_of env sigma s in
+        let sigma, conv = convertible s_ty (mkconst P.ops0.subst) env sigma in
+        if conv then (sigma, Some (s, i)) else (sigma, None)
+    | None -> (sigma, None)
+
   (** Pattern which matches [sid] or [Var] (where [Var] is the variable constructor for
       level zero terms). *)
   let sid_patt : unit patt =
@@ -177,6 +188,11 @@ struct
       let* p = apps_ev (mkglob' C.eq_trans) 4 [| p1; p2 |] in
       ret (t', p)
     in
+    (* Branch for [?s ?i]. *)
+    let sapply_branch (s, i) =
+      let* s', p_s = reify_subst s in
+      ret (app s' i, app p_s i)
+    in
     (* Default branch. *)
     let default_branch t =
       let t' = app (mkconst P.re.reify) t in
@@ -189,6 +205,7 @@ struct
       ; Case (ctor_patt, ctor_branch)
       ; Case (rename_patt, rename_branch)
       ; Case (substitute_patt, substitute_branch)
+      ; Case (sapply_patt, sapply_branch)
       ]
       default_branch
 

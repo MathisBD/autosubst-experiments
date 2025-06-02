@@ -5,16 +5,6 @@ open Prelude
 open Signature
 module C = Constants
 
-(** [decompose_app2 sigma t] checks if [t] is an application [f x], and if so returns
-    [Some (f, x)]. Note that [f] can itself be an application. *)
-let decompose_app2 (sigma : Evd.evar_map) (t : EConstr.t) : (EConstr.t * EConstr.t) option
-    =
-  match EConstr.kind sigma t with
-  | App (f, args) when Array.length args > 0 ->
-      let n = Array.length args in
-      Some (apps f (Array.sub args 0 (n - 1)), args.(n - 1))
-  | _ -> None
-
 module Make (P : sig
   val sign : signature
   val ops0 : ops_zero
