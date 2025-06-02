@@ -7,6 +7,10 @@ open Monad
 (** *** Typing. *)
 (**************************************************************************************)
 
+(** [convertible ?pb t1 t2] checks for convertibility [t1 =?= t2] (if [pb] is [CONV]) or
+    cumulativity [t1 <=? t2] (if [pb] is [CUMUL]). By default [pb] is [CONV]. *)
+val convertible : ?pb:Conversion.conv_pb -> EConstr.t -> EConstr.t -> bool m
+
 (** [unify ?pb t1 t2] unifies [t1 =?= t2] (if [pb] is [CONV]) or [t1 <=? t2] (if [pb] is
     [CUMUL]), instantiating evars. Raises an exception if unification fails. By default
     [pb] is [CONV]. *)

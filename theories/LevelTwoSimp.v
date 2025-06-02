@@ -135,11 +135,14 @@ Inductive ered : forall {k}, expr k -> expr k -> Prop :=
 | ered_congr_al_cons {ty tys} : Proper (ered ==> ered ==> ered) (@E_al_cons _ ty tys)
 | ered_congr_aterm : Proper (ered ==> ered) E_aterm
 | ered_congr_abind {ty} : Proper (ered ==> ered) (@E_abind _ ty)
+| ered_congr_sapply : Proper (sred ==> qred ==> ered) E_sapply
 | ered_congr_ren {k} : Proper (rred ==> ered ==> ered) (@E_ren _ k)
 | ered_congr_subst {k} : Proper (sred ==> ered ==> ered) (@E_subst _ k)
-(* Simplification rules. *)
+(* Extract renamings/substitutions into [E_subst]. *)
 | ered_rapply r i : E_tvar (Q_rapply r i) =e=> E_ren r (E_tvar i)
 | ered_ren {k} r (t : expr k) : E_ren r t =e=> E_subst (S_ren r) t
+| ered_sapply s i : E_sapply s i =e=> E_subst s (E_tvar i)
+(* Simplification rules. *)
 | ered_subst_ctor s c al : E_subst s (E_tctor c al) =e=> E_tctor c (E_subst s al)
 | ered_subst_al_nil s : E_subst s E_al_nil =e=> E_al_nil
 | ered_subst_al_cons {ty tys} s (a : expr (Ka ty)) (al : expr (Kal tys)) : 
@@ -212,6 +215,7 @@ Proof. constructor ; triv. Qed.
 #[export] Existing Instance ered_congr_al_cons.
 #[export] Existing Instance ered_congr_aterm.
 #[export] Existing Instance ered_congr_abind.
+#[export] Existing Instance ered_congr_sapply.
 #[export] Existing Instance ered_congr_ren.
 #[export] Existing Instance ered_congr_subst.
 #[export] Existing Instance sred_congr_cons.
@@ -246,6 +250,7 @@ Proof.
 apply ered_sred_ind ; intros ; simp eeval qeval ; triv.
 all: try solve [ now rewrite H0, H2 ]. 
 - eapply qred_sound in H. now rewrite H.
+- eapply qred_sound in H1. now rewrite H0, H1. 
 - eapply rred_sound in H. now rewrite H1, H.
 - now rewrite O.ren_is_subst.
 - simp substitute. rewrite O.up_subst_alt. reflexivity.
@@ -284,7 +289,7 @@ Derive Signature for rspecial.
   
 (** Expressions in which we can push substitutions. *)
 Definition is_push {k} (e : expr k) : bool :=
-  match e with E_mvar _ | E_tvar _ | E_ren _ _ => false | _ => true end.
+  match e with E_mvar _ | E_tvar _ | E_ren _ _ | E_sapply _ _ => false | _ => true end.
 
 Unset Elimination Schemes.
 
@@ -334,6 +339,7 @@ Inductive ereducible : forall {k}, expr k -> Prop :=
 (* Simplification rules. *)
 | ereducible_rapply r i : ereducible (E_tvar (Q_rapply r i))
 | ereducible_ren {k} r (e : expr k) : ereducible (E_ren r e)
+| ereducible_sapply s i : ereducible (E_sapply s i)
 | ereducible_subst {k} s (e : expr k) : is_push e -> ereducible (E_subst s e)
 | ereducible_subst_id {k} (e : expr k) : ereducible (E_subst S_id e)
 | ereducible_subst_cons_zero s : is_scons s -> ereducible (E_subst s (E_tvar Q_zero))
@@ -442,6 +448,7 @@ all: try solve [ apply qr_reducible_impl_red in H ; destruct H as (i' & H1 & H2)
   + apply Sig.ctor_EqDec.
   + triv.
 - exists (E_ren r (E_tvar i)). triv.
+- eexists ; triv.
 - eexists ; triv.
 - destruct e ; try solve [ eexists ; triv ]. Unshelve. all: triv.
   exists (E_subst (S_comp s0 s) e). split ; triv. intros H1. depelim H1. 
@@ -600,6 +607,9 @@ Proof. change_irred. split ; intros H H' ; apply H ; triv. now depelim H'. Qed.
 Lemma eirreducible_abind {ty} (a : expr (Ka ty)) : 
   eirreducible (E_abind a) <-> eirreducible a.
 Proof. change_irred. split ; intros H H' ; apply H ; triv. now depelim H'. Qed.
+
+Lemma eirreducible_sapply s i : ~eirreducible (E_sapply s i).
+Proof. change_irred. triv. Qed.
 
 Lemma eirreducible_ren {k} (e : expr k) r : ~eirreducible (E_ren r e).
 Proof. change_irred. triv. Qed.
@@ -1238,6 +1248,7 @@ all: intros ; triv.
   * apply cup_irreducible ; triv.  
 - apply csubstitute_aux_irreducible ; triv. intros H2 H3. rewrite eirreducible_subst.
   split5 ; triv.
+- now apply eirreducible_ren in H1.
 - rewrite eirreducible_subst in H2. apply csubstitute_aux_irreducible ; triv.
   + now apply H.
   + intros H3 H4. rewrite eirreducible_subst. split5 ; triv.
@@ -1347,6 +1358,7 @@ all: intros ; simp substitute ; triv.
   apply sup_irreducible ; triv.  
 - apply csubstitute_aux_irreducible ; triv. intros H2 H3. rewrite eirreducible_subst.
   split5 ; triv.
+- now apply eirreducible_ren in H0.
 - rewrite eirreducible_subst in H1. apply csubstitute_aux_irreducible ; triv.
   + now apply H.
   + intros H3 H4. rewrite eirreducible_subst. split5 ; triv.
@@ -1455,6 +1467,7 @@ esimp (E_al_cons a al) := E_al_cons (esimp a) (esimp al) ;
 esimp (E_abase b x) := E_abase b x ;
 esimp (E_aterm t) := E_aterm (esimp t) ;
 esimp (E_abind a) := E_abind (esimp a) ;
+esimp (E_sapply s i) := substitute (ssimp s) (tvar (qsimp i)) ;
 esimp (E_ren r t) := substitute (sren (rsimp r)) (esimp t) ;
 esimp (E_subst s t) := substitute (ssimp s) (esimp t) ;
 esimp (E_mvar m) := E_mvar m 
@@ -1500,6 +1513,8 @@ all: intros ; triv.
 - now rewrite eirreducible_al_cons.
 - now rewrite eirreducible_aterm.
 - now rewrite eirreducible_abind.
+- apply substitute_scomp_irreducible ; triv.
+  apply tvar_sren_irreducible. now apply qsimp_irreducible.
 - apply substitute_scomp_irreducible ; triv.
   apply tvar_sren_irreducible. now apply rsimp_irreducible.
 - apply substitute_scomp_irreducible ; triv.

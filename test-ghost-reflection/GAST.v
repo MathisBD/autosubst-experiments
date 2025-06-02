@@ -61,17 +61,8 @@ Lemma autosubst_simpl_term_substitute (s : subst) (t res : term) :
 Proof. intros H. now apply term_simplification. Qed.
 #[export] Hint Rewrite -> autosubst_simpl_term_substitute : asimpl_topdown.
 
-Axiom F : subst -> term.
-
-(** Trigger [rasimpl] on a substitution occuring inside [F _]. *)
-(*Lemma autosubst_simpl_F (s res : subst) :
-  SubstSimplification s res -> F s = F res.
-Proof. Admitted.
-#[export] Hint Rewrite -> autosubst_simpl_F : asimpl_outermost.*)
-
 Axiom r : ren.
 Axiom s : subst.
-Axiom t : term.
-Lemma test : substitute (scomp s (scons (substitute (rscomp r s) t) s)) t = t.
+Lemma test : substitute s (Var 0) = s 0.
 Proof. rasimpl.
 Admitted.

@@ -143,11 +143,14 @@ Inductive ered : forall {k}, expr k -> expr k -> Prop :=
 | ered_congr_al_cons {ty tys} : Proper (ered ==> ered ==> ered) (@E_al_cons _ ty tys)
 | ered_congr_aterm : Proper (ered ==> ered) E_aterm
 | ered_congr_abind {ty} : Proper (ered ==> ered) (@E_abind _ ty)
+| ered_congr_sapply : Proper (sred ==> qred ==> ered) E_sapply
 | ered_congr_ren {k} : Proper (rred ==> ered ==> ered) (@E_ren _ k)
 | ered_congr_subst {k} : Proper (sred ==> ered ==> ered) (@E_subst _ k)
 (* Cleanup rules. *)
 | ered_ren_var r i : E_ren r (E_tvar i) =e=> E_tvar (Q_rapply r i)
 | ered_subst_ren {k} s r (t : expr k) : dest_ren s = Some r -> E_subst s t =e=> E_ren r t
+| ered_subst_var s i : E_subst s (E_tvar i) =e=> E_sapply s i
+| ered_sapply_ren s r i : dest_ren s = Some r -> E_sapply s i =e=> E_ren r (E_tvar i)
 
 with sred : subst -> subst -> Prop :=
 (* Preorder. *)
@@ -197,6 +200,7 @@ Proof. constructor ; triv. Qed.
 #[export] Existing Instance ered_congr_al_cons.
 #[export] Existing Instance ered_congr_aterm.
 #[export] Existing Instance ered_congr_abind.
+#[export] Existing Instance ered_congr_sapply.
 #[export] Existing Instance ered_congr_ren.
 #[export] Existing Instance ered_congr_subst.
 #[export] Existing Instance sred_congr_cons.
@@ -233,9 +237,11 @@ Proof.
 apply ered_sred_ind ; intros ; simp eeval ; triv.
 all: try solve [ now rewrite H0, H2 ].
 - eapply qred_sound in H. now rewrite H.
+- eapply qred_sound in H1. now rewrite H0, H1.
 - eapply rred_sound in H. now rewrite H1, H.
 - eapply dest_ren_sound in H. rewrite H. simp eeval.
   now rewrite O.ren_is_subst.
+- eapply dest_ren_sound in H. rewrite H. simp eeval. simp rename. reflexivity.
 - eapply rred_sound in H. now rewrite H.
 Qed.
 
@@ -296,6 +302,23 @@ Proof. now apply qrclean_red. Qed.
 #[local] Hint Rewrite <-rclean_red : red.
 
 (*********************************************************************************)
+(** *** [sapply]. *)
+(*********************************************************************************)
+
+(** Cleanup [E_sapply s i]. *)
+Equations sapply : subst -> qnat -> expr Kt :=
+sapply s i with dest_ren s := { 
+  | Some r => E_tvar (rapply r i)
+  | None => E_sapply s i
+  }. 
+
+Lemma sapply_red s i : E_sapply s i =e=> sapply s i.
+Proof. 
+funelim (sapply s i) ; simp red ; triv. rewrite <-ered_ren_var. triv.
+Qed.
+#[local] Hint Rewrite <-sapply_red : red.
+
+(*********************************************************************************)
 (** *** [rename] *)
 (*********************************************************************************)
 
@@ -314,6 +337,7 @@ Proof. funelim (rename r t) ; simp red ; triv. Qed.
 
 (** Cleanup [E_subst s t]. *)
 Equations substitute {k} : subst -> expr k -> expr k :=
+substitute s (E_tvar i) := sapply s i ;
 substitute s t with dest_ren s := {
   | Some r => rename r t 
   | None => E_subst s t
@@ -335,6 +359,7 @@ eclean (E_al_cons a al) := E_al_cons (eclean a) (eclean al) ;
 eclean (E_abase b x) := E_abase b x ;
 eclean (E_aterm t) := E_aterm (eclean t) ;
 eclean (E_abind a) := E_abind (eclean a) ;
+eclean (E_sapply s i) := sapply (sclean s) (qclean i) ;
 eclean (E_ren r t) := rename (rclean r) (eclean t) ;
 eclean (E_subst s t) := substitute (sclean s) (eclean t) ;
 eclean (E_mvar m) := E_mvar m

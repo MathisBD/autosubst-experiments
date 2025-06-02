@@ -90,9 +90,11 @@ Inductive expr : kind -> Type :=
 (** Binder argument. *)
 | E_abind {ty} : arg ty -> arg (AT_bind ty)
 
-(** Instantiate an expressions with a renaming. *)
+(** Explicit substitution applied to a quoted natural. *)
+| E_sapply : subst -> qnat -> term
+(** Instantiate an expression with an explicit renaming. *)
 | E_ren {k} : ren -> expr k -> expr k
-(** Instantiate an expressions with a substitution. *)
+(** Instantiate an expression with an explicit substitution. *)
 | E_subst {k} : subst -> expr k -> expr k
 
 with subst :=
@@ -152,6 +154,7 @@ esize (E_aterm t) := S (esize t) ;
 esize (E_abind a) := S (esize a) ;
 esize (E_ren r t) := S (rsize r + esize t) ;
 esize (E_subst s t) := S (ssize s + esize t) ;
+esize (E_sapply s i) := S (ssize s + qsize i) ;
 esize (E_mvar _) := 0 
 
 with ssize : subst -> nat :=
@@ -242,6 +245,7 @@ Section Evaluation.
   eeval (E_abase b x) := O.E_abase b x ;
   eeval (E_aterm t) := O.E_aterm (eeval t) ;
   eeval (E_abind a) := O.E_abind (eeval a) ;
+  eeval (E_sapply s i) := (seval s) (qeval i) ;
   eeval (E_ren r e) := O.rename (reval r) (eeval e) ;
   eeval (E_subst s e) := O.substitute (seval s) (eeval e) ;
   eeval (E_mvar x) := e.(assign_term) x
@@ -354,16 +358,17 @@ Ltac2 add_subst_mvar (t : constr) (e : env) : int * env :=
      ; term_mvars := e.(term_mvars)
      ; subst_mvars := subst_mvars }.
 
+(* TODO: handle a renaming applied to a natural. *)
 Ltac2 rec reify_nat (e : env) (t : constr) : env * constr := 
   lazy_match! t with 
   | 0 => e, constr:(Q_zero)
   | S ?i => 
     let (e, i) := reify_nat e i in
     e, constr:(Q_succ $i)
-  | ?r ?i =>
+  (*| ?r ?i =>
     let (e, r) := reify_ren e r in
     let (e, i) := reify_nat e i in
-    e, constr:(Q_rapply $r $i)
+    e, constr:(Q_rapply $r $i)*)
   | ?i => 
     let (idx, e) := add_qnat_mvar i e in
     let idx := nat_of_int idx in
@@ -389,6 +394,7 @@ with reify_ren (e : env) (t : constr) : env * constr :=
     e, constr:(R_mvar $idx)
   end.
 
+(* TODO: handle a substitution applied to a natural. *)
 Ltac2 rec reify_expr (sig : constr) (e : env) (t : constr) : env * constr :=
   lazy_match! t with 
   | O.E_var ?i => 

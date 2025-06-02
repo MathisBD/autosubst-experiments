@@ -4,6 +4,14 @@ open Monad
 (** *** Typing. *)
 (**************************************************************************************)
 
+let convertible ?(pb = Conversion.CONV) (t1 : EConstr.t) (t2 : EConstr.t) : bool m =
+ fun env sigma ->
+  let t1' = EConstr.to_constr ~abort_on_undefined_evars:false sigma t1 in
+  let t2' = EConstr.to_constr ~abort_on_undefined_evars:false sigma t2 in
+  match Conversion.default_conv pb env t1' t2' with
+  | Ok _ -> (sigma, true)
+  | Error _ -> (sigma, false)
+
 let unify ?(pb = Conversion.CONV) (t1 : EConstr.t) (t2 : EConstr.t) : unit m =
  fun env sigma -> (Unification.w_unify env sigma pb t1 t2, ())
 

@@ -5,6 +5,16 @@ open Prelude
 open Signature
 module C = Constants
 
+(** [decompose_app2 sigma t] checks if [t] is an application [f x], and if so returns
+    [Some (f, x)]. Note that [f] can itself be an application. *)
+let decompose_app2 (sigma : Evd.evar_map) (t : EConstr.t) : (EConstr.t * EConstr.t) option
+    =
+  match EConstr.kind sigma t with
+  | App (f, args) when Array.length args > 0 ->
+      let n = Array.length args in
+      Some (apps f (Array.sub args 0 (n - 1)), args.(n - 1))
+  | _ -> None
+
 module Make (P : sig
   val sign : signature
   val ops0 : ops_zero
@@ -26,29 +36,6 @@ struct
   (** Pattern which matches [O.E_Var ?i]. *)
   let var_patt : EConstr.t patt =
    fun t env sigma ->
-    (*match EConstr.kind sigma t with
-    | App (f, [| _; i |]) -> begin
-        match EConstr.kind sigma f with
-        | Construct (c, _) ->
-            Log.printf "var_patt: %s =can= %s := %b"
-              (Pp.string_of_ppcmds @@ Names.GlobRef.print @@ Names.GlobRef.ConstructRef c)
-              (Pp.string_of_ppcmds @@ Names.GlobRef.print @@ Lazy.force C.O.e_var)
-              (Names.GlobRef.CanOrd.equal (Names.GlobRef.ConstructRef c)
-                 (Lazy.force C.O.e_var));
-            Log.printf "var_patt: %s =user= %s := %b"
-              (Pp.string_of_ppcmds @@ Names.GlobRef.print @@ Names.GlobRef.ConstructRef c)
-              (Pp.string_of_ppcmds @@ Names.GlobRef.print @@ Lazy.force C.O.e_var)
-              (Names.GlobRef.UserOrd.equal (Names.GlobRef.ConstructRef c)
-                 (Lazy.force C.O.e_var));
-            Log.printf "var_patt: %s =syntactic= %s := %b"
-              (Pp.string_of_ppcmds @@ Names.GlobRef.print @@ Names.GlobRef.ConstructRef c)
-              (Pp.string_of_ppcmds @@ Names.GlobRef.print @@ Lazy.force C.O.e_var)
-              (Names.GlobRef.SyntacticOrd.equal (Names.GlobRef.ConstructRef c)
-                 (Lazy.force C.O.e_var));
-            (sigma, None)
-        | _ -> (sigma, None)
-      end
-    | _ -> (sigma, None)*)
     match EConstr.kind sigma t with
     | App (f, [| _; i |]) when is_glob' env sigma C.O.e_var f -> (sigma, Some i)
     | _ -> (sigma, None)
@@ -170,6 +157,17 @@ struct
     | App (f, [| _ |]) when is_glob' env sigma C.O.e_var f -> (sigma, Some ())
     | _ -> (sigma, None)
 
+  (** Pattern which matches [?s ?i] (where [?s] is a level 1 substitution). *)
+  let sapply_patt : (EConstr.t * EConstr.t) patt =
+   fun t env sigma ->
+    match decompose_app2 sigma t with
+    | Some (s, i) ->
+        (* Check the type of [s] is [O.subst]. *)
+        let s_ty = Retyping.get_type_of env sigma s in
+        let sigma, conv = convertible s_ty (subst1 P.ops1) env sigma in
+        if conv then (sigma, Some (s, i)) else (sigma, None)
+    | None -> (sigma, None)
+
   (** Pattern which matches [O.sreify ?s]. *)
   let sreify_patt : EConstr.t patt =
    fun s env sigma ->
@@ -227,6 +225,11 @@ struct
       let* p = apps_ev (mkglob' C.eq_trans) 4 [| p1; p2 |] in
       ret (t, p)
     in
+    (* Branch for [?s' ?i]. *)
+    let sapply_branch (s', i) =
+      let* s, p_s = eval_subst s' in
+      ret (app s i, app p_s i)
+    in
     (* Branch for [reify ?t]. *)
     let reify_branch t = ret (t, app (mkconst P.bij.eval_reify_inv) t) in
     (* Default branch. *)
@@ -241,6 +244,7 @@ struct
       ; Case (ctor_patt, ctor_branch)
       ; Case (rename_patt, rename_branch)
       ; Case (substitute_patt, substitute_branch)
+      ; Case (sapply_patt, sapply_branch)
       ; Case (reify_patt, reify_branch)
       ]
       default_branch
