@@ -12,6 +12,17 @@ Set Default Goal Selector "!".
 
 (** Substitution preserves modes **)
 
+Lemma autosubst_simpl_scoping :
+  ∀ Γ t1 t2 m,
+    TermSimplification t1 t2 →
+    scoping Γ t1 m ↔ scoping Γ t2 m.
+Proof.
+  intros Γ t1 t2 m H.
+  now rewrite (@term_simplification _ t1 t2 H).
+Qed.
+#[export] Hint Rewrite -> autosubst_simpl_scoping : asimpl_outermost.
+
+
 Definition rscoping (Γ : scope) (ρ : ren) (Δ : scope) : Prop :=
   ∀ x m,
     nth_error Δ x = Some m →
@@ -25,6 +36,48 @@ Inductive sscoping (Γ : scope) (σ : subst) : scope → Prop :=
       scoping Γ (σ 0) m →
       sscoping Γ σ (m :: Δ).
       
+#[export] Instance rscoping_morphism :
+  Proper (eq ==> pointwise_relation _ eq ==> eq ==> iff) rscoping.
+Proof.
+  intros Γ ? <- ρ ρ' e Δ ? <-.
+  revert ρ ρ' e. wlog_iff. intros ρ ρ' e h.
+  intros n m en. rewrite <- e. apply h. assumption.
+Qed.
+
+Lemma autosubst_simpl_rscoping :
+  ∀ Γ Δ r s,
+    RenSimplification r s →
+    rscoping Γ r Δ ↔ rscoping Γ s Δ.
+Proof.
+  intros Γ Δ r s H.
+  apply rscoping_morphism. 1,3: auto.
+  apply H.
+Qed.
+#[export] Hint Rewrite -> autosubst_simpl_rscoping : asimpl_outermost.
+
+#[export] Instance sscoping_morphism :
+  Proper (eq ==> pointwise_relation _ eq ==> eq ==> iff) sscoping.
+Proof.
+  intros Γ ? <- σ σ' e Δ ? <-.
+  revert σ σ' e. wlog_iff. intros σ σ' e h.
+  induction h as [| ? ? ? ? ih ] in σ', e |- *.
+  - constructor.
+  - constructor.
+    + apply ih. intros n. apply e.
+    + rewrite <- e. assumption.
+Qed.
+
+Lemma autosubst_simpl_sscoping :
+  ∀ Γ Δ r s,
+    SubstSimplification r s →
+    sscoping Γ r Δ ↔ sscoping Γ s Δ.
+Proof.
+  intros Γ Δ r s H.
+  apply sscoping_morphism. 1,3: auto.
+  apply H.
+Qed.
+#[export] Hint Rewrite -> autosubst_simpl_sscoping : asimpl_outermost.
+
 Lemma rscoping_S :
   ∀ Γ m,
     rscoping (m :: Γ) S Γ.
@@ -56,17 +109,18 @@ Proof.
   all: solve [ rasimpl ; econstructor ; eauto ].
 Qed.
 
-Lemma sscoping_weak :
+Lemma sscoping_sshift_r :
   ∀ Γ Δ σ m,
     sscoping Γ σ Δ →
-    sscoping (m :: Γ) (srcomp σ rshift) Δ.
+    sscoping (m :: Γ) (scomp σ sshift) Δ.
 Proof.
   intros Γ Δ σ m h.
   induction h.
   - constructor.
   - constructor.
     + assumption.
-    + eapply scoping_ren. 2: eassumption. apply rscoping_S.
+    + assert ((σ >> ↑) 0 = rename rshift (σ 0)) as -> by now rasimpl. 
+      eapply scoping_ren. 2: eassumption. apply rscoping_S.
 Qed.
 
 Lemma scoping_subst :
@@ -85,79 +139,36 @@ Proof.
   - rasimpl. constructor.
     + eauto.
     + apply IHht2. constructor.
-      * rasimpl. apply sscoping_weak. assumption.
+      * rasimpl. apply sscoping_sshift_r. assumption.
       * rasimpl. constructor. reflexivity.
   - rasimpl. constructor.
     + eauto.
     + apply IHht2. constructor.
-      * rasimpl. apply sscoping_weak. assumption.
+      * rasimpl. apply sscoping_sshift_r. assumption.
       * rasimpl. constructor. reflexivity.
 Qed.
 
 Lemma sscoping_shift :
   ∀ Γ Δ mx σ,
     sscoping Γ σ Δ →
-    sscoping (mx :: Γ) (var 0 .: σ >> ren1 S) (mx :: Δ).
+    sscoping (mx :: Γ) (Var 0 .: srcomp σ rshift) (mx :: Δ).
 Proof.
   intros Γ Δ mx σ h.
   constructor.
-  - rasimpl. apply sscoping_weak. assumption.
+  - rasimpl. apply sscoping_sshift_r. assumption.
   - rasimpl. constructor. reflexivity.
 Qed.
 
-#[export] Instance rscoping_morphism :
-  Proper (eq ==> pointwise_relation _ eq ==> eq ==> iff) rscoping.
-Proof.
-  intros Γ ? <- ρ ρ' e Δ ? <-.
-  revert ρ ρ' e. wlog_iff. intros ρ ρ' e h.
-  intros n m en. rewrite <- e. apply h. assumption.
-Qed.
 
-Lemma autosubst_simpl_rscoping :
-  ∀ Γ Δ r s,
-    RenSimplification r s →
-    rscoping Γ r Δ ↔ rscoping Γ s Δ.
-Proof.
-  intros Γ Δ r s H.
-  apply rscoping_morphism. 1,3: auto.
-  apply H.
-Qed.
-
-#[export] Hint Rewrite -> autosubst_simpl_rscoping : rasimpl_outermost.
-
-#[export] Instance sscoping_morphism :
-  Proper (eq ==> pointwise_relation _ eq ==> eq ==> iff) sscoping.
-Proof.
-  intros Γ ? <- σ σ' e Δ ? <-.
-  revert σ σ' e. wlog_iff. intros σ σ' e h.
-  induction h as [| ? ? ? ? ih ] in σ', e |- *.
-  - constructor.
-  - constructor.
-    + apply ih. intros n. apply e.
-    + rewrite <- e. assumption.
-Qed.
-
-Lemma autosubst_simpl_sscoping :
-  ∀ Γ Δ r s,
-    SubstSimplification r s →
-    sscoping Γ r Δ ↔ sscoping Γ s Δ.
-Proof.
-  intros Γ Δ r s H.
-  apply sscoping_morphism. 1,3: auto.
-  apply H.
-Qed.
-
-#[export] Hint Rewrite -> autosubst_simpl_sscoping : rasimpl_outermost.
-
-Lemma sscoping_ids :
+Lemma sscoping_sid :
   ∀ Γ,
-    sscoping Γ ids Γ.
+    sscoping Γ sid Γ.
 Proof.
   intros Γ. induction Γ as [| m Γ ih].
   - constructor.
   - constructor.
-    + eapply sscoping_weak with (m := m) in ih. rasimpl in ih. assumption.
-    + constructor. reflexivity.
+    + rasimpl. eapply sscoping_sshift_r with (m := m) in ih. rasimpl in ih. assumption.
+    + rasimpl. constructor. reflexivity.
 Qed.
 
 Lemma sscoping_one :
@@ -167,7 +178,7 @@ Lemma sscoping_one :
 Proof.
   intros Γ u mx h.
   constructor.
-  - rasimpl. apply sscoping_ids.
+  - rasimpl. apply sscoping_sid.
   - rasimpl. assumption.
 Qed.
 
@@ -204,19 +215,19 @@ Proof.
   intros t ρ.
   induction t in ρ |- *.
   all: try reflexivity.
-  all: solve [ simpl ; rasimpl ; repeat core.unfold_funcomp ; f_equal ; auto ].
+  all: solve [ simpl ; rasimpl ; (*repeat core.unfold_funcomp ;*) f_equal ; auto ].
 Qed.
 
 (** Cast removal commutes with substitution **)
 
 Lemma castrm_subst :
   ∀ t σ,
-    ε| t <[ σ ] | = ε| t | <[ σ >> castrm ].
+    ε| t <[ σ ] | = ε| t | <[ fun i => castrm (σ i) ].
 Proof.
   intros t σ.
   assert (∀ σ t,
-    t <[ (var 0 .: σ >> ren1 ↑) >> castrm] =
-    t <[ var 0 .: σ >> (castrm >> ren1 ↑) ]
+    t <[ (Var 0 .: σ >> sshift) >> castrm] =
+    t <[ Var 0 .: σ >> (castrm >> rshift) ]
   ).
   { intros θ u.
     apply ext_term. intros n.

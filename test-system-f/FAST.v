@@ -215,21 +215,10 @@ intros H. induction H.
 - constructor.
 - constructor.
   + assumption.
-  + rasimpl.  rasimpl. eapply rscoping_rename ; eauto with scoping.
+  + assert (scomp s sshift 0 = rename rshift (s 0)) as -> by now rasimpl. 
+    eapply rscoping_rename ; eauto with scoping.
 Qed.
-#[export] Hint Resolve sscoping_weak : scoping.
-
-
-Lemma sscoping_weak Γ Δ s m :
-  sscoping Γ s Δ -> sscoping (m :: Γ) (srcomp s rshift) Δ.
-Proof.
-intros H. induction H.
-- constructor.
-- constructor.
-  + assumption.
-  + eapply rscoping_rename ; eauto with scoping.
-Qed.
-#[export] Hint Resolve sscoping_weak : scoping.
+#[export] Hint Resolve sscoping_sshift_r : scoping.
 
 (** Substituting preserves the scope. *)
 Lemma sscoping_substitute Γ Δ s t m :
@@ -248,24 +237,36 @@ all: try solve [ econstructor ; eauto ].
     * apply IHHs. assumption.   
 - constructor.
   apply IHHt. constructor.
-  + rasimpl.  apply sscoping_weak. assumption.
+  + rasimpl. now apply sscoping_sshift_r. 
   + rasimpl. constructor. reflexivity.
 - constructor.
   + eauto.
-  + apply IHht2. constructor.
-    * rasimpl. apply sscoping_weak. assumption.
+  + apply IHHt2. constructor.
+    * rasimpl. now apply sscoping_sshift_r. 
     * rasimpl. constructor. reflexivity.
+- constructor. apply IHHt. constructor.
+  + rasimpl. now apply sscoping_sshift_r.
+  + rasimpl. constructor. reflexivity.   
 Qed.
+#[export] Hint Resolve sscoping_substitute : scoping.
 
-Lemma sscoping_shift :
-  ∀ Γ Δ mx σ,
-    sscoping Γ σ Δ →
-    sscoping (mx :: Γ) (var 0 .: σ >> ren1 S) (mx :: Δ).
+Lemma sscoping_sid Γ :
+  sscoping Γ sid Γ.
 Proof.
-  intros Γ Δ mx σ h.
-  constructor.
-  - rasimpl. apply sscoping_weak. assumption.
-  - rasimpl. constructor. reflexivity.
+induction Γ.
+- constructor.
+- constructor. 
+  + rasimpl. apply sscoping_sshift_r with (m := a) in IHΓ. rasimpl in IHΓ. assumption.
+  + rasimpl. constructor. reflexivity.
+Qed.      
+
+Lemma sscoping_up_subst Γ Δ m s :
+  sscoping Γ s Δ ->
+  sscoping (m :: Γ) (up_subst s) (m :: Δ).
+Proof.
+intros H. constructor.
+- rasimpl. eauto with scoping.
+- rasimpl. now constructor.
 Qed.
 
 

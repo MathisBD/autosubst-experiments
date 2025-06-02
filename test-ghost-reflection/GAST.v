@@ -67,3 +67,4 @@ Axiom s : subst.
 Lemma test (Htest : substitute (up_subst Var) t = t) : substitute sid t = t.
 Proof. rasimpl in Htest. rasimpl.
 Admitted.
+
