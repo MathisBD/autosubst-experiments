@@ -62,7 +62,8 @@ Proof. intros H. now apply term_simplification. Qed.
 #[export] Hint Rewrite -> autosubst_simpl_term_substitute : asimpl_topdown.
 
 Axiom r : ren.
+Axiom t : term.
 Axiom s : subst.
-Lemma test : substitute s (Var 0) = s 0.
+Lemma test : substitute (scons t Var) t = t.
 Proof. rasimpl.
 Admitted.

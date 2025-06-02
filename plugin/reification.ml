@@ -55,10 +55,13 @@ struct
         (sigma, Some (s, t))
     | _ -> (sigma, None)
 
-  (** Pattern which matches [sid]. *)
+  (** Pattern which matches [sid] or [Var] (where [Var] is the variable constructor for
+      level zero terms). *)
   let sid_patt : unit patt =
    fun s env sigma ->
-    if is_const env sigma P.ops0.sid s then (sigma, Some ()) else (sigma, None)
+    if is_const env sigma P.ops0.sid s || is_ctor env sigma (P.ops0.term, 1) s
+    then (sigma, Some ())
+    else (sigma, None)
 
   (** Pattern which matches [sshift]. *)
   let sshift_patt : unit patt =

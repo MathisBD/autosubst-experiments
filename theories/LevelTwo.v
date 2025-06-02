@@ -432,6 +432,7 @@ Ltac2 rec reify_expr (sig : constr) (e : env) (t : constr) : env * constr :=
 with reify_subst (sig : constr) (e : env) (s : constr) : env * constr :=
   lazy_match! s with 
   | O.sid => e, constr:(@S_id $sig)
+  | O.E_var => e, constr:(@S_id $sig)
   | O.sshift => e, constr:(@S_shift $sig)
   | O.scons ?t ?s =>
     let (e, t) := reify_expr sig e t in 

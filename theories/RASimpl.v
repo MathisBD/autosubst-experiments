@@ -24,15 +24,19 @@ Ltac2 red_flags_eval () : RedFlags.t :=
    
 (** Simplify a level one term. Returns [(t1', eq)] where [eq : t1 = t1'].  *)
 Ltac2 simpl_term_one (sig : constr) (t1 : constr) : constr * constr :=
+  (*printf "t1: %t" t1;*)
   (* Reify Level 1 -> Level 2. *)
   let env := T.empty_env () in
   let (env, t2) := T.reify_expr sig env t1 in
   let env := T.build_env sig env in
+  (*printf "t2: %t" t2;*)
   (* Simplify on Level 2. *)
   let t2' := Std.eval_cbn RedFlags.all constr:(Simp.esimp $t2) in
   let t2'' := Std.eval_cbn RedFlags.all constr:(Clean.eclean $t2') in
+  (*printf "t2'': %t" t2'';*)
   (* Eval Level 2 -> Level 1. *)
   let t1' := Std.eval_cbn (red_flags_eval ()) constr:(T.eeval $env $t2'') in
+  (*printf "t1': %t" t1';*)
   (* [eq1 : t1 = t1']. *)
   let eq1 := constr:(eq_trans
     (Simp.ered_sound $env _ _ (Simp.esimp_red $t2))
