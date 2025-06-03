@@ -4,6 +4,8 @@ From Prototype Require Export All.
 (** *** Generate all operations and lemmas. *)
 (*********************************************************************************)
 
+Module SystemF.
+
 Autosubst Generate 
 {{
   expr(var) : Type
@@ -22,7 +24,14 @@ Autosubst Generate
   tlam : (bind expr in expr) -> expr
 }}.
 
+End SystemF.
+Import SystemF.
+
 Derive NoConfusion NoConfusionHom for expr.
+
+Notation ty := expr (only parsing).
+Notation tm := expr (only parsing).
+Notation vl := expr (only parsing).
 
 Inductive sort := Sty | Stm | Svl. 
 Derive NoConfusion for sort.
@@ -167,7 +176,7 @@ Proof. unfold up_ren. auto with scoping. Qed.
 #[export] Hint Resolve rscoping_up_ren : scoping.
 
 (** Renaming preserves the scope. *)
-Lemma rscoping_rename Γ Δ r t st :
+Lemma scoping_rename Γ Δ r t st :
   rscoping Γ r Δ ->
   scoping Δ t st ->
   scoping Γ (rename r t) st.
@@ -175,7 +184,7 @@ Proof.
 intros Hr Ht. induction Ht in Γ, r, Hr |- *.
 all: solve [ rasimpl ; constructor ; auto with scoping ].
 Qed.
-#[export] Hint Resolve rscoping_rename : scoping.
+#[export] Hint Resolve scoping_rename : scoping.
 
 (*********************************************************************************)
 (** *** Scoping for substitutions. *)
@@ -216,12 +225,12 @@ intros H. induction H.
 - constructor.
   + assumption.
   + assert (scomp s sshift 0 = rename rshift (s 0)) as -> by now rasimpl. 
-    eapply rscoping_rename ; eauto with scoping.
+    eapply scoping_rename ; eauto with scoping.
 Qed.
 #[export] Hint Resolve sscoping_sshift_r : scoping.
 
 (** Substituting preserves the scope. *)
-Lemma sscoping_substitute Γ Δ s t m :
+Lemma scoping_substitute Γ Δ s t m :
   sscoping Γ s Δ ->
   scoping Δ t m ->
   scoping Γ (substitute s t) m.
@@ -248,7 +257,7 @@ all: try solve [ econstructor ; eauto ].
   + rasimpl. now apply sscoping_sshift_r.
   + rasimpl. constructor. reflexivity.   
 Qed.
-#[export] Hint Resolve sscoping_substitute : scoping.
+#[export] Hint Resolve scoping_substitute : scoping.
 
 Lemma sscoping_sid Γ :
   sscoping Γ sid Γ.
@@ -259,6 +268,7 @@ induction Γ.
   + rasimpl. apply sscoping_sshift_r with (m := a) in IHΓ. rasimpl in IHΓ. assumption.
   + rasimpl. constructor. reflexivity.
 Qed.      
+#[export] Hint Resolve sscoping_sid : scoping.
 
 Lemma sscoping_up_subst Γ Δ m s :
   sscoping Γ s Δ ->
@@ -268,53 +278,322 @@ intros H. constructor.
 - rasimpl. eauto with scoping.
 - rasimpl. now constructor.
 Qed.
+#[export] Hint Resolve sscoping_up_subst : scoping.
 
+Lemma sscoping_sextend Γ t m : 
+  scoping Γ t m ->
+  sscoping Γ (scons t sid) (m :: Γ).
+Proof.
+intros H. constructor.
+- rasimpl. apply sscoping_sid.
+- rasimpl. assumption.
+Qed.  
+#[export] Hint Resolve sscoping_sextend : scoping.
 
-(*Inductive ty_view : scoping -> expr -> Type :=
-| ty_view_var i : ty_view (scoping_var Γ i Sty p) (var i) 
-| ty_view_arr t1 t2 : ty_view (arr t1 t2)
-| ty_view_all t : ty_view (all t).
-
-Definition build_ty_view (Γ : scope) (t : expr) (s : scoping Γ t Sty) : ty_view t.
-depelim s ; constructor.
-Defined.
-
-Equations ty_size Γ t (s : scoping Γ t Sty) : nat :=
-ty_size Γ t s with ty_view Γ t s :=
-ty_size Γ (var i) s (ty_view_var _) := 0 ;
-ty_size Γ (arr t1 t2)  (ty_view_arr _ _) := S (ty_size s1 + ty_size s2) ;
-
-ty_size (scoping_var _ _ _ _) := 0 ;
-ty_size (scoping_arr _ t1 t2 s1 s2) := S (ty_size s1 + ty_size s2) ;
-ty_size (scoping_all _ t s) := S (ty_size s).*)
-
-(*********************************************************************************)
-(** *** Triggers. *)
-(*********************************************************************************)
-
-(*(** Trigger [rasimpl] on [rename _ _]. *)
-Lemma autosubst_simpl_term_rename (r : ren) (t res : term) :
-  TermSimplification (rename r t) res -> rename r t = res.
-Proof. intros H. now apply term_simplification. Qed.
-#[export] Hint Rewrite -> autosubst_simpl_term_rename : asimpl_topdown.
-
-(** Trigger [rasimpl] on [substitute _ _]. *)
-Lemma autosubst_simpl_term_substitute (s : subst) (t res : term) :
-  TermSimplification (substitute s t) res -> substitute s t = res.
-Proof. intros H. now apply term_simplification. Qed.
-#[export] Hint Rewrite -> autosubst_simpl_term_substitute : asimpl_topdown.
-
-Axiom F : subst -> term.
-
-(** Trigger [rasimpl] on a substitution occuring inside [F _]. *)
-(*Lemma autosubst_simpl_F (s res : subst) :
-  SubstSimplification s res -> F s = F res.
+Lemma scoping_strengthening Γ m t mt : 
+  scoping (m :: Γ) (rename rshift t) mt ->
+  scoping Γ t mt.
 Proof. Admitted.
-#[export] Hint Rewrite -> autosubst_simpl_F : asimpl_outermost.*)
+(** Looks annoying to prove... *)
 
-Axiom r : ren.
-Axiom s : subst.
-Axiom t : term.
-Lemma test : substitute (scomp s (scons (substitute (rscomp r s) t) s)) t = t.
-Proof. rasimpl.
-Admitted.*)
+(*********************************************************************************)
+(** *** Notations. *)
+(*********************************************************************************)
+
+Declare Scope asubst_scope.
+Delimit Scope asubst_scope with asub.
+
+Notation "s [ sigma ]" := (substitute sigma s) 
+  (at level 7, left associativity, format "s [ sigma ]") : asubst_scope.
+Notation "s '..'" := (scons s sid) 
+  (at level 1, format "s ..") : asubst_scope.
+
+Open Scope asubst_scope.
+
+(*********************************************************************************)
+(** *** Call by value reduction. *)
+(*********************************************************************************)
+
+Inductive eval : tm -> vl -> Prop :=
+| eval_app (A : ty) (s t u : tm) (v1 v2 : vl) :
+    eval s (lam A u) -> eval t v1 -> eval u[v1..] v2 ->
+    eval (app s t) v2
+| eval_tapp (A : ty) (s u : tm) (v : vl) :
+    eval s (tlam u) -> eval u[A..] v ->
+    eval (tapp s A) v
+| eval_val (v : vl) :
+    eval (vt v) v.
+Hint Resolve eval_val : core.
+
+(** Evaluation preserves scoping. *)
+Lemma eval_scoping Γ t v : 
+  eval t v ->
+  scoping Γ t Stm ->
+  scoping Γ v Svl.
+Proof.
+intros He Hs. induction He in Γ, Hs |- .
+- apply IHHe3. depelim Hs. specialize (IHHe1 Γ Hs1). specialize (IHHe2 Γ Hs2).
+  depelim IHHe1. eapply scoping_substitute ; [|eassumption]. eauto with scoping.
+- apply IHHe2. depelim Hs. specialize (IHHe1 _ Hs1).
+   eapply scoping_substitute.
+   + eapply sscoping_sextend. eassumption.
+   + depelim IHHe1. assumption.
+- depelim Hs. assumption.
+Qed. 
+
+(*********************************************************************************)
+(** *** Typing Contexts. *)
+(*********************************************************************************)
+
+(** [liftn n t] lifts free variables of [t] by [n]. *)
+Fixpoint liftn (n : nat) (t : expr) : expr :=
+  match n with 
+  | 0 => t
+  | S n => rename rshift (liftn n t)
+  end. 
+
+(** A context declaration. *)
+Inductive ctx_decl :=
+  | TyDecl (* Declare a new type. *)
+  | VlDecl (ty : expr) (* Declare a new value with given type. *).
+
+Derive NoConfusion for ctx_decl.
+
+(** A typing context. *)
+Definition ctx := list ctx_decl.
+
+(** The empty context. *)
+Notation "'∙'" := (@nil ctx_decl).
+
+(** Extend a context with a type declaration. *)
+Notation "C ,, *" := (@cons ctx_decl TyDecl C) 
+  (at level 20).
+
+(** Extend a context with a type declaration. *)
+Notation "C ,, ty" := (@cons ctx_decl (VlDecl ty) C) 
+  (at level 20, ty at next level).
+
+(** Concatenate contexts. *)
+Notation "Γ ,,, Δ" := (@app ctx_decl Δ Γ) 
+  (at level 25, Δ at next level, left associativity).
+
+(** The sort of a bound variable which is described by a context declaration. *)
+Definition sort_of_ctx_decl (d : ctx_decl) : sort :=
+  match d with 
+  | TyDecl => Sty 
+  | VlDecl _ => Svl
+  end.
+
+(** The scope associated to a context. *)
+Definition scope_of_ctx (c : ctx) : scope :=
+  map sort_of_ctx_decl c.
+
+Notation "⌜ C ⌝" := (scope_of_ctx C) (format "⌜ C ⌝").
+
+(** Well-formedness of typing contexts. *)
+Inductive wf_ctx : ctx -> Prop :=
+| wf_ctx_empty : wf_ctx ∙
+| wf_ctx_ty C : wf_ctx C -> wf_ctx (C ,, *)
+| wf_ctx_vl C A : wf_ctx C -> scoping ⌜C⌝ A Sty -> wf_ctx (C ,, A).
+
+(** Well-formed contexts contain only well-scoped types. *)
+Lemma wf_ctx_lookup C i A :
+  wf_ctx C ->
+  nth_error C i = Some (VlDecl A) ->
+  scoping ⌜C⌝ (liftn (S i) A) Sty.
+Proof.
+intros Hc H. induction Hc in i, A, H |- .
+- rewrite nth_error_nil in H. depelim H.
+- destruct i ; cbn in H.
+  + depelim H.
+  + specialize (IHHc _ _ H). eapply scoping_rename ; [|eassumption].
+    apply rscoping_rshift.
+- destruct i ; cbn in H.
+  + depelim H. eapply scoping_rename ; [|eassumption]. apply rscoping_rshift.
+  + specialize (IHHc _ _ H). eapply scoping_rename ; [|eassumption].
+    apply rscoping_rshift.
+Qed.
+
+(*********************************************************************************)
+(** *** Typing judgement. *)
+(*********************************************************************************)
+
+Unset Elimination Schemes.
+
+(** Typing for terms. *)
+Inductive typing_tm : ctx -> tm -> ty -> Prop :=
+
+| typing_app C (A B : ty) (s t : tm) :
+    typing_tm C s (arr A B) ->
+    typing_tm C t A ->
+    typing_tm C (app s t) B
+
+| typing_tapp C (A B : ty) (s : tm) :
+    scoping ⌜C⌝ B Sty ->
+    typing_tm C s (all A) ->
+    typing_tm C (tapp s B) A[B..]
+
+| typing_vt C (A : ty) (v : vl) :
+    typing_vl C v A ->
+    typing_tm C (vt v) A
+
+(** Typing for values. *)
+with typing_vl : ctx -> vl -> ty -> Prop :=
+
+| typing_var C (A : ty) (i : nat) :
+    nth_error C i = Some (VlDecl A) -> 
+    typing_vl C (var i) (liftn (S i) A)
+ 
+| typing_lam C (A B : ty) (t : tm) :
+    scoping ⌜C⌝ A Sty ->
+    typing_tm (C ,, A) t (rename rshift B) ->
+    typing_vl C (lam A t) (arr A B)
+
+| typing_tlam C (A : ty) (t : tm) :
+    typing_tm (C ,, *) t A ->
+    typing_vl C (tlam t) (all A).
+
+Set Elimination Schemes.
+
+Scheme typing_tm_ind := Minimality for typing_tm Sort Prop 
+  with typing_vl_ind := Minimality for typing_vl Sort Prop.
+Combined Scheme typing_tm_vl_ind from typing_tm_ind, typing_vl_ind.
+
+Derive Signature for typing_tm typing_vl.
+
+(** In a typing judgement [typing C t A], both [T] and [A] are well scoped
+    (under the hypothesis that [C] itself is well scoped). *)
+Lemma typing_scoping_aux :
+  (forall C t A, typing_tm C t A -> wf_ctx C -> scoping ⌜C⌝ t Stm /\ scoping ⌜C⌝ A Sty) /\
+  (forall C v A, typing_vl C v A -> wf_ctx C -> scoping ⌜C⌝ v Svl /\ scoping ⌜C⌝ A Sty).
+Proof.
+apply typing_tm_vl_ind ; intros.
+- destruct (H2 H3). destruct (H0 H3). depelim H7. split ; [constructor|] ; assumption.
+- destruct (H1 H2). split ; [constructor|] ; try assumption.
+  depelim H4. eapply scoping_substitute ; [|eassumption]. apply sscoping_sextend. 
+  assumption.
+- destruct (H0 H1). split ; [constructor|] ; assumption.
+- split.
+  + constructor. unfold scope_of_ctx. erewrite map_nth_error by eassumption. reflexivity.
+  + now apply wf_ctx_lookup.
+- feed H1. { constructor ; assumption. } destruct H1. split.
+  + constructor ; assumption.
+  + constructor ; try assumption. apply scoping_strengthening in H4. assumption.
+- feed H0. { constructor. assumption. } destruct H0. split.
+  + constructor. assumption.
+  + constructor. assumption.
+Qed.
+
+(*********************************************************************************)
+(** *** Preservation. *)
+(*********************************************************************************)
+
+(** Typing is stable under _value_ substitution. *)
+Lemma typing_substitute_vl C t v A B : 
+  typing_tm (C ,, A) t (rename rshift B) -> 
+  typing_vl C v A ->
+  typing_tm C t[v..] B.
+Proof. Admitted.
+
+(** Typing is stable under _type_ substitution. *)
+Lemma typing_substitute_ty C t T B : 
+  typing_tm (C ,, *) t B -> 
+  scoping ⌜C⌝ T Sty ->
+  typing_tm C t[T..] B[T..].
+Proof.
+intros H1. revert T. induction H1 using typing_tm_ind with (P0 := _).
+all: intros.
+- rasimpl. eapply typing_app.
+  + now apply IHtyping_tm1.
+  + now apply IHtyping_tm2.  
+- assert ((tapp s B)[T..] = tapp s[T..] B[T..]) as -> by now rasimpl.
+  rasimpl.
+  apply typing_tapp.
+
+
+
+(** Preservation a.k.a. subject reduction. *)
+Lemma preservation C t v A :
+  eval t v -> 
+  typing_tm C t A -> 
+  typing_vl C v A.
+Proof.
+intros H Ht. induction H in C, A, Ht |- .
+- apply IHeval3. depelim Ht. specialize (IHeval1 _ _ Ht1). specialize (IHeval2 _ _ Ht2).
+  depelim IHeval1. eapply typing_substitute_vl ; eassumption.
+- apply IHeval2. depelim Ht. specialize (IHeval1 _ _ Ht). depelim IHeval1.
+  eapply typing_substitute_ty ; eassumption.
+- now depelim Ht.
+Qed. 
+
+(*********************************************************************************)
+(** *** Semantic typing. *)
+(*********************************************************************************)
+
+(** [L P s] means that [s] reduces to a value which satisfies [P]. *)
+Definition L (P : vl -> Prop) (s : tm) : Prop :=
+  exists2 v, eval s v & P v.
+
+Definition fcons {A} (x : A) (f : nat -> A) : nat -> A :=
+  fun n =>
+    match n with 
+    | 0 => x
+    | S n => f n 
+    end.
+
+Fixpoint V (A : ty) (rho : nat -> vl -> Prop) (v : vl) {struct A} : Prop :=
+  match A with
+  | var X => rho X v
+  | arr A B =>
+    match v with
+    | lam C t => forall u, V A rho u -> L (V B rho) t[u..]
+    | _ => False
+    end
+  | all A =>
+    match v with
+    | tlam t => forall i (B : ty), L (V A (fcons i rho)) t[B..]
+    | _ => False
+    end
+  | _ => False
+  end.
+
+Notation E A rho := (L (V A rho)).
+
+Lemma V_ren (A : ty) (rho : nat -> vl -> Prop) (xi : -> ) :
+  V A.[ren xi] rho = V A (xi >>> rho).
+
+
+
+
+
+
+
+
+Lemma V_weak (A : ty) d rho :
+V A.[ren (+1)] (d .: rho) = V A rho.
+
+Lemma V_subst (A : ty) rho sigma :
+V A.[sigma] rho = V A (fun x => V (sigma x) rho).
+
+
+
+
+
+
+
+
+
+Lemma E_subst1 (A B : ty) rho :
+E A.[B .: var_ty] rho = E A (V B rho .: rho).
+
+
+
+Definition VG (Gamma : ctx) (rho : index -> vl -> Prop) (sigma : index -> vl) :=
+forall x, x < size Gamma -> V Gamma`_x rho (sigma x).
+
+Theorem soundness (Gamma : ctx) :
+(forall (s : tm) (A : ty), tm_ty Gamma s A ->
+  forall sigma tau rho, VG Gamma rho tau -> E A rho s.[sigma,tau]) /\
+(forall (v : vl) (A : ty), vl_ty Gamma v A ->
+  forall sigma tau rho, VG Gamma rho tau -> V A rho v.[sigma,tau]).
+

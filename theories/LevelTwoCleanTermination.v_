@@ -91,7 +91,29 @@ all: intros H ; depelim H ; simp eeval qeval in * ; try reflexivity.
 Qed.
 
 (*********************************************************************************)
-(** *** Rewriting system. *)
+(** *** Core rewriting system. *)
+(*********************************************************************************)
+
+#[local] Reserved Notation "i '=q=>₁' i'" (at level 70, no associativity). 
+#[local] Reserved Notation "e '=e=>₁' e'" (at level 70, no associativity). 
+
+Inductive qred1 : qnat -> qnat -> Prop :=
+| qred1_rapply_shift r i n : dest_rshift r = Some n -> Q_rapply r i =q=>₁ mk_qsucc n i
+where "i '=q=>₁' i'" := (qred1 i i').
+
+Inductive ered1 : forall {k}, expr k -> expr k -> Prop :=
+| ered1_ren_var r i : E_ren r (E_tvar i) =e=>₁ E_tvar (Q_rapply r i)
+| ered1_subst_ren {k} s r (t : expr k) : dest_ren s = Some r -> E_subst s t =e=>₁ E_ren r t
+| ered1_subst_var s i : E_subst s (E_tvar i) =e=>₁ E_sapply s i
+| ered1_sapply_ren s r i : dest_ren s = Some r -> E_sapply s i =e=>₁ E_ren r (E_tvar i)
+where "t =e=>₁ t'" := (ered1 t t').
+
+#[local] Hint Constructors qred1 ered1 : core.
+
+Derive Signature for qred1 ered1.
+
+(*********************************************************************************)
+(** *** Full rewriting system. *)
 (*********************************************************************************)
 
 #[local] Reserved Notation "i =q=> i'" (at level 70, no associativity). 
@@ -108,8 +130,8 @@ Inductive qred : qnat -> qnat -> Prop :=
 (* Congruence. *)
 | qred_congr_succ : Proper (qred ==> qred) Q_succ
 | qred_congr_rapply : Proper (rred ==> qred ==> qred) Q_rapply 
-(* Cleanup rules. *)
-| qred_rapply_shift r i n : dest_rshift r = Some n -> Q_rapply r i =q=> mk_qsucc n i
+(* Core rules. *)
+| qred_core i i' : i =q=>₁ i' -> i =q=> i'
 
 with rred : ren -> ren -> Prop :=
 (* Preorder. *)
@@ -135,11 +157,8 @@ Inductive ered : forall {k}, expr k -> expr k -> Prop :=
 | ered_congr_sapply : Proper (sred ==> qred ==> ered) E_sapply
 | ered_congr_ren {k} : Proper (rred ==> ered ==> ered) (@E_ren _ k)
 | ered_congr_subst {k} : Proper (sred ==> ered ==> ered) (@E_subst _ k)
-(* Cleanup rules. *)
-| ered_ren_var r i : E_ren r (E_tvar i) =e=> E_tvar (Q_rapply r i)
-| ered_subst_ren {k} s r (t : expr k) : dest_ren s = Some r -> E_subst s t =e=> E_ren r t
-| ered_subst_var s i : E_subst s (E_tvar i) =e=> E_sapply s i
-| ered_sapply_ren s r i : dest_ren s = Some r -> E_sapply s i =e=> E_ren r (E_tvar i)
+(* Core rules. *)
+| ered_core {k} (t t' : expr k) : t =e=>₁ t' -> t =e=> t'
 
 with sred : subst -> subst -> Prop :=
 (* Preorder. *)
@@ -207,7 +226,7 @@ Proof.
 apply qred_rred_ind ; intros ; simp qeval ; triv.
 - now rewrite H0, H2.
 - now rewrite H0, H2.
-- now rewrite (dest_rshift_sound _ _ _ H).
+- depelim H. simp qeval. now rewrite (dest_rshift_sound _ _ _ H).
 - now rewrite H0.
 - now rewrite H0, H2.
 - now rewrite H0, H2.
@@ -228,9 +247,10 @@ all: try solve [ now rewrite H0, H2 ].
 - eapply qred_sound in H. now rewrite H.
 - eapply qred_sound in H1. now rewrite H0, H1.
 - eapply rred_sound in H. now rewrite H1, H.
-- eapply dest_ren_sound in H. rewrite H. simp eeval.
-  now rewrite O.ren_is_subst.
-- eapply dest_ren_sound in H. rewrite H. simp eeval. simp rename. reflexivity.
+- depelim H ; simp eeval ; triv.
+  + eapply dest_ren_sound in H. rewrite H. simp eeval.
+    now rewrite O.ren_is_subst.
+  + eapply dest_ren_sound in H. rewrite H. simp eeval. simp rename. reflexivity.
 - eapply rred_sound in H. now rewrite H.
 Qed.
 
@@ -239,7 +259,7 @@ Proof. now apply ered_sred_sound. Qed.
 
 Lemma sred_sound e s s' : s =s=> s' -> seval e s =₁ seval e s'.
 Proof. now apply ered_sred_sound. Qed.
-
+ 
 (*********************************************************************************)
 (** *** [rapply]. *)
 (*********************************************************************************)
@@ -303,7 +323,7 @@ sapply s i with dest_ren s := {
 
 Lemma sapply_red s i : E_sapply s i =e=> sapply s i.
 Proof. 
-funelim (sapply s i) ; simp red ; triv. rewrite <-ered_ren_var. triv.
+funelim (sapply s i) ; simp red ; triv. etransitivity ; triv.
 Qed.
 #[local] Hint Rewrite <-sapply_red : red.
 
@@ -379,5 +399,98 @@ Lemma sclean_red s : s =s=> sclean s.
 Proof. now apply eclean_sclean_red. Qed.
 #[local] Hint Rewrite sclean_red : red.
 
-End WithSignature.
+(*********************************************************************************)
+(** *** Confluence of the rewriting system. *)
+(*********************************************************************************)
 
+Lemma qred_local_confluence x y i : 
+  i =q=>₁ x -> i =q=>₁ y -> exists i', x =q=> i' /\ y =q=> i'.
+Proof.
+intros Hx Hy. depelim Hx ; depelim Hy.
+rewrite H in H0. depelim H0. eexists ; split ; reflexivity.
+Qed.
+
+Lemma ered_local_confluence {k} (x y t : expr k) :
+  t =e=>₁ x -> t =e=>₁ y -> exists t', x =e=> t' /\ y =e=> t'.
+Proof.
+intros Hx Hy. depelim Hx ; depelim Hy.
+all: try solve [ eexists ; triv ].
+- rewrite H in H0. depelim H0. eexists ; triv.
+- exists (E_tvar (Q_rapply r i)). split ; triv. etransitivity ; triv.
+- exists (E_tvar (Q_rapply r i)). split ; triv. etransitivity ; triv.
+- rewrite H in H0. depelim H0. eexists ; triv.
+Qed.
+
+(*Definition confluent {A} (r : relation A) :=
+  forall t x, r t x -> forall y, r t y -> exists t', r x t' /\ r y t'. 
+
+Lemma qred_rred_confluence : confluent qred /\ confluent rred.
+Proof.
+unfold confluent. apply qred_rred_ind 
+  with (P := fun t x => forall y, t =q=> y -> exists t', x =q=> t' /\ y =q=> t').
+all: intros ; triv.
+- destruct (H0 _ H3) as (t' & ? & ?). destruct (H2 _ H4) as (t'' & ? & ?).
+  exists t''. split ; triv.
+- rename y0 into z.
+
+
+    
+(*********************************************************************************)
+(** *** Termination of the rewriting system. *)
+(*********************************************************************************)
+
+Equations qmeasure : qnat -> nat :=
+qmeasure Q_zero := 0 ;
+qmeasure (Q_succ i) := qmeasure i ;
+qmeasure (Q_rapply r i) := 1 + rmeasure r + qmeasure i ;
+qmeasure (Q_mvar _) := 0
+
+with rmeasure : ren -> nat :=
+rmeasure R_id := 0 ;
+rmeasure R_shift := 0 ;
+rmeasure (R_cons i r) := rmeasure r ;
+rmeasure (R_comp r1 r2) := rmeasure r1 + rmeasure r2 ;
+rmeasure (R_mvar _) := 0.
+
+Lemma mk_qsucc_measure n i : 
+  qmeasure (mk_qsucc n i) = qmeasure i.
+Proof. funelim (mk_qsucc n i) ; simp qmeasure ; lia. Qed.
+#[local] Hint Rewrite mk_qsucc_measure : qmeasure.
+
+(*Lemma dest_rshift_measure r n : 
+  dest_rshift r = Some n -> rmeasure r = 0.
+Proof.
+intros H. funelim (dest_rshift r) ; simp dest_rshift in * ; triv.
+- rewrite Heq, Heq0 in H. simp dest_rshift in H. depelim H. 
+  simp qmeasure. rewrite (Hind n2), (Hind0 n1) by assumption. lia.
+- rewrite Heq, Heq0 in H. simp dest_rshift in H. depelim H.
+- rewrite Heq in H. simp dest_rshift in H. depelim H.
+Qed.*)
+
+Lemma qred_rred_decreased : 
+  (forall i i', i =q=> i' -> qmeasure i' < qmeasure i) /\
+  (forall r r', r =r=> r' -> rmeasure r' < rmeasure r).
+Proof.
+apply qred_rred_ind ; intros ; simp qmeasure.
+all: try lia.
+- admit.
+- admit.
+Admitted.  
+
+Equations emeasure {k} : expr k -> nat :=
+emeasure (E_var _) := 0 ;
+emeasure (E_ctor c al) := emeasure al ;
+emeasure E_al_nil := 0 ;
+emeasure (E_al_cons a al) := emeasure a + emeasure al ;
+emeasure (E_abase _ _) := 0 ;
+emeasure (E_aterm t) := emeasure t ;
+emeasure (E_abind a) := emeasure a ;
+emeasure ()
+emeasure (Q_mvar _) := 0
+
+with rmeasure : ren -> nat :=
+rmeasure R_id := 0 ;
+rmeasure R_shift := 0 ;
+rmeasure (R_cons i r) := 1 + qmeasure i + rmeasure r ;
+rmeasure (R_comp r1 r2) := 1 + rmeasure r1 + rmeasure r2 ;
+rmeasure (R_mvar _) := 0.*)
