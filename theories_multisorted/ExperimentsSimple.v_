@@ -8,25 +8,39 @@ Module O.
 Section WithSig.
 Context {sig : signature}.
 
-(** Level one terms. *)
+(*********************************************************************************)
+(** *** Level one terms. *)
+(*********************************************************************************)
 
-Inductive term : fin nsort -> Type :=
-| T_var {s} : nat -> term s
-| T_ctor {s} (c : fin (nctor s)) : args (ctor_type c) -> term s
+(** Notations for expressions with known kinds. *)
+#[local] Reserved Notation "'term' m" (at level 0).
+#[local] Reserved Notation "'arg' ty" (at level 0, ty at level 0).
+#[local] Reserved Notation "'args' tys" (at level 0, tys at level 0).
 
-with args : list arg_ty -> Type :=
-| AL_nil : args []
-| AL_cons {ty tys} : arg ty -> args tys -> args (ty :: tys)
+(** Terms over an abstract signature. Terms are indexed by a kind. *)
+Inductive expr : kind -> Type :=
+| (** Variable constructor. *)
+  E_var {m} : nat -> term m
+| (** Non-variable constructor applied to a list of arguments. *)
+  E_ctor {m} : forall (c : ctor m), args (ctor_type c) -> term m
+| (** Empty argument list. *)
+  E_al_nil : args []
+| (** Non-empty argument list. *)
+  E_al_cons {ty tys} : arg ty -> args tys -> args (ty :: tys)
+| (** Base argument (e.g. bool or string). *)
+  E_abase : forall b, base_type b -> arg (AT_base b)
+| (** Term argument. *)
+  E_aterm {m} : term m -> arg (AT_term m)
+| (** Binder argument. *)
+  E_abind {ty} : forall m, arg ty -> arg (AT_bind m ty)
 
-with arg : arg_ty -> Type :=
-| A_base b : base_type b -> arg (AT_base b)
-| A_term {s} : term s -> arg (AT_term s)
-| A_bind {s s'} : term s' -> arg (AT_bind s s'). 
+where "'term' m" := (expr (Kt m))
+  and "'arg' ty" := (expr (Ka ty))
+  and "'args' tys" := (expr (Kal tys)).
 
-Derive Signature NoConfusion NoConfusionHom for term args arg.
+Derive Signature NoConfusion NoConfusionHom for expr.
 
-(** Size of terms. *)
-
+(** Size of expressions. *)
 Equations term_size {s} : term s -> nat :=
 term_size (T_var _) := 0 ;
 term_size (T_ctor c al) := S (args_size al) ;
@@ -38,7 +52,7 @@ args_size (AL_cons a al) := S (arg_size a + args_size al)
 with arg_size {ty} : arg ty -> nat :=
 arg_size (A_base _ _) := 0 ;
 arg_size (A_term t) := S (term_size t) ;
-arg_size (A_bind t) := S (term_size t).
+arg_size (A_bind _ t) := S (term_size t).
 
 (** Well-founded induction on terms based on their size. *)
 
@@ -57,24 +71,77 @@ Section SizeInd.
   Qed.
 End SizeInd.
 
-(** Renamings. *)
+(*********************************************************************************)
+(** *** Level one renamings. *)
+(*********************************************************************************)
 
 (** Vector of renamings. *)
-Definition ren_vec := vector ren nsort.
+Definition vren := vector ren nsort.
+
+(** A vector of identity renamings. *)
+Definition vren_id := vector_init nsort (fun _ => rid).
 
 (** Apply a vector of renamings to a term. *)
-Equations rename {s} (rv : ren_vec) (t : term s) : term s :=
+Equations rename {s} (rv : vren) (t : term s) : term s :=
 rename rv (T_var i) := T_var (vector_nth s rv i) ;
 rename rv (T_ctor c al) := T_ctor c (rename_args rv al)
 
-with rename_args {tys : list arg_ty} (rv : ren_vec) (al : args tys) : args tys :=
+with rename_args {tys : list arg_ty} (rv : vren) (al : args tys) : args tys :=
 rename_args rv AL_nil := AL_nil ;
 rename_args rv (AL_cons a al) := AL_cons (rename_arg rv a) (rename_args rv al)
 
-with rename_arg {ty : arg_ty} (rv : ren_vec) (a : arg ty) : arg ty :=
+with rename_arg {ty : arg_ty} (rv : vren) (a : arg ty) : arg ty :=
 rename_arg rv (A_base b x) := A_base b x ;
 rename_arg rv (A_term t) := A_term (rename rv t) ;
-rename_arg rv (@A_bind s _ a) := A_bind (rename (vector_map_nth up_ren s rv) a).
+rename_arg rv (A_bind s a) := A_bind s (rename (vector_map_nth up_ren s rv) a).
+
+Lemma rename_id s rv t : 
+  rename rv 
+
+(*********************************************************************************)
+(** *** Level one substitutions. *)
+(*********************************************************************************)
+
+(** A single substitution which yields terms of sort [m]. *)
+Definition subst m := nat -> term m.
+
+Definition scons {m} (t : term m) (s : subst m) : subst m :=
+  fun i =>
+    match i with 
+    | 0 => t
+    | S i => s i
+    end.
+
+(** Compose a substitution with a vector of renaming. *)
+Definition srcomp {m} (s : subst m) (r : vren) : subst m :=
+  fun i => rename r (s i).
+
+(** A vector of substitutions. *)
+Definition vsubst := hvector nsort subst.
+
+(** Lift a vector of substitutions through a binder of sort [m].*)
+Definition up_vsubst (m : fin nsort) (svec : vsubst) : vsubst :=
+  (* [rvec] is a vector of renamings which lifts variables of sort [m]
+     and doesn't touch variables of other sorts. *)
+  let r := vector_init nsort (fun m' => if eqb_fin m m' then rshift else rid) in 
+  hvector_map 
+    (fun m' s => if eqb_fin m m' then scons (T_var 0) (srcomp s r) else srcomp s r) 
+    svec.
+
+Equations substitute {s} (svec : vsubst) (t : term s) : term s :=
+substitute svec (T_var i) := hvector_nth s svec i ;
+substitute svec (T_ctor c al) := T_ctor c (substitute_args svec al)
+
+with substitute_args {tys} (svec : vsubst) (al : args tys) : args tys :=
+substitute_args svec AL_nil := AL_nil ;
+substitute_args svec (AL_cons a al) := AL_cons (substitute_arg svec a) (substitute_args svec al)
+
+with substitute_arg {ty} (svec : vsubst) (a : arg ty) : arg ty :=
+substitute_arg svec (A_base b x) := A_base b x ;
+substitute_arg svec (A_term t) := A_term (substitute svec t) ;
+substitute_arg svec (A_bind s t) := A_bind s (substitute (up_vsubst s svec) t).
+
+
 
 End WithSig.
 End O.
@@ -329,13 +396,13 @@ End CustomInd.
 (** *** Transporting renamings. *)
 (*********************************************************************************)
 
-Definition ren_vec := (ren * (ren * ren))%type.
+Definition vren := (ren * (ren * ren))%type.
 
-Definition eval_ren_vec (rv : O.ren_vec) : ren_vec :=
+Definition eval_vren (rv : O.vren) : vren :=
   (vector_nth finO rv, (vector_nth (finS finO) rv, vector_nth (finS (finS finO)) rv)).
   
 (** Evaluate [O.rename s] into a concrete function such as [rename_ty] or [rename_tm]. *)
-Definition eval_rename {s} (r : ren_vec) : eval_sort s -> eval_sort s :=
+Definition eval_rename {s} (r : vren) : eval_sort s -> eval_sort s :=
   let '(rty, (rtm, rvl)) := r in
   hvector_nth (T := fun s => eval_sort s -> eval_sort s) 
     s [= rename_ty rty rtm rvl ; rename_tm rty rtm rvl ; rename_vl rty rtm rvl =].
@@ -363,8 +430,8 @@ induction t1 in rty1, rty2, rtm1, rtm2, rvl1, rvl2, Hty, Htm, Hvl |- * ; cbn.
 Qed.
 
 (** Push [eval] through renamings. *)
-Lemma push_eval_rename {s} (rv : O.ren_vec) (t : O.term s) : 
-  eval (O.rename rv t) = eval_rename (eval_ren_vec rv) (eval t).
+Lemma push_eval_rename {s} (rv : O.vren) (t : O.term s) : 
+  eval (O.rename rv t) = eval_rename (eval_vren rv) (eval t).
 Proof.
 revert rv. pattern t. revert s t. apply custom_ind.
 all: intros ; repeat depelim rv ; cbn.

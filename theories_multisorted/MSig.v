@@ -7,36 +7,71 @@ From Prototype Require Import MPrelude.
 (*********************************************************************************)
 
 (** Argument types over a set of base types and a set of sorts. *)
-Inductive arg_ty {nbase nsort} :=
-| AT_base : fin nbase -> arg_ty
-| AT_term : fin nsort -> arg_ty
-| AT_bind : fin nsort -> fin nsort -> arg_ty.
+Inductive arg_ty {base sort} :=
+| AT_base : base -> arg_ty
+| AT_term : sort -> arg_ty
+| AT_bind : sort -> arg_ty -> arg_ty.
+
 Derive NoConfusion NoConfusionHom for arg_ty.
 
 (** Signatures for abstract terms. *)
 Record signature :=
-{ nbase : nat 
-; base_type : fin nbase -> Type
-; nsort : nat 
-; nctor : fin nsort -> nat
-; ctor_type : forall s, fin (nctor s) -> list (@arg_ty nbase nsort) }.
+{ (** The set of base types, 
+      e.g. [Inductive base := BUnit | BBool | BNat]. *)
+  base : Type
+; (** Decidable equality on the set of base types. *)
+  base_EqDec : EqDec base 
+; (** The actual type that each base type represents,
+      e.g. a mapping BNat => nat ; BBool => bool ; BUnit => unit. *)
+  base_type : base -> Type
+; (** The set of sorts constructors, 
+      e.g. [Inductive sort := Stype | Sterm | Svalue]. *)
+  sort : Type
+; (** Decidable equality on the set of sorts. *)
+  sort_EqDec : EqDec sort 
+; (** The set of _non variable_ constructors of a given sort, 
+      e.g. [Inductive ctor_Stype := CApp | CLam]. *)
+  ctor : sort -> Type
+; (** Decidable equality on the set of constructors. *)
+  ctor_EqDec : forall s, EqDec (ctor s)
+; (** The number and types of the arguments of each constructor. *)
+  ctor_type : forall s (c : ctor s), list (@arg_ty base sort) }.
 
 (** Most of the time we can omit writing the precise signature,
     it will be inferred by typeclass resolution. *)
 Existing Class signature.
 
 (** Set the [signature] argument of the projections to be implicit. *)
-Arguments nbase {_}.
+Arguments base {_}.
+Arguments base_EqDec {_}.
 Arguments base_type {_}.
-Arguments nsort {_}.
-Arguments nctor {_}.
+Arguments sort {_}.
+Arguments sort_EqDec {_}.
+Arguments ctor {_}.
+Arguments ctor_EqDec {_}.
 Arguments ctor_type {_ _}.
+
+(** Export the [EqDec] instances. *)
+#[export] Existing Instance base_EqDec.
+#[export] Existing Instance sort_EqDec.
+#[export] Existing Instance ctor_EqDec.
+
+(** Kind of an expression (this is used in both level one and level two). *)
+Inductive kind {base sort} := 
+| (** Term of a given sort. *)
+  Kt : sort -> kind
+| (** Constructor argument. *)
+  Ka : @arg_ty base sort -> kind
+| (** List of constructor arguments. *)
+  Kal : list (@arg_ty base sort) -> kind.
+
+Derive NoConfusion NoConfusionHom for kind.
 
 (*********************************************************************************)
 (** *** Computing properties of signatures. *)
 (*********************************************************************************)
 
-Section Signature.
+(*Section Signature.
 Context {sig : signature}.
 
 (** [occurs_ty] *)
@@ -157,4 +192,4 @@ destruct (fin_existsb_spec nsort (fun s' => bindsb s s' && occursb s s')).
   now destruct (binds_spec s s'), (occurs_spec s s').
 Qed.
 
-End Signature.
+End Signature.*)

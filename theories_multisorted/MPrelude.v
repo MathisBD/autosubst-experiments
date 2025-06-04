@@ -20,8 +20,8 @@ Coercion is_true : bool >-> Sortclass.
 (*********************************************************************************)
 
 (** Add some power to [auto] and variants (such as [triv]). *)
-#[export] Hint Extern 5 => f_equal : core.
-#[export] Hint Extern 5 => subst : core.
+(*#[export] Hint Extern 5 => f_equal : core.
+#[export] Hint Extern 5 => subst : core.*)
 
 (** Split n-ary conjunctions. *)
 Ltac split3 := split ; [|split].
@@ -45,15 +45,44 @@ Ltac feed2 H := feed H ; [| feed H].
 Ltac feed3 H := feed H ; [| feed2 H].
 Ltac feed4 H := feed H ; [| feed3 H].
 
-(** Surprisingly, neither [eauto] nor [easy] is more powerful than the other. *)
-Ltac triv := try solve [ eauto | easy ].
+(*********************************************************************************)
+(** *** Pointwise equality on functions. *)
+(*********************************************************************************)
 
-(** Unfold all local definitions from the proof context,
-    then clear the definitions. *)
-Ltac unfold_all :=
-  repeat match goal with 
-  | [ x := _ |- _ ] => unfold x in * ; clear x
-  end.
+(** Pointwise equality on functions with one argument. *)
+Definition eq1 {A B} : relation (A -> B) :=
+  fun f g => forall x, f x = g x.
+
+Notation "f =₁ g" := (eq1 f g) (at level 75).
+
+#[export] Instance eq1_refl {A B} : Reflexive (@eq1 A B).
+Proof. intros ? ?. reflexivity. Qed.
+
+#[export] Instance eq1_sym {A B} : Symmetric (@eq1 A B).
+Proof. intros ? ? H ?. now rewrite H. Qed.
+
+#[export] Instance eq1_trans {A B} : Transitive (@eq1 A B).
+Proof. intros ? ? ? H1 H2 ?. now rewrite H1, H2. Qed.
+
+(* #[export] Instance eq1_equiv A B : Equivalence (@eq1 A B) :=
+Proof.
+constructor. ; [apply eq1_refl | |].
+Build_Equivalence eq1 eq1_refl eq1_sym eq1_trans.*)
+
+(** Pointwise equality on functions with two arguments. *)
+Definition eq2 {A B C} : relation (A -> B -> C) :=
+  fun f g => forall x, f x =₁ g x.
+
+Notation "f =₂ g" := (eq2 f g) (at level 75).
+
+#[export] Instance eq2_refl {A B C} : Reflexive (@eq2 A B C).
+Proof. intros ? ? ?. reflexivity. Qed.
+
+#[export] Instance eq2_sym {A B C} : Symmetric (@eq2 A B C).
+Proof. intros ? ? H ? ?. now rewrite H. Qed.
+
+#[export] Instance eq2_trans {A B C} : Transitive (@eq2 A B C).
+Proof. intros ? ? ? H1 H2 ? ?. now rewrite H1, H2. Qed.
 
 (*********************************************************************************)
 (** *** Renamings. *)
@@ -70,46 +99,29 @@ Definition rid : ren := fun i => i.
 Definition rshift : ren := fun i => S i.
 
 (** Cons an index with a renaming. *)
-Equations rcons (i0 : nat) (r : ren) : ren :=
-rcons i0 _ 0 := i0 ;
-rcons i0 r (S i) := r i.
+Definition rcons (i0 : nat) (r : ren) : ren :=
+  fun i =>
+    match i with 
+    | 0 => i0 
+    | S i => r i 
+    end. 
 
+#[export] Instance rcons_proper : Proper (eq ==> eq1 ==> eq1) rcons.
+Proof. intros i0 ? <- r r' Hr [|i] ; [reflexivity|]. cbn. apply Hr. Qed.
+  
 (** Compose two renamings (left to right composition). *)
-Equations rcomp (r1 r2 : ren) : ren :=
-rcomp r1 r2 i := r2 (r1 i).
+Definition rcomp (r1 r2 : ren) : ren :=
+  fun i => r2 (r1 i).
+
+#[export] Instance rcomp_proper : Proper (eq1 ==> eq1 ==> eq1) rcomp.
+Proof. intros ? ? H1 ? ? H2 i. cbv. now rewrite H1, H2. Qed.
 
 (** Lift a renaming through a binder. *)
-Equations up_ren (r : ren) : ren := 
-up_ren r := rcons 0 (rcomp r rshift).
+Definition up_ren (r : ren) : ren := 
+  rcons 0 (rcomp r rshift).
 
-(*********************************************************************************)
-(** *** Trivial properties of renamings. *)
-(*********************************************************************************)
-
-(** Pointwise equality for functions. *)
-Definition point_eq {A B} : relation (A -> B) := pointwise_relation _ eq.
-Notation "f =₁ g" := (point_eq f g) (at level 75).
-
-Lemma peq_refl {A B} {x : A -> B} : x =₁ x.
-Proof. reflexivity. Qed.
-
-Lemma peq_sym {A B} {x y : A -> B} : x =₁ y -> y =₁ x.
-Proof. now intros ->. Qed.
-
-Lemma peq_trans {A B} {x y z : A -> B} : x =₁ y -> y =₁ z -> x =₁ z.
-Proof. now intros -> ->. Qed.
-
-Lemma congr_rcons i {r r'} :
-  r =₁ r' -> rcons i r =₁ rcons i r'.
-Proof. intros H [|i'] ; [reflexivity|]. now simp rcons. Qed.
-
-Lemma congr_rcomp {r1 r1' r2 r2'} :
-  r1 =₁ r1' -> r2 =₁ r2' -> rcomp r1 r2 =₁ rcomp r1' r2'.
-Proof. intros H1 H2 i. simp rcomp. now rewrite H1, H2. Qed.
-
-Lemma congr_up_ren {r r'} :
-  r =₁ r' -> up_ren r =₁ up_ren r'.
-Proof. intros H. simp up_ren. apply congr_rcons. now apply congr_rcomp. Qed.
+#[export] Instance up_ren_proper : Proper (eq1 ==> eq1) up_ren.
+Proof. intros ? ? H. unfold up_ren. now rewrite H. Qed.
 
 (*********************************************************************************)
 (** *** Finite sets. *)
@@ -143,7 +155,7 @@ funelim (eqb_fin i i').
 - right. intros H. depelim H.
 - destruct H ; subst.
   + now left.
-  + right. intros H. apply n. depelim H. triv.
+  + right. intros H. apply n. now depelim H.
 Qed.     
 
 Derive Signature for reflect.
@@ -179,6 +191,12 @@ Arguments vnil {T}.
 Arguments vcons {T n}.
 
 Derive Signature NoConfusion NoConfusionHom for vector.
+
+(** [vector_init n f] creates the vector of length [n] with elements 
+    [f 0], [f 1], [f 2], etc. *)
+Equations vector_init {T} (n : nat) (f : fin n -> T) : vector T n :=
+vector_init 0 _ := vnil ;
+vector_init (S n) f := vcons (f finO) (vector_init n (fun i => f (finS i))).
 
 (** [vector_nth i xs] looks up the [i]-th element of [xs]. Contrary to lists,
     this does not return an [option T] or require a default element in [T]. *)
