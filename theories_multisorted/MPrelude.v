@@ -191,6 +191,12 @@ Equations vector_map {T U n} (f : T -> U) (xs : vector T n) : vector U n :=
 vector_map f vnil := vnil ;
 vector_map f (vcons x xs) := vcons (f x) (vector_map f xs). 
 
+(** [vector_map_nth f i xs] maps [f] on the [i]-th element of [xs],
+    and leaves other elements untouched. *)
+Equations vector_map_nth {T n} (f : T -> T) (i : fin n) (xs : vector T n) : vector T n := 
+vector_map_nth f finO (vcons x xs) := vcons (f x) xs ;
+vector_map_nth f (finS i) (vcons x xs) := vcons x (vector_map_nth f i xs).
+
 (** Notation for vectors, in scope [vector]. *)
 
 Declare Scope vector_scope.

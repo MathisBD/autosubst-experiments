@@ -8,31 +8,10 @@ Module O.
 Section WithSig.
 Context {sig : signature}.
 
-Lemma occurs_iff s s' : occursb s s' <-> occurs s s'.
-Proof. now destruct (occurs_spec s s'). Qed.
-
-Lemma has_var_iff s : has_varb s <-> has_var s.
-Proof. now destruct (has_var_spec s). Qed.
-
-Lemma occurs_in {s1 s2 ty} {c : fin (nctor s2)} : 
-  occurs_ty s1 ty -> In ty (ctor_type c) -> occurs s1 s2.
-Proof.
-intros H1 H2. apply occurs_base. exists c. rewrite Exists_exists. eauto.
-Qed.
-
-Lemma occurs_aux s s' : occursb s s' -> occurs s s'.
-Proof. now destruct (occurs_spec s s'). Qed.
-
-Lemma has_var_aux s : has_varb s -> has_var s.
-Proof. now destruct (has_var_spec s). Qed.
-
-Lemma has_var_aux' s : has_var s -> has_varb s.
-Proof. now destruct (has_var_spec s). Qed.
-
 (** Level one terms. *)
 
 Inductive term : fin nsort -> Type :=
-| T_var {s} : has_varb s -> nat -> term s
+| T_var {s} : nat -> term s
 | T_ctor {s} (c : fin (nctor s)) : args (ctor_type c) -> term s
 
 with args : list arg_ty -> Type :=
@@ -49,7 +28,7 @@ Derive Signature NoConfusion NoConfusionHom for term args arg.
 (** Size of terms. *)
 
 Equations term_size {s} : term s -> nat :=
-term_size (T_var _ _) := 0 ;
+term_size (T_var _) := 0 ;
 term_size (T_ctor c al) := S (args_size al) ;
 
 with args_size {tys} : args tys -> nat :=
@@ -80,45 +59,22 @@ End SizeInd.
 
 (** Renamings. *)
 
-Definition ren (s : fin nsort) := nat -> nat.
-
-(** Vector of renamings which can be applied to a term of sort [s]. *)
-Definition ren_vec (s : fin nsort) :=
-  hvector nsort (fun s' => occursb s' s -> has_varb s' -> ren s').
-
-(** Select a subvector of a vector of renaming. *)
-Equations? ren_subvector {s1 s2} (p : occursb s1 s2) (rv : ren_vec s2) : ren_vec s1 := 
-ren_subvector p rv := 
-  hvector_map 
-    (fun s' (r : occursb s' s2 -> has_varb s' -> ren s') pocc pvar => r _ pvar) rv.
-Proof. 
-rewrite occurs_iff. apply occurs_trans with (s' := s1).
-- now rewrite <-occurs_iff.
-- now rewrite <-occurs_iff. 
-Qed.
+(** Vector of renamings. *)
+Definition ren_vec := vector ren nsort.
 
 (** Apply a vector of renamings to a term. *)
-Equations? rename {s} (rv : ren_vec s) (t : term s) : term s :=
-rename rv (T_var p i) := T_var p (hvector_nth s rv _ p i) ;
-rename rv (T_ctor c al) := T_ctor c (rename_args c _ rv al)
+Equations rename {s} (rv : ren_vec) (t : term s) : term s :=
+rename rv (T_var i) := T_var (vector_nth s rv i) ;
+rename rv (T_ctor c al) := T_ctor c (rename_args rv al)
 
-with rename_args {s} {tys : list arg_ty} (c : fin (nctor s)) (p : incl tys (ctor_type c)) 
-  (rv : ren_vec s) (al : args tys) : args tys :=
-rename_args c p rv AL_nil := AL_nil ;
-rename_args c p rv (AL_cons a al) := AL_cons (rename_arg c _ rv a) (rename_args c _ rv al)
+with rename_args {tys : list arg_ty} (rv : ren_vec) (al : args tys) : args tys :=
+rename_args rv AL_nil := AL_nil ;
+rename_args rv (AL_cons a al) := AL_cons (rename_arg rv a) (rename_args rv al)
 
-with rename_arg {s} {ty : arg_ty} (c : fin (nctor s)) (p : In ty (ctor_type c))
-  (rv : ren_vec s) (a : arg ty) : arg ty :=
-rename_arg c p rv (A_base b x) := A_base b x ;
-rename_arg c p rv (A_term t) := A_term (rename (ren_subvector _ rv) t) ;
-rename_arg c p rv (A_bind a) := A_bind a.
-
-Proof.
-- rewrite occurs_iff. apply occurs_refl. 
-- apply p. now left.
-- apply p. now right.
-- rewrite occurs_iff. unshelve eapply (occurs_in _ p). constructor.
-Qed.
+with rename_arg {ty : arg_ty} (rv : ren_vec) (a : arg ty) : arg ty :=
+rename_arg rv (A_base b x) := A_base b x ;
+rename_arg rv (A_term t) := A_term (rename rv t) ;
+rename_arg rv (@A_bind s _ a) := A_bind (rename (vector_map_nth up_ren s rv) a).
 
 End WithSig.
 End O.
@@ -137,6 +93,7 @@ Inductive ty : Type :=
 | all : ty -> ty.
 
 Inductive tm : Type :=
+| var_tm : nat -> tm
 | app : tm -> tm -> tm
 | tapp : tm -> ty -> tm
 | vt : vl -> tm
@@ -155,22 +112,27 @@ Combined Scheme tm_vl_ind from tm_ind, vl_ind.
 
 (** Renaming. *)
 
-Definition ren := nat -> nat.
-
-Equations rename_ty : ren -> ty -> ty :=
-rename_ty rty (var_ty i) := var_ty (rty i) ;
-rename_ty rty (arr t1 t2) := arr (rename_ty rty t1) (rename_ty rty t2) ;
-rename_ty rty (all t) := all (rename_ty (up_ren rty) t).
-
-Equations rename_tm : ren * ren -> tm -> tm :=
-rename_tm (rty, rvl) (app t1 t2) := app (rename_tm (rty, rvl) t1) (rename_tm (rty, rvl) t2) ;
-rename_tm (rty, rvl) (tapp t1 t2) := tapp (rename_tm (rty, rvl) t1) (rename_ty rty t2) ;
-rename_tm (rty, rvl) (vt v) := vt (rename_vl (rty, rvl) v)
-
-with rename_vl : ren * ren -> vl -> vl :=
-rename_vl (rty, rvl) (var_vl i) := var_vl (rvl i) ;
-rename_vl (rty, rvl) (lam t1 t2) := lam (rename_ty rty t1) (rename_tm (rty, up_ren rvl) t2) ;
-rename_vl (rty, rvl) (tlam t) := tlam (rename_tm (up_ren rty, rvl) t).
+Fixpoint rename_ty (rty rtm rvl : ren) (t : ty) : ty :=
+  match t with 
+  | var_ty i => var_ty (rty i)
+  | arr t1 t2 => arr (rename_ty rty rtm rvl t1) (rename_ty rty rtm rvl t2)
+  | all t => all (rename_ty (up_ren rty) rtm rvl t)
+  end.
+  
+Fixpoint rename_tm (rty rtm rvl : ren) (t : tm) : tm :=
+  match t with 
+  | var_tm i => var_tm (rtm i)
+  | app t1 t2 => app (rename_tm rty rtm rvl t1) (rename_tm rty rtm rvl t2)
+  | tapp t1 t2 => tapp (rename_tm rty rtm rvl t1) (rename_ty rty rtm rvl t2)
+  | vt v => vt (rename_vl rty rtm rvl v)
+  end
+  
+with rename_vl (rty rtm rvl : ren) (t : vl) : vl :=
+  match t with 
+  | var_vl i => var_vl (rvl i) 
+  | lam t1 t2 => lam (rename_ty rty rtm rvl t1) (rename_tm rty rtm (up_ren rvl) t2)
+  | tlam t => tlam (rename_tm (up_ren rty) rtm rvl t)
+  end.
 
 (*********************************************************************************)
 (** *** Signature. *)
@@ -201,21 +163,24 @@ Definition ctor_type_ (s : fin nsort_) (c : fin (nctor_ s)) : list (@arg_ty nbas
 Definition sig : signature := 
   Build_signature nbase_ base_type_ nsort_ nctor_ ctor_type_.
 
+#[local] Existing Instance sig.
+
 (*********************************************************************************)
 (** *** Reification. *)
 (*********************************************************************************)
 
-Fixpoint reify_ty (t : ty) : @O.term sig sty :=
+Fixpoint reify_ty (t : ty) : O.term sty :=
   match t with 
-  | var_ty i => O.T_var (@eq_refl bool (@has_varb sig sty)) i
+  | var_ty i => O.T_var i
   | arr t1 t2 => 
       @O.T_ctor sig sty finO (O.AL_cons (O.A_term (reify_ty t1)) (O.AL_cons (O.A_term (reify_ty t2)) O.AL_nil))
   | all t => 
       @O.T_ctor sig sty (finS finO) (O.AL_cons (O.A_bind (reify_ty t)) O.AL_nil)
   end.
 
-Fixpoint reify_tm (t : tm) : @O.term sig stm :=
+Fixpoint reify_tm (t : tm) : O.term stm :=
   match t with 
+  | var_tm i => O.T_var i
   | app t1 t2 =>
       @O.T_ctor sig stm finO (O.AL_cons (O.A_term (reify_tm t1)) (O.AL_cons (O.A_term (reify_tm t2)) O.AL_nil))
   | tapp t1 t2 =>
@@ -224,9 +189,9 @@ Fixpoint reify_tm (t : tm) : @O.term sig stm :=
       @O.T_ctor sig stm (finS (finS finO)) (O.AL_cons (O.A_term (reify_vl t)) O.AL_nil)
   end
 
-with reify_vl (t : vl) : @O.term sig svl :=
+with reify_vl (t : vl) : O.term svl :=
   match t with 
-  | var_vl i => O.T_var (@eq_refl bool (@has_varb sig svl)) i
+  | var_vl i => O.T_var i
   | lam t1 t2 =>
       @O.T_ctor sig svl finO (O.AL_cons (O.A_term (reify_ty t1)) (O.AL_cons (O.A_bind (reify_tm t2)) O.AL_nil))
   | tlam t =>
@@ -237,55 +202,47 @@ with reify_vl (t : vl) : @O.term sig svl :=
 (** *** Evaluation. *)
 (*********************************************************************************)
 
-Lemma explode {A : Type} : is_true false -> A.
-Proof. intros H. unfold is_true in H. discriminate. Qed.
-
-Definition eval_sort (s : fin (@nsort sig)) : Type :=
+Definition eval_sort (s : fin nsort) : Type :=
   vector_nth s [- ty ; tm ; vl -].
 
-Definition eval_arg_ty (ty : @arg_ty (@nbase sig) (@nsort sig)) : Type :=
+Definition eval_arg_ty (ty : @arg_ty nbase nsort) : Type :=
   match ty with 
-  | AT_base b => @base_type sig b 
+  | AT_base b => base_type b 
   | AT_term s => eval_sort s
   | AT_bind _ s => eval_sort s
   end.
 
-Fixpoint eval_arg_tys (tys : list (@arg_ty (@nbase sig) (@nsort sig))) : Type :=
+Fixpoint eval_arg_tys (tys : list (@arg_ty nbase nsort)) : Type :=
   match tys with 
   | [] => unit 
   | ty :: tys => eval_arg_ty ty * eval_arg_tys tys 
   end.
 
-Definition eval_ctor_sty (c : fin (@nctor sig sty)) : eval_arg_tys (ctor_type c) -> eval_sort sty :=
+Definition eval_ctor_sty (c : fin (nctor sty)) : eval_arg_tys (ctor_type c) -> eval_sort sty :=
   let x '(t1, (t2, tt)) := arr t1 t2 in
   let y '(t, tt) := all t in 
   hvector_nth (T := fun c => eval_arg_tys (ctor_type c) -> eval_sort sty) c [= x ; y =].
 
-Definition eval_ctor_stm (c : fin (@nctor sig stm)) : eval_arg_tys (ctor_type c) -> eval_sort stm :=
+Definition eval_ctor_stm (c : fin (nctor stm)) : eval_arg_tys (ctor_type c) -> eval_sort stm :=
   let x '(t1, (t2, tt)) := app t1 t2 in
   let y '(t1, (t2, tt)) := tapp t1 t2 in
   let z '(t, tt) := vt t in
   hvector_nth (T := fun c => eval_arg_tys (ctor_type c) -> eval_sort stm) c [= x ; y ; z =].
 
-Definition eval_ctor_svl (c : fin (@nctor sig svl)) : eval_arg_tys (ctor_type c) -> eval_sort svl :=
+Definition eval_ctor_svl (c : fin (nctor svl)) : eval_arg_tys (ctor_type c) -> eval_sort svl :=
   let x '(t1, (t2, tt)) := lam t1 t2 in
   let y '(t, tt) := tlam t in
   hvector_nth (T := fun c => eval_arg_tys (ctor_type c) -> eval_sort svl) c [= x ; y =].
 
-Definition eval_ctor (s : fin (@nsort sig)) (c : fin (nctor s)) 
+Definition eval_ctor (s : fin nsort) (c : fin (nctor s)) 
   (args : eval_arg_tys (ctor_type c)) : eval_sort s :=
-  hvector_nth s (T := fun s => forall c : fin (@nctor sig s), eval_arg_tys (ctor_type c) -> eval_sort s) 
+  hvector_nth s (T := fun s => forall c : fin (nctor s), eval_arg_tys (ctor_type c) -> eval_sort s) 
     [= eval_ctor_sty ; eval_ctor_stm ; eval_ctor_svl =] c args.
 
-Definition eval_var {s} (p : has_varb s) (i : nat) : eval_sort s :=
-  let x _ := var_ty i in
-  let z _ := var_vl i in
-  hvector_nth (T := fun s => has_varb s -> eval_sort s) s [= x ; explode ; z =] p.
-
-Fixpoint eval {s} (t : @O.term sig s) : eval_sort s :=
-  match t with 
-  | O.T_var p i => eval_var p i
-  | O.T_ctor c al => eval_ctor _ c (eval_args al)
+Fixpoint eval {s} (t : O.term s) : eval_sort s :=
+  match t in @O.term _ s0 return eval_sort s0 with 
+  | @O.T_var _ s i => hvector_nth (T := eval_sort) s [= var_ty i ; var_tm i ; var_vl i =]
+  | @O.T_ctor _ s c al => eval_ctor s c (eval_args al)
   end 
 
 with eval_args {tys} (al : O.args tys) : eval_arg_tys tys :=
@@ -321,12 +278,13 @@ Section CustomInd.
 
   Context (P : forall s, O.term s -> Prop).
   
-  Context (Hvar_ty : forall i (p : has_varb sty), P sty (O.T_var p i)).
+  Context (Hvar_ty : forall i, P sty (O.T_var i)).
   Context (Harr : forall t1 t2, P sty t1 -> P sty t2 -> 
     P sty (@O.T_ctor _ sty finO (O.AL_cons (O.A_term t1) (O.AL_cons (O.A_term t2) O.AL_nil)))).
   Context (Hall : forall t, P sty t -> 
     P sty (@O.T_ctor _ sty (finS finO) (O.AL_cons (O.A_bind t) O.AL_nil))).
 
+  Context (Hvar_tm : forall i, P stm (O.T_var i)).
   Context (Happ : forall t1 t2, P stm t1 -> P stm t2 ->
     P stm (@O.T_ctor _ stm finO (O.AL_cons (O.A_term t1) (O.AL_cons (O.A_term t2) O.AL_nil)))).
   Context (Htapp : forall t1 t2, P stm t1 -> P sty t2 ->
@@ -334,7 +292,7 @@ Section CustomInd.
   Context (Hvt : forall t, P svl t ->
     P stm (@O.T_ctor _ stm (finS (finS finO)) (O.AL_cons (O.A_term t) O.AL_nil))).
 
-  Context (Hvar_vl : forall i (p : has_varb svl), P svl (O.T_var p i)).
+  Context (Hvar_vl : forall i, P svl (O.T_var i)).
   Context (Hlam : forall t1 t2, P sty t1 -> P stm t2 ->
     P svl (@O.T_ctor _ svl finO (O.AL_cons (O.A_term t1) (O.AL_cons (O.A_bind t2) O.AL_nil)))).
   Context (Htlam : forall t1, P stm t1 ->
@@ -349,7 +307,7 @@ Section CustomInd.
       apply Harr ; apply IH ; cbn ; lia.
     + depelim a. depelim a1. depelim a. 
       apply Hall ; apply IH ; cbn ; lia.
-  - exfalso. clear -i. now cbv in i.
+  - apply Hvar_tm.
   - repeat depelim c.
     + depelim a. depelim a. depelim a1. depelim a. depelim a1. 
       apply Happ ; apply IH ; cbn ; lia.
@@ -370,67 +328,85 @@ End CustomInd.
 (*********************************************************************************)
 (** *** Transporting renamings. *)
 (*********************************************************************************)
+
+Definition ren_vec := (ren * (ren * ren))%type.
+
+Definition eval_ren_vec (rv : O.ren_vec) : ren_vec :=
+  (vector_nth finO rv, (vector_nth (finS finO) rv, vector_nth (finS (finS finO)) rv)).
   
-Definition eval_ren_vec_type (s : fin (@nsort sig)) : Type :=
-  vector_nth s [- ren ; (ren * ren)%type ; (ren * ren)%type -].
-
-Definition eval_ren_vec {s : fin (@nsort sig)} (rv : O.ren_vec s) : eval_ren_vec_type s :=
-  let x (rv : @O.ren_vec sig sty) :=
-    hvector_nth sty rv eq_refl eq_refl
-  in
-  let y (rv : @O.ren_vec sig stm) :=
-    ( hvector_nth sty rv eq_refl eq_refl
-    , hvector_nth svl rv eq_refl eq_refl)
-  in
-  let z (rv : @O.ren_vec sig svl) :=
-    ( hvector_nth sty rv eq_refl eq_refl
-    , hvector_nth svl rv eq_refl eq_refl )
-  in
-  hvector_nth (T := fun s => @O.ren_vec sig s -> eval_ren_vec_type s) s [= x ; y ; z =] rv.
-
 (** Evaluate [O.rename s] into a concrete function such as [rename_ty] or [rename_tm]. *)
-Definition eval_rename {s} : eval_ren_vec_type s -> eval_sort s -> eval_sort s :=
-  hvector_nth (T := fun s => eval_ren_vec_type s -> eval_sort s -> eval_sort s) 
-    s [= rename_ty ; rename_tm ; rename_vl =].
+Definition eval_rename {s} (r : ren_vec) : eval_sort s -> eval_sort s :=
+  let '(rty, (rtm, rvl)) := r in
+  hvector_nth (T := fun s => eval_sort s -> eval_sort s) 
+    s [= rename_ty rty rtm rvl ; rename_tm rty rtm rvl ; rename_vl rty rtm rvl =].
 
-Existing Instance sig.
-
-Ltac red_hvector_nth :=
+(*Ltac red_vector_nth :=
   repeat match goal with 
+  | |- context [ vector_nth finO (vcons ?x ?xs) ] => 
+    change (vector_nth finO (vcons x xs)) with x
+  | |- context [ vector_nth (finS ?i) (vcons ?x ?xs) ] =>
+    change (vector_nth (finS i) (vcons x xs)) with (vector_nth i xs)
   | |- context [ hvector_nth finO (hcons ?x ?xs) ] => 
     change (hvector_nth finO (hcons x xs)) with x
   | |- context [ hvector_nth (finS ?i) (hcons ?x ?xs) ] =>
     change (hvector_nth (finS i) (hcons x xs)) with (hvector_nth i xs)
   end ;
-  cbn beta zeta iota.
+  cbn beta zeta iota.*)
 
-Lemma rename_ty_congr (r1 r2 : ren) (t1 t2 : ty) :
-  r1 =₁ r2 -> t1 = t2 -> rename_ty r1 t1 = rename_ty r2 t2.
+#[export] Instance rename_ty_congr : Proper (point_eq ==> point_eq ==> point_eq ==> eq ==> eq) rename_ty.
 Proof.
-intros H <-. induction t1 in r1, r2, H |- * ; simp rename_ty. 
-- now rewrite H.
+intros rty1 rty2 Hty rtm1 rtm2 Htm rvl1 rvl2 Hvl t1 t2 <-. 
+induction t1 in rty1, rty2, rtm1, rtm2, rvl1, rvl2, Hty, Htm, Hvl |- * ; cbn.
+- now rewrite Hty.
 - f_equal ; auto.
-- f_equal. apply IHt1. intros [|i] ; [reflexivity|]. cbv. now rewrite H.
+- f_equal. apply IHt1 ; auto using congr_up_ren. 
 Qed.
 
 (** Push [eval] through renamings. *)
-Lemma push_eval_rename {s} (rv : O.ren_vec s) (t : O.term s) : 
+Lemma push_eval_rename {s} (rv : O.ren_vec) (t : O.term s) : 
   eval (O.rename rv t) = eval_rename (eval_ren_vec rv) (eval t).
 Proof.
 revert rv. pattern t. revert s t. apply custom_ind.
-all: intros.
-- simp rename. cbn [eval]. unfold eval_var. red_hvector_nth.  
-  unfold eval_rename. red_hvector_nth. 
-  unfold eval_ren_vec. red_hvector_nth.
-  cbn [rename_ty]. f_equal. f_equal.
-  + apply uip.
-  + apply uip.
-- unfold eval_rename. red_hvector_nth.
-  simp rename. cbn [eval eval_args eval_arg].
-  unfold eval_ctor. red_hvector_nth.
-  unfold eval_ctor_sty. red_hvector_nth.
-  simpl. rewrite H, H0. f_equal.
-  + unfold eval_rename. red_hvector_nth. apply rename_ty_congr ; [|reflexivity].
-    intros i. 
-Admitted.
+all: intros ; repeat depelim rv ; cbn.
+- reflexivity. 
+- f_equal.
+  + apply H.
+  + apply H0.
+- f_equal. apply H.
+- reflexivity.
+- f_equal.
+  + apply H.
+  + apply H0.
+- f_equal. 
+  + apply H.
+  + apply H0.
+- f_equal. apply H.
+- reflexivity.
+- f_equal.
+  + apply H.
+  + apply H0.
+- f_equal. apply H.
+Qed.      
+
+Axiom t1 t2 : ty.
+
+Definition t : ty := arr t1 t2.
+Definition t' : ty := rename_ty rshift rid rid t.
+
+Definition s : @O.term sig sty := 
+  @O.T_ctor sig sty finO (O.AL_cons (O.A_term (reify_ty t1)) (O.AL_cons (O.A_term (reify_ty t2)) O.AL_nil)).
+Definition s' : @O.term sig sty := 
+  O.rename [- rshift ; rid ; rid -]%vector s.
+
+Lemma arr_congr : Proper (eq ==> eq ==> eq) arr.
+Proof. now intros ? ? -> ? ? ->. Qed.
+
+Definition p1 : eval s = t := 
+  arr_congr _ _ (eval_reify_ty t1) _ _ (eval_reify_ty t2).
+
+Definition p2 : eval s' = t' :=
+  let x := push_eval_rename [- rshift ; rid ; rid -]%vector s in
+  let y := rename_ty_congr rshift rshift peq_refl rid rid peq_refl rid rid peq_refl (eval s) t p1 in
+  eq_trans x y.
+
     

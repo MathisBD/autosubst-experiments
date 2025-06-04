@@ -44,6 +44,8 @@ Ltac2 simpl_term_one (sig : constr) (t1 : constr) : constr * constr :=
     (Clean.ered_sound $env _ _ (Clean.eclean_red $t2'))) 
   in
   (t1', eq1).
+  
+  (*(t1', eq1).*)
 
 (** Simplify a level one substitution. Returns [(s1', eq)] where [eq : s1 =₁ s1'].*)
 Ltac2 simpl_subst_one (sig : constr) (s1 : constr) : constr * constr :=

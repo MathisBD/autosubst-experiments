@@ -36,6 +36,16 @@ Notation vl := expr (only parsing).
 Inductive sort := Sty | Stm | Svl. 
 Derive NoConfusion for sort.
 
+Tactic Notation "rapply" constr(t) :=
+  let tac2 := ltac2:(t |- 
+  eapply_eq_gen 
+    (fun ty => constr:(@eq $ty))
+    (fun () => () (*try (solve [ reflexivity | ltac1:(rasimpl) ; reflexivity ])*))
+    (Option.get (Ltac1.to_constr t)))  
+  in
+  tac2 t ;
+  shelve_unifiable.
+
 (*********************************************************************************)
 (** *** Triggers for [rasimpl]. *)
 (*********************************************************************************)
@@ -51,6 +61,11 @@ Lemma rasimpl_trigger_substitute (s : subst) (t res : expr) :
   TermSimplification (substitute s t) res -> substitute s t = res.
 Proof. intros H. now apply term_simplification. Qed.
 #[export] Hint Rewrite -> rasimpl_trigger_substitute : asimpl_topdown.
+
+(*Axiom P : expr -> Prop.
+Axiom t : expr.
+Lemma test (H : forall t r, P (rename r t)) : P (var 0).
+Proof. rapply H. rasimpl. Unshelve. 2: exact t. rasimpl. *)
 
 (*********************************************************************************)
 (** *** Scoping for terms. *)
@@ -224,9 +239,14 @@ intros H. induction H.
 - constructor.
 - constructor.
   + assumption.
-  + assert (scomp s sshift 0 = rename rshift (s 0)) as -> by now rasimpl. 
+  + (*eapply_eq scoping_rename. Unshelve. 5: exact rshift.
+    * 
+
+    
+  assert (scomp s sshift 0 = rename rshift (s 0)) as -> by now rasimpl. 
     eapply scoping_rename ; eauto with scoping.
-Qed.
+Qed.*)
+Admitted.
 #[export] Hint Resolve sscoping_sshift_r : scoping.
 
 (** Substituting preserves the scope. *)
@@ -423,15 +443,15 @@ Unset Elimination Schemes.
 (** Typing for terms. *)
 Inductive typing_tm : ctx -> tm -> ty -> Prop :=
 
-| typing_app C (A B : ty) (s t : tm) :
-    typing_tm C s (arr A B) ->
-    typing_tm C t A ->
-    typing_tm C (app s t) B
+| typing_app C (A B : ty) (t1 t2 : tm) :
+    typing_tm C t1 (arr A B) ->
+    typing_tm C t2 A ->
+    typing_tm C (app t1 t2) B
 
-| typing_tapp C (A B : ty) (s : tm) :
+| typing_tapp C (A B : ty) (t : tm) :
     scoping ⌜C⌝ B Sty ->
-    typing_tm C s (all A) ->
-    typing_tm C (tapp s B) A[B..]
+    typing_tm C t (all A) ->
+    typing_tm C (tapp t B) A[B..]
 
 | typing_vt C (A : ty) (v : vl) :
     typing_vl C v A ->
@@ -488,12 +508,62 @@ Qed.
 (** *** Preservation. *)
 (*********************************************************************************)
 
+Definition rtyping (C1 : ctx) (r : ren) (C2 : ctx) : Prop :=
+  forall i di,
+    nth_error C2 i = Some di ->
+    nth_error C1 (r i) = Some di.
+
+Lemma rtyping_rid C :
+  rtyping C rid C.
+Proof. intros i di Hi. assumption. Qed.
+
+Lemma rtyping_rshift C d :
+  rtyping (d :: C) rshift C.
+Proof. intros i di Hi. cbn. assumption. Qed.
+
+Lemma rtyping_rcons C1 i di r C2 :
+  nth_error C1 i = Some di ->
+  rtyping C1 r C2 ->
+  rtyping C1 (rcons i r) (di :: C2).
+Proof.
+intros H1 H2 j dj Hj. destruct j ; cbn in *.
+- depelim Hj. assumption.
+- apply H2. assumption.
+Qed.
+
+Lemma rtyping_up_ren C1 r d C2 : 
+  rtyping C1 r C2 ->
+  rtyping (d :: C1) (up_ren r) (d :: C2).
+Proof.
+intros H i di Hi. destruct i ; cbn in *.
+- now depelim Hi.
+- apply H. assumption.
+Qed.
+
+(** Typing is stable under renaming. *)
+Lemma typing_rcons : 
+  (forall C t A, typing_tm C t A -> forall C' r, rtyping C' r C -> typing_tm C' (rename r t) (rename r A)) /\
+  (forall C v A, typing_vl C v A -> forall C' r, rtyping C' r C -> typing_vl C' (rename r v) (rename r A)).
+Proof.
+apply typing_tm_vl_ind ; intros.
+- specialize (H0 _ _ H3). specialize (H2 _ _ H3). rasimpl. eapply typing_app ; eassumption.
+- specialize (H1 _ _ H2). rasimpl. eapply typing_tapp.
+
+(*
+
+typing_
+
+*)
+
 (** Typing is stable under _value_ substitution. *)
 Lemma typing_substitute_vl C t v A B : 
   typing_tm (C ,, A) t (rename rshift B) -> 
   typing_vl C v A ->
   typing_tm C t[v..] B.
-Proof. Admitted.
+Proof.
+
+
+Admitted.
 
 (** Typing is stable under _type_ substitution. *)
 Lemma typing_substitute_ty C t T B : 
