@@ -4,6 +4,29 @@ From Prototype Require Import MPrelude MSig.
 (** *** Level one. *)
 (*********************************************************************************)
 
+Definition eval : term_param -> option term_concret
+
+Definition seval : (nat -> term_param) -> (nat -> term_concret)
+seval s := fun i => eval (s i)
+
+A -> option B
+
+option (A -> B)
+
+Inductive arg_ty {nbase nsort} :=
+| AT_base : fin nbase -> arg_ty
+| AT_term : fin nsort -> arg_ty
+| AT_bind : fin nsort -> arg_ty -> arg_ty.
+
+Record signature :=
+{ nsort : nat 
+; nctor : forall (s : fin nsort), nat
+; ctor_type : forall s (c : fin (nctor s)), list arg_ty
+}
+
+Definition occurs : fin nsort -> fin nsort -> Prop/bool.
+Definition has_var : fin nsort -> Prop/bool.
+
 Module O.
 Section WithSig.
 Context {sig : signature}.
@@ -80,11 +103,11 @@ End SizeInd.
 
 (** Renamings. *)
 
-Definition ren (s : fin nsort) := nat -> nat.
+(*Definition ren (s : fin nsort) := nat -> nat.*)
 
 (** Vector of renamings which can be applied to a term of sort [s]. *)
 Definition ren_vec (s : fin nsort) :=
-  hvector nsort (fun s' => occursb s' s -> has_varb s' -> ren s').
+  hvector nsort (fun s' => occursb s' s -> has_varb s' -> nat -> nat).
 
 (** Select a subvector of a vector of renaming. *)
 Equations? ren_subvector {s1 s2} (p : occursb s1 s2) (rv : ren_vec s2) : ren_vec s1 := 

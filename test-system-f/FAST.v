@@ -239,7 +239,7 @@ intros H. induction H.
 - constructor.
 - constructor.
   + assumption.
-  + (*eapply_eq scoping_rename. Unshelve. 5: exact rshift.
+  + eapply_eq scoping_rename. (*eapply_eq scoping_rename. Unshelve. 5: exact rshift.
     * 
 
     
