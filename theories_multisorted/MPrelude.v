@@ -50,7 +50,7 @@ Ltac feed4 H := feed H ; [| feed3 H].
 (*********************************************************************************)
 
 (** Pointwise equality on functions with one argument. *)
-Definition eq1 {A B} : relation (A -> B) :=
+Definition eq1 {A B} : relation (forall a : A, B a) :=
   fun f g => forall x, f x = g x.
 
 Notation "f =₁ g" := (eq1 f g) (at level 75).
@@ -69,8 +69,8 @@ Proof.
 constructor. ; [apply eq1_refl | |].
 Build_Equivalence eq1 eq1_refl eq1_sym eq1_trans.*)
 
-(** Pointwise equality on functions with two arguments. *)
-Definition eq2 {A B C} : relation (A -> B -> C) :=
+(** Pointwise equality on vectors of renamings/substitutions. *)
+Definition eq2 {A B C} : relation (forall (a : A) (b : B a), C a b) :=
   fun f g => forall x, f x =₁ g x.
 
 Notation "f =₂ g" := (eq2 f g) (at level 75).
@@ -117,11 +117,11 @@ Definition rcomp (r1 r2 : ren) : ren :=
 Proof. intros ? ? H1 ? ? H2 i. cbv. now rewrite H1, H2. Qed.
 
 (** Lift a renaming through a binder. *)
-Definition up_ren (r : ren) : ren := 
+Definition rup (r : ren) : ren := 
   rcons 0 (rcomp r rshift).
 
-#[export] Instance up_ren_proper : Proper (eq1 ==> eq1) up_ren.
-Proof. intros ? ? H. unfold up_ren. now rewrite H. Qed.
+#[export] Instance rup_proper : Proper (eq1 ==> eq1) rup.
+Proof. intros ? ? H. unfold rup. now rewrite H. Qed.
 
 (*********************************************************************************)
 (** *** Finite sets. *)

@@ -158,7 +158,7 @@ Inductive ty : Type :=
 | var_ty : nat -> ty
 | arr : ty -> ty -> ty
 | all : ty -> ty.
-
+ 
 Inductive tm : Type :=
 | app : tm -> tm -> tm
 | tapp : tm -> ty -> tm
