@@ -1,6 +1,6 @@
 (** This file defines the notion of abstract signature of a language. *)
 
-From Prototype Require Import MPrelude.
+From MPrototype Require Import Prelude.
 
 (*********************************************************************************)
 (** *** Signatures. *)

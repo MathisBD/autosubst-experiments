@@ -1,4 +1,4 @@
-From Prototype Require Import MPrelude MSig.
+From MPrototype Require Import Prelude Sig.
 
 (** This file defines a term syntax parameterized over an arbitrary signature,
      with _admissible_ renamings and substitutions (i.e. renamings are 
@@ -45,10 +45,10 @@ where "'term' m" := (expr (Kt m))
 Derive Signature NoConfusion NoConfusionHom for expr.
 
 (*********************************************************************************)
-(** *** Induction on expressions based on their size. *)
+(** *** Induction on terms based on their size. *)
 (*********************************************************************************)
 
-(*(** Size of expressions. *)
+(** Size of an expression. *)
 Equations expr_size {k} : expr k -> nat :=
 expr_size (E_var _) := 0 ;
 expr_size (E_ctor c al) := S (expr_size al) ;
@@ -58,23 +58,21 @@ expr_size (E_abase _ _) := 0 ;
 expr_size (E_aterm t) := S (expr_size t) ;
 expr_size (E_abind _ a) := S (expr_size a).
 
+(** Custom induction principle on _terms_ (not on arbitrary expressions). *)
 Section SizeInd.
-  Context (P : forall k, expr k -> Prop).
+  Context (P : forall m, term m -> Prop).
 
-  Context (IH : forall s (t : term s), 
-    (forall s' (t' : term s'), expr_size t' < expr_size t -> P s' t') -> 
-    P s t).
+  Context (IH : forall m (t : term m), 
+    (forall m' (t' : term m'), expr_size t' < expr_size t -> P m' t') -> 
+    P m t).
 
-  Lemma size_ind : forall s t, P s t.
+  Lemma size_ind : forall m t, P m t.
   Proof.
-  intros s t. remember (term_size t) as n eqn:E.
-  revert s t E. induction n using Wf_nat.lt_wf_ind. intros s t ->.
-  apply IH. intros s' t' Hlt. eapply H ; eauto.
+  intros m t. remember (expr_size t) as n eqn:E.
+  revert m t E. induction n using Wf_nat.lt_wf_ind. intros m t ->.
+  apply IH. intros m' t' Hlt. eapply H ; eauto.
   Qed.
-End SizeInd.*)
-
-(** Notation for left to right function composition. *)
-(*Notation "f >> g" := (fun i => g (f i)) (at level 30).*)
+End SizeInd.
 
 (*********************************************************************************)
 (** *** Renamings. *)

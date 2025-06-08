@@ -1,5 +1,4 @@
 (coq.theory
- (name Prototype)
+ (name MPrototype)
  (package autosubst-experiments)
- (theories Ltac2 Equations)
- (plugins autosubst-experiments.plugin))
+ (theories Ltac2 Equations))
