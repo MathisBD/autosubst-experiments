@@ -14,6 +14,11 @@ Inductive arg_ty {base sort} :=
 
 Derive NoConfusion NoConfusionHom for arg_ty.
 
+(** Decidable equality on argument types, to avoid UIP. *)
+#[export] Instance arg_ty_EqDec base sort : 
+  EqDec base -> EqDec sort -> EqDec (@arg_ty base sort).
+Proof. Admitted.
+
 (** Signatures for abstract terms. *)
 Record signature :=
 { (** The set of base types, 
