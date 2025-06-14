@@ -269,7 +269,7 @@ intros s s' Hs r r' Hr. unfold vsvrcomp. apply (hvec_mapi_proper (fun _ => eq1))
 Qed.
 
 (*********************************************************************************)
-(** *** Properties of renamings and substitutions. *)
+(** *** Pushing [vec_nth] and [hvec_nth] inside expressions. *)
 (*********************************************************************************)
 
 Lemma vec_nth_vrid m : 
@@ -277,10 +277,52 @@ Lemma vec_nth_vrid m :
 Proof. intros i. unfold vrid. now simp vec_nth. Qed.
 #[local] Hint Rewrite vec_nth_vrid : vec_nth.
 
+Lemma vec_nth_vren_shift_point m m' : 
+  vec_nth (vren_shift_point m) m' =₁ if eq_dec m m' then rshift else rid.
+Proof. intros i. unfold vren_shift_point. now simp vec_nth. Qed.
+#[local] Hint Rewrite vec_nth_vren_shift_point : vec_nth. 
+
+Lemma vec_nth_vrup r m m' : 
+  vec_nth (vrup m r) m' =₁ if eq_dec m m' then rup (vec_nth r m') else vec_nth r m'.
+Proof. intros i. unfold vrup. now simp vec_nth. Qed.
+#[local] Hint Rewrite vec_nth_vrup : vec_nth.
+
+Lemma vec_nth_vrcomp r1 r2 m : 
+  vec_nth (vrcomp r1 r2) m =₁ rcomp (vec_nth r1 m) (vec_nth r2 m).
+Proof. intros i. unfold vrcomp, rcomp. now simp vec_nth. Qed.
+#[local] Hint Rewrite vec_nth_vrcomp : vec_nth.
+
 Lemma hvec_nth_vsid m : 
   hvec_nth vsid m =₁ sid.
 Proof. intros i. unfold vsid. now simp hvec_nth. Qed.
 #[local] Hint Rewrite hvec_nth_vsid : hvec_nth.
+
+Lemma hvec_nth_vsup s m m' : 
+  hvec_nth (vsup m s) m' =₁ 
+    if eq_dec m m' 
+    then scons (E_var 0) (svrcomp (hvec_nth s m') (vren_shift_point m))
+    else svrcomp (hvec_nth s m') (vren_shift_point m).
+Proof. intros i. unfold vsup. now simp hvec_nth. Qed.
+#[local] Hint Rewrite hvec_nth_vsup : hvec_nth.
+
+Lemma hvec_nth_vscomp s1 s2 m : 
+  hvec_nth (vscomp s1 s2) m =₁ svscomp (hvec_nth s1 m) s2.
+Proof. intros i. unfold vscomp. now simp hvec_nth. Qed.
+#[local] Hint Rewrite hvec_nth_vscomp : hvec_nth.
+
+Lemma hvec_nth_vrvscomp r s m : 
+  hvec_nth (vrvscomp r s) m =₁ rscomp (vec_nth r m) (hvec_nth s m).
+Proof. intros i. unfold vrvscomp. now simp hvec_nth. Qed.
+#[local] Hint Rewrite hvec_nth_vrvscomp : hvec_nth.
+
+Lemma hvec_nth_vsvrcomp s r m : 
+  hvec_nth (vsvrcomp s r) m =₁ svrcomp (hvec_nth s m) r.
+Proof. intros i. unfold vsvrcomp. now simp hvec_nth. Qed.
+#[local] Hint Rewrite hvec_nth_vsvrcomp : hvec_nth.
+
+(*********************************************************************************)
+(** *** Properties of renamings and substitutions. *)
+(*********************************************************************************)
 
 Lemma rid_rcons : 
   rcons 0 rshift =₁ rid.
@@ -325,7 +367,7 @@ Proof. intros [|i] ; reflexivity. Qed.
 
 Lemma vrup_id {m} : vrup m vrid =ᵣ vrid.
 Proof. 
-intros m' i. unfold vrup, vrid. simp vec_nth. destruct (eq_dec m m').
+intros m'. simp vec_nth. destruct (eq_dec m m') ; simp vec_nth.
 - now rewrite rup_id.
 - reflexivity.
 Qed.
@@ -333,24 +375,23 @@ Qed.
 Lemma comp_vrup_vrup {m} r1 r2 : 
   vrcomp (vrup m r1) (vrup m r2) =ᵣ vrup m (vrcomp r1 r2).
 Proof.
-intros m' i. unfold vrcomp, vrup. simp vec_nth. destruct (eq_dec m m').
+intros m'. simp vec_nth. destruct (eq_dec m m') ; simp vec_nth.
 - subst. now rewrite comp_rup_rup.
 - reflexivity.
 Qed. 
 
 Lemma rename_id {k} (t : expr k) : rename vrid t = t.
 Proof.
-induction t ; simp rename vec_nth.
-all: try solve [ f_equal ; auto ].
+induction t ; simp rename vec_nth ; f_equal ; auto.
 now rewrite vrup_id, IHt.
 Qed.
 
 Lemma vsup_id {m} : vsup m vsid =ₛ vsid.
 Proof. 
-intros m' i. unfold vsup, vsid. simp hvec_nth. destruct (eq_dec m m') ; subst ; cbn.
-- destruct i ; cbn ; [reflexivity|]. unfold vren_shift_point. simp vec_nth. 
+intros m'. simp hvec_nth. destruct (eq_dec m m') ; subst ; setoid_rewrite (hvec_nth_vsid m').
+- intros i. destruct i ; cbn ; [reflexivity|]. simp vec_nth. 
   now rewrite eq_dec_refl.
-- unfold vren_shift_point. simp vec_nth. destruct (eq_dec m m').
+- intros i. unfold svrcomp. cbn. simp vec_nth. destruct (eq_dec m m').
   + now apply n in e. 
   + reflexivity.
 Qed.
@@ -364,68 +405,64 @@ Qed.
 Lemma rename_rename {k} (t : expr k) (r1 r2 : vren) : 
   rename r2 (rename r1 t) = rename (vrcomp r1 r2) t.
 Proof.
-induction t in r1, r2 |- * ; simp rename in * ; f_equal ; auto.
-- unfold vrcomp. simp vec_nth. reflexivity. 
-- now rewrite IHt, comp_vrup_vrup.
+induction t in r1, r2 |- * ; simp rename vec_nth in * ; f_equal ; auto.
+now rewrite IHt, comp_vrup_vrup.
 Qed.
 
 Lemma comp_vrup_vsup {m} r s : 
   vrvscomp (vrup m r) (vsup m s) =ₛ vsup m (vrvscomp r s).
 Proof.
-intros m'. unfold vrvscomp, vrup, vsup. simp hvec_nth vec_nth. destruct (eq_dec m m').
-- subst. intros i. unfold rscomp. destruct i ; reflexivity.
-- intros i. reflexivity.
+intros m'. simp hvec_nth vec_nth. destruct (eq_dec m m') ; simp hvec_nth.
+- subst. intros [|] ; reflexivity.
+- reflexivity.
 Qed. 
 
 Lemma substitute_rename {k} (t : expr k) (r : vren) (s : vsubst) : 
   substitute s (rename r t) = substitute (vrvscomp r s) t.
 Proof.
-induction t in r, s |- * ; simp rename substitute in * ; f_equal ; auto.
--  
+induction t in r, s |- * ; simp rename substitute hvec_nth ; f_equal ; auto.
 now rewrite IHt, comp_vrup_vsup.
 Qed.
 
 Lemma comp_vsup_vrup {m} s r :
-  vsvrcomp (vsup m s) (vrup m r) =₂ vsup m (vsvrcomp s r).
+  vsvrcomp (vsup m s) (vrup m r) =ₛ vsup m (vsvrcomp s r).
 Proof.
-intros m'. unfold vsvrcomp, vsup, vrup, svrcomp. destruct (eq_dec m m').
-- subst. intros i. destruct i ; cbn.
+intros m'. simp hvec_nth. destruct (eq_dec m m') ; simp hvec_nth.
+- subst. intros [|i] ; cbn ; simp vec_nth.
   + rewrite eq_dec_refl. reflexivity.
-  + rewrite !rename_rename. apply rename_proper ; [|reflexivity].
-    clear s i. intros m i. unfold vrcomp, vren_shift_point.
+  + cbv [svrcomp]. rewrite !rename_rename. apply rename_proper ; [|reflexivity].
+    clear. intros m. simp vec_nth.
     destruct (eq_dec m' m) ; subst ; reflexivity.
-- intros i. rewrite !rename_rename. apply rename_proper ; [|reflexivity].
-  clear s i. intros m'' i. unfold vrcomp, vren_shift_point.
+- intros i. cbv [svrcomp]. rewrite !rename_rename. apply rename_proper ; [|reflexivity].
+  clear. intros m''. simp vec_nth.
   destruct (eq_dec m m'') ; subst ; reflexivity.
 Qed.
 
 Lemma rename_substitute {k} (t : expr k) (s : vsubst) (r : vren) : 
   rename r (substitute s t) = substitute (vsvrcomp s r) t.
 Proof.
-induction t in s, r |- * ; simp rename substitute in * ; f_equal ; auto.
+induction t in s, r |- * ; simp rename substitute hvec_nth in * ; f_equal ; auto.
 now rewrite IHt, comp_vsup_vrup.
 Qed.
 
 Lemma comp_vsup_vsup {m} s1 s2 :
-  vscomp (vsup m s1) (vsup m s2) =₂ vsup m (vscomp s1 s2).
+  vscomp (vsup m s1) (vsup m s2) =ₛ vsup m (vscomp s1 s2).
 Proof.
-intros m' i. unfold vscomp, vsup, svscomp, svrcomp. destruct (eq_dec m m').
-- subst. destruct i.
-  + cbn. rewrite eq_dec_refl. reflexivity.
-  + cbn. rewrite substitute_rename, rename_substitute.
-    apply substitute_proper ; [|reflexivity]. clear s1 i.
-    intros m i. unfold vrvscomp, vren_shift_point, vsvrcomp, svrcomp, rscomp.
-    destruct (eq_dec m' m) ; subst ; reflexivity.
-- rewrite substitute_rename, rename_substitute. 
-  apply substitute_proper ; [|reflexivity]. clear s1 i.
-  intros m'' i. unfold vrvscomp, vren_shift_point. 
+intros m'. simp hvec_nth. destruct (eq_dec m m') ; simp hvec_nth.
+- subst. intros [|i] ; cbn.
+  + simp hvec_nth. rewrite eq_dec_refl. reflexivity.
+  + cbv [svrcomp svscomp]. rewrite substitute_rename, rename_substitute.
+    apply substitute_proper ; [|reflexivity]. clear. intros m. 
+    simp hvec_nth vec_nth. destruct (eq_dec m' m) ; subst ; reflexivity.
+- intros i. cbv [svscomp svrcomp]. rewrite substitute_rename, rename_substitute. 
+  apply substitute_proper ; [|reflexivity]. clear. intros m''. simp hvec_nth vec_nth.
   destruct (eq_dec m m'') ; subst ; reflexivity.
 Qed.
 
 Lemma substitute_substitute {k} (t : expr k) (s1 s2 : vsubst) : 
   substitute s2 (substitute s1 t) = substitute (vscomp s1 s2) t.
 Proof.
-induction t in s1, s2 |- * ; simp substitute ; f_equal ; auto.
+induction t in s1, s2 |- * ; simp substitute hvec_nth ; f_equal ; auto.
 now rewrite IHt, comp_vsup_vsup.
 Qed.
 
