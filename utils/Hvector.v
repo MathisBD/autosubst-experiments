@@ -129,16 +129,6 @@ Section HvecEq.
   Qed. 
 
 End HvecEq.
-  
-(*Lemma hvec_eq_hcons_inv {n} {T : fin (S n) -> Type} (R : forall i, relation (T i)) 
-  (x x' : T (@finO n)) (xs xs' : hvec (S n) T) :
-  hvec_eq R (hcons x xs) (hcons x' xs') ->
-  R x x' /\ hvec_eq R xs xs'.
-Proof. 
-intros H'. split.
-- specialize (H' finO). exact H'.
-- intros i. specialize (H' (finS i)). exact H'.
-Qed.*)
 
 #[export] Instance hvec_of_vec_proper {n T} (R : relation T) : 
   Proper (vec_eq R ==> hvec_eq (fun _ => R)) (@hvec_of_vec n T).
@@ -154,7 +144,10 @@ Proof. intros xs xs' H i. rewrite !hvec_nth_vec. apply H. Qed.
   in
   Proper (R ==> hvec_eq RT ==> hvec_eq RU) 
     (@hvec_mapi n T U). 
-Proof. Admitted.
+Proof.
+cbn. induction n in T, U, RT, RU |- * ; intros f f' Hf xs xs' Hxs i ; depelim i.
+all: depelim xs ; depelim xs' ; simp hvec_nth ; apply Hf ; apply Hxs.
+Qed.   
 
 #[export] Instance hvec_mapi2_proper {n} {T1 T2 U : fin n -> Type} 
   (RT1 : forall i, relation (T1 i)) (RT2 : forall i, relation (T2 i)) (RU : forall i, relation (U i)) : 
@@ -167,5 +160,8 @@ Proof. Admitted.
   in
   Proper (Rf ==> hvec_eq RT1 ==> hvec_eq RT2 ==> hvec_eq RU) 
     (@hvec_mapi2 n T1 T2 U). 
-Proof. Admitted.
-
+Proof.
+cbn. induction n in T1, T2, U, RT1, RT2, RU |- * ; intros f f' Hf xs xs' Hxs ys ys' Hys i ; depelim i.
+all: depelim xs ; depelim xs' ; depelim ys ; depelim ys' ; simp hvec_nth.
+all: apply Hf ; solve [ apply Hxs | apply Hys ].
+Qed. 
