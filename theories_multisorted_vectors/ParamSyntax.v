@@ -79,22 +79,26 @@ End SizeInd.
 (*********************************************************************************)
 
 (** Vector of renamings. *)
-Definition vren := vector ren nsort.
+Definition vren := vec ren nsort.
+
+(** Equality on vectors of renamings. *)
+Definition vren_eq : relation vren := vec_eq eq1.
+Notation "r =ᵣ r'" := (vren_eq r r') (at level 75).
 
 (** A vector of identity renamings. *)
-Definition vrid : vren := vector_init nsort (fun _ => rid).
+Definition vrid : vren := vec_init nsort (fun _ => rid).
 
 (** [vren_shift_point m] has [rshift] at position [m] and [rid] at other positions. *)
 Definition vren_shift_point (m : fin nsort) : vren :=
-  vector_init nsort (fun m' => if eq_dec m m' then rshift else rid).
+  vec_init nsort (fun m' => if eq_dec m m' then rshift else rid).
 
 (** Lift a vector of renamings through a binder for sort [m]. *)
 Definition vrup (m : fin nsort) (r : vren) : vren :=
-  vector_mapi (fun m' r_m' => if eq_dec m m' then rup r_m' else r_m') r.
+  vec_mapi (fun m' r_m' => if eq_dec m m' then rup r_m' else r_m') r.
 
 (** Apply a vector of renamings to an expression. *)
 Equations rename {k} (r : vren) (t : expr k) : expr k :=
-rename r (@E_var m i) := E_var (vector_nth r m i) ;
+rename r (@E_var m i) := E_var (vec_nth r m i) ;
 rename r (E_ctor c al) := E_ctor c (rename r al) ;
 rename r E_al_nil := E_al_nil ;
 rename r (E_al_cons a al) := E_al_cons (rename r a) (rename r al) ;
@@ -104,7 +108,7 @@ rename r (E_abind m a) := E_abind m (rename (vrup m r) a).
 
 (** Compose of two vectors of renamings. *)
 Definition vrcomp (r1 r2 : vren) : vren :=
-  vector_map2 rcomp r1 r2.
+  vec_map2 rcomp r1 r2.
   
 (*********************************************************************************)
 (** *** Substitutions. *)
@@ -114,14 +118,18 @@ Definition vrcomp (r1 r2 : vren) : vren :=
 Definition subst m := nat -> term  m.
 
 (** A vector of substitutions. *)
-Definition vsubst := hvector nsort subst.
+Definition vsubst := hvec nsort subst.
+
+(** Equality on vectors of substitutions. *)
+Definition vsubst_eq : relation vsubst := hvec_eq (fun _ => eq1).
+Notation "s =ₛ s'" := (vsubst_eq s s') (at level 75).
 
 (** The identity substitution. *)
 Definition sid {m} : subst m := fun i => E_var i.
 
 (** A vector of identity substitutions. *)
 Definition vsid : vsubst := 
-  hvector_init nsort (fun _ => sid).
+  hvec_init nsort (fun _ => sid).
 
 (** [sshift] shifts indices by one. *)
 Definition sshift {m} : subst m := 
@@ -143,7 +151,7 @@ Definition svrcomp {m} (s : subst m) (r : vren) : subst m :=
 (** Lift a vector of substitutions through a binder of sort [m].*)
 Definition vsup (m : fin nsort) (s : vsubst) : vsubst :=
   let r := vren_shift_point m in 
-  hvector_mapi 
+  hvec_mapi 
     (fun m' s_m' => 
       if eq_dec m m' 
       then scons (E_var 0) (svrcomp s_m' r) 
@@ -151,7 +159,7 @@ Definition vsup (m : fin nsort) (s : vsubst) : vsubst :=
 
 (** Apply a vector of substitutions to an expression. *)
 Equations substitute {k} (s : vsubst) (t : expr k) : expr k :=
-substitute s (@E_var m i) := hvector_nth s m i ;
+substitute s (@E_var m i) := hvec_nth s m i ;
 substitute s (E_ctor c al) := E_ctor c (substitute s al) ;
 substitute s E_al_nil := E_al_nil ;
 substitute s (E_al_cons a al) := E_al_cons (substitute s a) (substitute s al) ;
@@ -165,30 +173,30 @@ Definition svscomp {m} (s1 : subst m) (s2 : vsubst) : subst m :=
 
 (** Compose of two vectors of substitutions. *)
 Definition vscomp (s1 s2 : vsubst) : vsubst :=
-  hvector_mapi (fun _ s1_m => svscomp s1_m s2) s1.
+  hvec_mapi (fun _ s1_m => svscomp s1_m s2) s1.
 
 (** Compose of a vector of renamings with a vector of substitutions. *)
 Definition vrvscomp (r : vren) (s : vsubst) : vsubst := 
-  hvector_mapi2 (@rscomp) (hvector_of_vector r) s.  
+  hvec_mapi2 (@rscomp) (hvec_of_vec r) s.  
 
 (** Compose of a vector of substitutions with a vector of renamings. *)
 Definition vsvrcomp (s : vsubst) (r : vren) : vsubst := 
-  hvector_mapi (fun _ s_m => svrcomp s_m r) s.
+  hvec_mapi (fun _ s_m => svrcomp s_m r) s.
   
 (*********************************************************************************)
 (** *** Setoid Rewrite lemmas. *)
 (*********************************************************************************)
 
 #[export] Instance vrup_proper : 
-  Proper (eq ==> vector_eq eq1 ==> vector_eq eq1) vrup.
+  Proper (eq ==> vren_eq ==> vren_eq) vrup.
 Proof.
-intros m ? <- r r' Hr. unfold vrup. apply (vector_mapi_proper eq1 eq1) ; [|assumption].
+intros m ? <- r r' Hr. unfold vrup. apply (vec_mapi_proper eq1) ; [|assumption].
 intros m1 m2 -> r1 r2 ?. destruct (eq_dec m m2) ; [|assumption].
 now setoid_rewrite H.
 Qed.
 
 #[export] Instance rename_proper k : 
-  Proper (vector_eq eq1 ==> eq ==> eq) (@rename k).
+  Proper (vren_eq ==> eq ==> eq) (@rename k).
 Proof.
 intros rv rv' Hr t _ <-. induction t in rv, rv', Hr |- * ; simp rename.
 all: try solve [ f_equal ; auto ].
@@ -197,11 +205,11 @@ all: try solve [ f_equal ; auto ].
 Qed.
 
 #[export] Instance vrcomp_proper : 
-  Proper (vector_eq eq1 ==> vector_eq eq1 ==> vector_eq eq1) vrcomp.
+  Proper (vren_eq ==> vren_eq ==> vren_eq) vrcomp.
 Proof. intros r1 r1' H1 r2 r2' H2. unfold vrcomp. now rewrite H1, H2. Qed.
 
 #[export] Instance svrcomp_proper m : 
-  Proper (eq1 ==> vector_eq eq1 ==> eq1) (@svrcomp m).
+  Proper (eq1 ==> vren_eq ==> eq1) (@svrcomp m).
 Proof. intros s s' Hs r r' Hr i. unfold svrcomp. now rewrite Hr, Hs. Qed.
 
 #[export] Instance rscomp_proper m : 
@@ -213,9 +221,9 @@ Proof. intros r r' Hr s s' Hs i. unfold rscomp. now rewrite Hr, Hs. Qed.
 Proof. intros t ? <- s s' Hs i. unfold scons. now destruct i. Qed.
 
 #[export] Instance vsup_proper : 
-  Proper (eq ==> hvector_eq (fun _ => eq1) ==> hvector_eq (fun _ => eq1)) vsup.
+  Proper (eq ==> vsubst_eq ==> vsubst_eq) vsup.
 Proof.
-intros m ? <- s s' Hs. unfold vsup. apply (hvector_mapi_proper (fun _ => eq1)).
+intros m ? <- s s' Hs. unfold vsup. apply (hvec_mapi_proper (fun _ => eq1)).
 - clear. intros i s s' Hs. destruct (eq_dec m i).
   + subst. now rewrite Hs.
   + now rewrite Hs.
@@ -223,7 +231,7 @@ intros m ? <- s s' Hs. unfold vsup. apply (hvector_mapi_proper (fun _ => eq1)).
 Qed. 
 
 #[export] Instance substitute_proper k : 
-  Proper (hvector_eq (fun _ => eq1) ==> eq ==> eq) (@substitute k).
+  Proper (vsubst_eq ==> eq ==> eq) (@substitute k).
 Proof.
 intros s s' Hs t ? <-. induction t in s, s', Hs |- * ; simp substitute.
 all: try solve [ f_equal ; auto ].
@@ -232,30 +240,30 @@ all: try solve [ f_equal ; auto ].
 Qed.
 
 #[export] Instance svscomp_proper m : 
-  Proper (eq1 ==> hvector_eq (fun _ => eq1) ==> eq1) (@svscomp m).
+  Proper (eq1 ==> vsubst_eq ==> eq1) (@svscomp m).
 Proof. intros s1 s1' H1 s2 s2' H2 i. unfold svscomp. now rewrite H1, H2. Qed.
 
 #[export] Instance vscomp_proper : 
-  Proper (hvector_eq (fun _ => eq1) ==> hvector_eq (fun _ => eq1) ==> hvector_eq (fun _ => eq1)) vscomp.
+  Proper (vsubst_eq ==> vsubst_eq ==> vsubst_eq) vscomp.
 Proof.
-intros s1 s1' H1 s2 s2' H2. unfold vscomp. apply (hvector_mapi_proper (fun _ => eq1)).
+intros s1 s1' H1 s2 s2' H2. unfold vscomp. apply (hvec_mapi_proper (fun _ => eq1)).
 - clear -H2. intros i s s' Hs. now rewrite Hs, H2.
 - apply H1.
 Qed.
 
 #[export] Instance vrvscomp_proper : 
-  Proper (vector_eq eq1 ==> hvector_eq (fun _ => eq1) ==> hvector_eq (fun _ => eq1)) vrvscomp.
+  Proper (vren_eq ==> vsubst_eq ==> vsubst_eq) vrvscomp.
 Proof. 
-intros r r' Hr s s' Hs. unfold vrvscomp. apply (hvector_mapi2_proper (fun _ => eq1) (fun _ => eq1)).
+intros r r' Hr s s' Hs. unfold vrvscomp. apply (hvec_mapi2_proper (fun _ => eq1) (fun _ => eq1)).
 - clear. intros i r r' Hr s s' Hs. now rewrite Hr, Hs.
 - now rewrite Hr.
 - exact Hs.
 Qed.
 
 #[export] Instance vsvrcomp_proper : 
-  Proper (hvector_eq (fun _ => eq1) ==> vector_eq eq1 ==> hvector_eq (fun _ => eq1)) vsvrcomp.
+  Proper (vsubst_eq ==> vren_eq ==> vsubst_eq) vsvrcomp.
 Proof. 
-intros s s' Hs r r' Hr. unfold vsvrcomp. apply (hvector_mapi_proper (fun _ => eq1)).
+intros s s' Hs r r' Hr. unfold vsvrcomp. apply (hvec_mapi_proper (fun _ => eq1)).
 - clear -Hr. intros i s s' ->. now rewrite Hr.
 - exact Hs.
 Qed.
@@ -263,6 +271,16 @@ Qed.
 (*********************************************************************************)
 (** *** Properties of renamings and substitutions. *)
 (*********************************************************************************)
+
+Lemma vec_nth_vrid m : 
+  vec_nth vrid m =₁ rid.
+Proof. intros i. unfold vrid. now simp vec_nth. Qed.
+#[local] Hint Rewrite vec_nth_vrid : vec_nth.
+
+Lemma hvec_nth_vsid m : 
+  hvec_nth vsid m =₁ sid.
+Proof. intros i. unfold vsid. now simp hvec_nth. Qed.
+#[local] Hint Rewrite hvec_nth_vsid : hvec_nth.
 
 Lemma rid_rcons : 
   rcons 0 rshift =₁ rid.
@@ -304,42 +322,42 @@ Proof. intros [|] ; reflexivity. Qed.
 Lemma comp_rup_rup (r1 r2 : ren) : 
   rcomp (rup r1) (rup r2) =₁ rup (rcomp r1 r2).
 Proof. intros [|i] ; reflexivity. Qed.
-  
-Lemma vrup_id {m} : vrup m vrid =₂ vrid.
+
+Lemma vrup_id {m} : vrup m vrid =ᵣ vrid.
 Proof. 
-intros m' i. unfold vrup. destruct (eq_dec m m').
-- subst. now rewrite rup_id.
+intros m' i. unfold vrup, vrid. simp vec_nth. destruct (eq_dec m m').
+- now rewrite rup_id.
 - reflexivity.
 Qed.
 
 Lemma comp_vrup_vrup {m} r1 r2 : 
-  vrcomp (vrup m r1) (vrup m r2) =₂ vrup m (vrcomp r1 r2).
+  vrcomp (vrup m r1) (vrup m r2) =ᵣ vrup m (vrcomp r1 r2).
 Proof.
-intros m' i. unfold vrcomp, vrup. destruct (eq_dec m m').
+intros m' i. unfold vrcomp, vrup. simp vec_nth. destruct (eq_dec m m').
 - subst. now rewrite comp_rup_rup.
 - reflexivity.
 Qed. 
 
 Lemma rename_id {k} (t : expr k) : rename vrid t = t.
 Proof.
-induction t ; simp rename.
+induction t ; simp rename vec_nth.
 all: try solve [ f_equal ; auto ].
 now rewrite vrup_id, IHt.
 Qed.
 
-Lemma vsup_id {m} : vsup m vsid =₂ vsid.
+Lemma vsup_id {m} : vsup m vsid =ₛ vsid.
 Proof. 
-intros m' i. unfold vsup, vsid. destruct (eq_dec m m') ; subst ; cbn.
-- destruct i ; cbn ; [reflexivity|]. unfold vren_shift_point. 
+intros m' i. unfold vsup, vsid. simp hvec_nth. destruct (eq_dec m m') ; subst ; cbn.
+- destruct i ; cbn ; [reflexivity|]. unfold vren_shift_point. simp vec_nth. 
   now rewrite eq_dec_refl.
-- unfold vren_shift_point. destruct (eq_dec m m').
+- unfold vren_shift_point. simp vec_nth. destruct (eq_dec m m').
   + now apply n in e. 
   + reflexivity.
 Qed.
 
 Lemma substitute_id {k} (t : expr k) : substitute vsid t = t.
 Proof.
-induction t ; simp substitute in * ; f_equal ; auto.
+induction t ; simp substitute hvec_nth in * ; f_equal ; auto.
 now rewrite vsup_id. 
 Qed.
 
@@ -347,13 +365,14 @@ Lemma rename_rename {k} (t : expr k) (r1 r2 : vren) :
   rename r2 (rename r1 t) = rename (vrcomp r1 r2) t.
 Proof.
 induction t in r1, r2 |- * ; simp rename in * ; f_equal ; auto.
-now rewrite IHt, comp_vrup_vrup.
+- unfold vrcomp. simp vec_nth. reflexivity. 
+- now rewrite IHt, comp_vrup_vrup.
 Qed.
 
 Lemma comp_vrup_vsup {m} r s : 
-  vrvscomp (vrup m r) (vsup m s) =₂ vsup m (vrvscomp r s).
+  vrvscomp (vrup m r) (vsup m s) =ₛ vsup m (vrvscomp r s).
 Proof.
-intros m'. unfold vrvscomp, vrup, vsup. destruct (eq_dec m m').
+intros m'. unfold vrvscomp, vrup, vsup. simp hvec_nth vec_nth. destruct (eq_dec m m').
 - subst. intros i. unfold rscomp. destruct i ; reflexivity.
 - intros i. reflexivity.
 Qed. 
@@ -362,6 +381,7 @@ Lemma substitute_rename {k} (t : expr k) (r : vren) (s : vsubst) :
   substitute s (rename r t) = substitute (vrvscomp r s) t.
 Proof.
 induction t in r, s |- * ; simp rename substitute in * ; f_equal ; auto.
+-  
 now rewrite IHt, comp_vrup_vsup.
 Qed.
 

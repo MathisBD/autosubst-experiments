@@ -1,0 +1,4 @@
+(coq.theory
+ (name Utils)
+ (package autosubst-experiments)
+ (theories Equations))
