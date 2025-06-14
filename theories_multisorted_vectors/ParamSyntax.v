@@ -1,10 +1,15 @@
-From MPrototype Require Import Prelude Sig.
-
 (** This file defines a term syntax parameterized over an arbitrary signature,
-     with _admissible_ renamings and substitutions (i.e. renamings are 
-     functions [nat -> nat] and substitutions are functions [nat -> term m]).
+    with _admissible_ renamings and substitutions (i.e. renamings are 
+    functions [nat -> nat] and substitutions are functions [nat -> term m]).
+
+    We assume all sorts have a variable constructor, and we represent 
+    vectors of renamings/substitutions as _complete_ vectors (i.e. one
+    renaming/substitution for each sort, including sorts which might
+    not actually occur when substituting).
     
     We prove the main properties of substitution and renaming. *)
+
+From MPrototype Require Import Prelude Sig.
 
 Section WithSig.
 Context {sig : signature}.
@@ -19,9 +24,9 @@ Context {sig : signature}.
 #[local] Reserved Notation "'args' tys" (at level 0, tys at level 0).
 
 (** Terms over an abstract signature. Terms are indexed by a kind.
-    Note that terms have a sort, but arguments and argument lists
-    can't be assigned a unique sort in general (for instance 
-    what would be the sort of [E_abase _ _] ?). *)
+
+    Note that terms have a sort, but arguments and argument lists can't be assigned 
+    a unique sort in general (for instance what would be the sort of [E_abase _ _] ?). *)
 Inductive expr : kind -> Type :=
 | (** Variable constructor. *)
   E_var {m} : nat -> term m
@@ -184,7 +189,7 @@ Definition vsvrcomp (s : vsubst) (r : vren) : vsubst :=
   hvec_mapi (fun _ s_m => svrcomp s_m r) s.
   
 (*********************************************************************************)
-(** *** Setoid Rewrite lemmas. *)
+(** *** Setoid rewrite support. *)
 (*********************************************************************************)
 
 #[export] Instance vrup_proper : 

@@ -1,3 +1,6 @@
+(** This file defines fixed length vectors [vec T n], encoded using
+    an indexed inductive type (as opposed to a list with a proof for the length). *)
+
 From Coq Require Import Relations Morphisms.
 From Equations Require Import Equations.
 From Utils Require Import Fin.

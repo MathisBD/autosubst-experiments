@@ -1,3 +1,6 @@
+(** This file defines fixed length _heterogeneous_ vectors [hvec n T], 
+    encoded using an indexed inductive type. *)
+
 From Coq Require Import Relations Morphisms.
 From Equations Require Import Equations.
 From Utils Require Import Fin Vector.
