@@ -1,7 +1,8 @@
 From Coq Require Export Bool Nat List String Morphisms Relations Program.Equality Lia.
 From Ltac2 Require Export Ltac2.
 From Equations Require Export Equations.
-Export ListNotations.
+From Utils Require Export Fin Vector.
+Export ListNotations VectorNotations.
 
 #[export] Set Equations Transparent.
 
@@ -18,10 +19,6 @@ Coercion is_true : bool >-> Sortclass.
 (*********************************************************************************)
 (** *** Convenience tactics. *)
 (*********************************************************************************)
-
-(** Add some power to [auto] and variants (such as [triv]). *)
-#[export] Hint Extern 5 => f_equal : core.
-#[export] Hint Extern 5 => subst : core.
 
 (** Split n-ary conjunctions. *)
 Ltac split3 := split ; [|split].
@@ -44,16 +41,6 @@ Ltac feed H :=
 Ltac feed2 H := feed H ; [| feed H].
 Ltac feed3 H := feed H ; [| feed2 H].
 Ltac feed4 H := feed H ; [| feed3 H].
-
-(** Surprisingly, neither [eauto] nor [easy] is more powerful than the other. *)
-Ltac triv := try solve [ eauto | easy ].
-
-(** Unfold all local definitions from the proof context,
-    then clear the definitions. *)
-Ltac unfold_all :=
-  repeat match goal with 
-  | [ x := _ |- _ ] => unfold x in * ; clear x
-  end.
 
 (*********************************************************************************)
 (** *** Renamings. *)
@@ -87,8 +74,8 @@ up_ren r := rcons 0 (rcomp r rshift).
 (*********************************************************************************)
 
 (** Pointwise equality for functions. *)
-Definition point_eq {A B} : relation (A -> B) := pointwise_relation _ eq.
-Notation "f =₁ g" := (point_eq f g) (at level 75).
+Definition eq1 {A B} : relation (A -> B) := pointwise_relation _ eq.
+Notation "f =₁ g" := (eq1 f g) (at level 75).
 
 Lemma peq_refl {A B} {x : A -> B} : x =₁ x.
 Proof. reflexivity. Qed.
@@ -111,12 +98,87 @@ Lemma congr_up_ren {r r'} :
   r =₁ r' -> up_ren r =₁ up_ren r'.
 Proof. intros H. simp up_ren. apply congr_rcons. now apply congr_rcomp. Qed.
 
-(** Tests. *)
+(*********************************************************************************)
+(** *** Normal functors. *)
+(*********************************************************************************)
+
+Record encoding (Shape : Type) (size : Shape -> nat) (A : Type) : Type :=
+  { shape : Shape 
+  ; elems : vec A (size shape) 
+  }.
+Arguments shape {Shape} {size} {A} e.
+Arguments elems {Shape} {size} {A} e.
 
 Class NormalFunctor (F : Type -> Type) :=
-  { shape : Type
-  ; size : shape -> nat
-  ; encode : forall A, F A -> (s : shape, vec A (size s)). 
+  { Shape : Type
+  ; size : Shape -> nat
+  ; encode {A} : F A -> encoding Shape size A
+  ; decode {A} : encoding Shape size A -> F A
+  ; encode_decode_inv {A} : forall x : F A, decode (encode x) = x
   }.
 
-Definition 
+Module OptionNF.
+  Definition Shape := bool.
+  Definition size (b : bool) := if b then 1 else 0.
+
+  Equations encode {A} (x : option A) : encoding Shape size A :=
+  encode (Some a) := {| shape := true ; elems := [ a ] |} ;
+  encode None := {| shape := false ; elems := [] |}.
+    
+  Equations decode {A} (x : encoding Shape size A) : option A :=
+  decode {| shape := true ; elems := [ a ] |} := Some a ;
+  decode {| shape := false ; elems := [] |} := None.
+  
+  Lemma encode_decode_inv A (x : option A) : decode (encode x) = x.
+  Proof. depelim x ; reflexivity. Qed.
+End OptionNF.
+
+#[export] Instance option_normal_functor : NormalFunctor option :=
+  Build_NormalFunctor option OptionNF.Shape OptionNF.size 
+    (@OptionNF.encode) (@OptionNF.decode) (@OptionNF.encode_decode_inv).
+
+Module ListNF.
+  Definition Shape := nat.
+  Definition size (n : nat) := n.
+
+  Definition encode {A} (x : list A) : encoding Shape size A :=
+    {| shape := List.length x ; elems := vec_of_list x |}.
+    
+  Definition decode {A} (x : encoding Shape size A) : list A :=
+    list_of_vec (elems x).
+    
+  Lemma encode_decode_inv A (x : list A) : decode (encode x) = x.
+  Proof. unfold encode, decode. cbn. apply list_vec_inv. Qed.
+End ListNF.
+
+#[export] Instance list_normal_functor : NormalFunctor list :=
+  Build_NormalFunctor list ListNF.Shape ListNF.size 
+    (@ListNF.encode) (@ListNF.decode) (@ListNF.encode_decode_inv).
+
+(*Equations vec_of_fin {n A} (f : fin n -> A) : vec A n :=
+@vec_of_fin 0 _ _ := vnil ;
+@vec_of_fin (S n) _ f := vcons (f finO) (vec_of_fin (fun i => f (finS i))).
+
+Lemma vec_nth_of_fin {n A} (f : fin n -> A) i : 
+  vec_nth (vec_of_fin f) i = f i.
+Proof.
+funelim (vec_of_fin f) ; depelim i ; simp vec_nth. reflexivity.
+Qed.
+
+Module PiNF.
+Section WithN.
+  Context (n : nat).
+
+  Definition Shape := unit.
+  Definition size (_ : unit) : nat := n.
+
+  Definition encode {A} (x : fin n -> A) : encoding (fun A => fin n -> A) Shape size A :=
+    {| shape := tt ; elems := vec_of_fin x |}.
+    
+  Definition decode {A} (x : encoding (fun A => fin n -> A) Shape size A) : fin n -> A :=
+    vec_nth (elems x).
+    
+  Lemma encode_decode_inv A (x : fin n -> A) : decode (encode x) = x.
+  Proof. unfold encode, decode. cbn. Fail apply vec_nth_of_fin. Qed.
+End PiNF.
+*)

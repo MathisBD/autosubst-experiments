@@ -1,20 +1,14 @@
-From Prototype Require Import Prelude Sig.
-From Prototype Require LevelOne LevelTwo.
-Module P := Prelude.
-Module O := LevelOne.
-Module T := LevelTwo.
-Import T.
+From Prototype Require Import Prelude Sig ExplicitSyntax.
 
-(** This file defines a simplification algorithm for level two 
-    terms/substitutions. 
+(** This file defines a simplification algorithm on explicit syntax. 
     
     We first define simplification as a rewriting system ([qred], [rred], 
-    [ered], [sred]), which is proved sound with respect to evaluation
+    [ered], [sred]) which is proved sound with respect to evaluation
     (lemmas [ered_sound], [sred_sound], etc).
     
     We then implement simplification functions ([qsimp], [rsimp], [esimp], 
     [ssimp]). We prove that the simplification functions indeed implement
-    the rewriting system (lemmas [esimp_red], [ssimp_red], etc), and that 
+    the rewriting system (lemmas [esimp_red], [ssimp_red], etc) and that 
     they compute irreducible forms (lemmas [esimp_irreducible], 
     [ssimp_irreducible], etc). *)
 
@@ -55,9 +49,9 @@ Definition is_rmvar_l r :=
   match r with R_comp (R_mvar _) _ => true | _ => false end.
 
 Definition is_tvar {k} (t : expr k) :=
-  match t with E_tvar _ => true | _ => false end.
+  match t with E_var _ => true | _ => false end.
 Definition is_tvar_zero {k} (t : expr k) :=
-  match t with E_tvar Q_zero => true | _ => false end.
+  match t with E_var Q_zero => true | _ => false end.
 Definition is_tmvar {k} (e : expr k) :=
   match e with E_mvar _ => True | _ => False end.
 
@@ -130,31 +124,34 @@ Inductive ered : forall {k}, expr k -> expr k -> Prop :=
 | ered_refl {k} : reflexive (expr k) ered
 | ered_trans {k} : transitive (expr k) ered
 (* Congruence. *)
-| ered_congr_tvar : Proper (qred ==> ered) E_tvar
-| ered_congr_tctor c : Proper (ered ==> ered) (E_tctor c)
+| ered_congr_tvar : Proper (qred ==> ered) E_var
+| ered_congr_tctor c : Proper (ered ==> ered) (E_ctor c)
 | ered_congr_al_cons {ty tys} : Proper (ered ==> ered ==> ered) (@E_al_cons _ ty tys)
 | ered_congr_aterm : Proper (ered ==> ered) E_aterm
 | ered_congr_abind {ty} : Proper (ered ==> ered) (@E_abind _ ty)
+| ered_congr_afunctor {ty} f sh : Proper (vec_eq ered ==> ered) (@E_afunctor _ ty f sh)
 | ered_congr_sapply : Proper (sred ==> qred ==> ered) E_sapply
 | ered_congr_ren {k} : Proper (rred ==> ered ==> ered) (@E_ren _ k)
 | ered_congr_subst {k} : Proper (sred ==> ered ==> ered) (@E_subst _ k)
 (* Extract renamings/substitutions into [E_subst]. *)
-| ered_rapply r i : E_tvar (Q_rapply r i) =e=> E_ren r (E_tvar i)
+| ered_rapply r i : E_var (Q_rapply r i) =e=> E_ren r (E_var i)
 | ered_ren {k} r (t : expr k) : E_ren r t =e=> E_subst (S_ren r) t
-| ered_sapply s i : E_sapply s i =e=> E_subst s (E_tvar i)
+| ered_sapply s i : E_sapply s i =e=> E_subst s (E_var i)
 (* Simplification rules. *)
-| ered_subst_ctor s c al : E_subst s (E_tctor c al) =e=> E_tctor c (E_subst s al)
+| ered_subst_ctor s c al : E_subst s (E_ctor c al) =e=> E_ctor c (E_subst s al)
 | ered_subst_al_nil s : E_subst s E_al_nil =e=> E_al_nil
 | ered_subst_al_cons {ty tys} s (a : expr (Ka ty)) (al : expr (Kal tys)) : 
     E_subst s (E_al_cons a al) =e=> E_al_cons (E_subst s a) (E_subst s al)
 | ered_subst_abase s b x : E_subst s (E_abase b x) =e=> E_abase b x
+| ered_subst_afunctor {ty} s f sh (al : vec (expr (Ka ty)) _) : 
+    E_subst s (E_afunctor f sh al) =e=> E_afunctor f sh (vec_map (E_subst s) al) 
 | ered_subst_aterm s t : E_subst s (E_aterm t) =e=> E_aterm (E_subst s t)
 | ered_subst_abind {ty} s (a : expr (Ka ty)) : 
-    E_subst s (E_abind a) =e=> E_abind (E_subst (S_cons (E_tvar Q_zero) (S_comp s S_shift)) a)
+    E_subst s (E_abind a) =e=> E_abind (E_subst (S_cons (E_var Q_zero) (S_comp s S_shift)) a)
 | ered_subst_subst {k} s1 s2 (t : expr k) : 
     E_subst s2 (E_subst s1 t) =e=> E_subst (S_comp s1 s2) t
 | ered_subst_id {k} (t : expr k) : E_subst S_id t =e=> t
-| ered_subst_cons_zero t s : E_subst (S_cons t s) (E_tvar Q_zero) =e=> t
+| ered_subst_cons_zero t s : E_subst (S_cons t s) (E_var Q_zero) =e=> t
 
 with sred : subst -> subst -> Prop :=
 (* Preorder. *)
@@ -170,10 +167,10 @@ with sred : subst -> subst -> Prop :=
 | sred_comp_l s1 s2 s3 : S_comp (S_comp s1 s2) s3 =s=> S_comp s1 (S_comp s2 s3)
 | sred_cons_l t s1 s2 : S_comp (S_cons t s1) s2 =s=> S_cons (E_subst s2 t) (S_comp s1 s2) 
 | sred_shift_cons i s : S_comp S_shift (S_cons i s) =s=> s
-| sred_zero_shift : S_cons (E_tvar Q_zero) S_shift =s=> S_id
+| sred_zero_shift : S_cons (E_var Q_zero) S_shift =s=> S_id
 | sred_sren_id : S_ren R_id =s=> S_id
 | sred_sren_shift : S_ren R_shift =s=> S_shift
-| sred_sren_cons i r : S_ren (R_cons i r) =s=> S_cons (E_tvar i) (S_ren r)
+| sred_sren_cons i r : S_ren (R_cons i r) =s=> S_cons (E_var i) (S_ren r)
 | sred_sren_comp r1 r2 : S_ren (R_comp r1 r2) =s=> S_comp (S_ren r1) (S_ren r2)
 
 where "t =e=> t'" := (ered t t')
@@ -198,13 +195,13 @@ Combined Scheme ered_sred_ind from ered_ind, sred_ind.
 (*********************************************************************************)
 
 #[export] Instance qred_preorder : PreOrder qred.
-Proof. constructor ; triv. Qed.
+Proof. constructor ; eauto. Qed.
 #[export] Instance rred_preorder : PreOrder rred.
-Proof. constructor ; triv. Qed.
+Proof. constructor ; eauto. Qed.
 #[export] Instance ered_preorder k : PreOrder (@ered k).
 Proof. constructor ; [apply ered_refl | apply ered_trans]. Qed.
 #[export] Instance sred_preorder : PreOrder sred.
-Proof. constructor ; triv. Qed.
+Proof. constructor ; eauto. Qed.
 
 #[export] Existing Instance qred_congr_succ.
 #[export] Existing Instance qred_congr_rapply.
@@ -215,6 +212,7 @@ Proof. constructor ; triv. Qed.
 #[export] Existing Instance ered_congr_al_cons.
 #[export] Existing Instance ered_congr_aterm.
 #[export] Existing Instance ered_congr_abind.
+#[export] Existing Instance ered_congr_afunctor.
 #[export] Existing Instance ered_congr_sapply.
 #[export] Existing Instance ered_congr_ren.
 #[export] Existing Instance ered_congr_subst.
@@ -230,9 +228,9 @@ Lemma qred_rred_sound e :
   (forall i i', i =q=> i' -> qeval e i = qeval e i') /\
   (forall r r', r =r=> r' -> reval e r =₁ reval e r').
 Proof.
-apply qred_rred_ind ; intros ; simp qeval ; triv.
+apply qred_rred_ind ; intros ; simp qeval ; eauto ; try easy.
 all: try solve [ now rewrite H0, H2 ].
-- now rewrite O.rcomp_rcons_distrib.
+- now rewrite P.rcomp_rcons_distrib.
 - intros [|] ; reflexivity.
 - intros [|] ; reflexivity. 
 Qed.    
@@ -247,20 +245,22 @@ Lemma ered_sred_sound e :
   (forall {k} (t t' : expr k), t =e=> t' -> eeval e t = eeval e t') /\
   (forall s s', s =s=> s' -> seval e s =₁ seval e s').
 Proof.
-apply ered_sred_ind ; intros ; simp eeval qeval ; triv.
-all: try solve [ now rewrite H0, H2 ]. 
+apply ered_sred_ind ; intros ; simp eeval qeval ; eauto ; try easy.
+all: try solve [ now rewrite H0 | now rewrite H0, H2 ]. 
 - eapply qred_sound in H. now rewrite H.
+- f_equal. apply vec_ext. intros i. simp vec_nth.
 - eapply qred_sound in H1. now rewrite H0, H1. 
 - eapply rred_sound in H. now rewrite H1, H.
-- now rewrite O.ren_is_subst.
-- simp substitute. rewrite O.up_subst_alt. reflexivity.
-- now rewrite O.subst_subst.
-- now rewrite O.subst_sid.
+- now rewrite P.ren_is_subst.
+- simp substitute. f_equal. apply vec_ext. intros i. simp vec_nth. 
+- simp substitute. rewrite P.up_subst_alt. reflexivity.
+- now rewrite P.subst_subst.
+- now rewrite P.subst_sid.
 - eapply rred_sound in H. now rewrite H.
-- now rewrite O.scomp_sid_r.
-- now rewrite O.scomp_assoc.
-- now rewrite O.scomp_scons_distrib.
-- now rewrite O.sid_scons.
+- now rewrite P.scomp_sid_r.
+- now rewrite P.scomp_assoc.
+- now rewrite P.scomp_scons_distrib.
+- now rewrite P.sid_scons.
 - intros [|] ; reflexivity.      
 Qed.
 
@@ -289,7 +289,7 @@ Derive Signature for rspecial.
   
 (** Expressions in which we can push substitutions. *)
 Definition is_push {k} (e : expr k) : bool :=
-  match e with E_mvar _ | E_tvar _ | E_ren _ _ | E_sapply _ _ => false | _ => true end.
+  match e with E_mvar _ | E_var _ | E_ren _ _ | E_sapply _ _ => false | _ => true end.
 
 Unset Elimination Schemes.
 
@@ -324,8 +324,8 @@ with rreducible : ren -> Prop :=
 
 Inductive ereducible : forall {k}, expr k -> Prop :=
 (* Congruence. *)
-| ereducible_congr_tvar i : qreducible i -> ereducible (E_tvar i)
-| ereducible_congr_tctor c al : ereducible al -> ereducible (E_tctor c al)
+| ereducible_congr_tvar i : qreducible i -> ereducible (E_var i)
+| ereducible_congr_tctor c al : ereducible al -> ereducible (E_ctor c al)
 | ereducible_congr_al_cons_1 {ty tys} (a : expr (Ka ty)) (al : expr (Kal tys)) : 
     ereducible a -> ereducible (E_al_cons a al)
 | ereducible_congr_al_cons_2 {ty tys} (a : expr (Ka ty)) (al : expr (Kal tys)) : 
@@ -337,12 +337,12 @@ Inductive ereducible : forall {k}, expr k -> Prop :=
 | ereducible_congr_subst_1 {k} s (t : expr k) : sreducible s -> ereducible (E_subst s t)
 | ereducible_congr_subst_2 {k} s (t : expr k) : ereducible t -> ereducible (E_subst s t)
 (* Simplification rules. *)
-| ereducible_rapply r i : ereducible (E_tvar (Q_rapply r i))
+| ereducible_rapply r i : ereducible (E_var (Q_rapply r i))
 | ereducible_ren {k} r (e : expr k) : ereducible (E_ren r e)
 | ereducible_sapply s i : ereducible (E_sapply s i)
 | ereducible_subst {k} s (e : expr k) : is_push e -> ereducible (E_subst s e)
 | ereducible_subst_id {k} (e : expr k) : ereducible (E_subst S_id e)
-| ereducible_subst_cons_zero s : is_scons s -> ereducible (E_subst s (E_tvar Q_zero))
+| ereducible_subst_cons_zero s : is_scons s -> ereducible (E_subst s (E_var Q_zero))
 
 with sreducible : subst -> Prop :=
 (* Congruence. *)
@@ -357,7 +357,7 @@ with sreducible : subst -> Prop :=
 | sreducible_comp_l s1 s2 s3: sreducible (S_comp (S_comp s1 s2) s3)
 | sreducible_cons_l t s1 s2 : sreducible (S_comp (S_cons t s1) s2)
 | sreducible_shift_cons s : is_scons s -> sreducible (S_comp S_shift s)
-| sreducible_cons_zero_shift : sreducible (S_cons (E_tvar Q_zero) S_shift)
+| sreducible_cons_zero_shift : sreducible (S_cons (E_var Q_zero) S_shift)
 | sreducible_sren r : ~is_rmvar r -> sreducible (S_ren r).
 
 Set Elimination Schemes.
@@ -393,8 +393,8 @@ Lemma qr_red_impl_reducible :
   (forall i i', i =q=> i' -> i = i' \/ qreducible i) /\ 
   (forall r r', r =r=> r' -> r = r' \/ rreducible r).
 Proof.
-apply qred_rred_ind ; intros ; triv.
-all: try solve [ destruct H0, H2 ; triv ].
+apply qred_rred_ind ; intros ; auto.
+all: try solve [ destruct H0, H2 ; subst ; auto ].
 right. now constructor.
 Qed.
 
@@ -402,37 +402,37 @@ Lemma qr_reducible_impl_red :
   (forall i, qreducible i -> exists i', i =q=> i' /\ i <> i') /\
   (forall r, rreducible r -> exists r', r =r=> r' /\ r <> r').
 Proof.
-apply qreducible_rreducible_ind ; intros.
+apply qreducible_rreducible_ind ; intros ; auto.
 all: try solve [ destruct H0 as (i' & H1 & H2) ; eexists ; split ; 
   [now rewrite H1 | intros H3 ; now depelim H3] ].
-- exists i. split ; triv. intros H ; inv_subterm H.
-- exists (Q_rapply (R_comp r2 r1) i). split ; triv. intros H ; depelim H.
+- exists i. split ; auto. intros H ; inv_subterm H.
+- exists (Q_rapply (R_comp r2 r1) i). split ; auto. intros H ; depelim H.
   inv_subterm H.
-- destruct r ; triv. exists q. split ; triv. intros H1. inv_subterm H1.
-- exists (Q_rapply R_shift i). split ; triv.
-- exists r. split ; triv. intros H. inv_subterm H.
-- exists r. split ; triv. intros H. inv_subterm H.
-- exists (R_comp r1 (R_comp r2 r3)). split ; triv. intros H. depelim H. inv_subterm H.
-- exists (R_cons (Q_rapply r2 i) (R_comp r1 r2)). split ; triv.
-- destruct r ; triv. exists r. split ; triv. intros H1. inv_subterm H1.
-- exists R_id. split ; triv.
-- destruct H. exists r. split ; triv. intros H. inv_subterm H. 
+- destruct r ; try easy. exists q. split ; auto. intros H1. inv_subterm H1.
+- exists (Q_rapply R_shift i). split ; easy.
+- exists r. split ; auto. intros H. inv_subterm H.
+- exists r. split ; auto. intros H. inv_subterm H.
+- exists (R_comp r1 (R_comp r2 r3)). split ; auto. intros H. depelim H. inv_subterm H.
+- exists (R_cons (Q_rapply r2 i) (R_comp r1 r2)). split ; easy.
+- destruct r ; try easy. exists r. split ; auto. intros H1. inv_subterm H1.
+- exists R_id. split ; easy.
+- destruct H. exists r. split ; auto. intros H. inv_subterm H. 
 Qed.
 
 Lemma es_red_impl_reducible : 
   (forall {k} (t t' : expr k), t =e=> t' -> t = t' \/ ereducible t) /\ 
   (forall s s', s =s=> s' -> s = s' \/ sreducible s).
 Proof.
-apply ered_sred_ind ; intros ; triv.
-all: try solve [ destruct H0 ; triv | destruct H0, H2 ; triv ].
-all: try solve [ right ; apply ereducible_subst ; triv ]. 
-- apply qr_red_impl_reducible in H. destruct H ; triv.
-- apply qr_red_impl_reducible in H. destruct H ; triv.
-- right ; eapply sreducible_sren ; simp dest_ren ; triv. 
-- right ; eapply sreducible_sren ; simp dest_ren ; triv.
-- right ; eapply sreducible_sren ; simp dest_ren ; triv. 
-- right ; eapply sreducible_sren ; simp dest_ren ; triv.  
-Qed.
+apply ered_sred_ind ; intros ; auto.
+all: try solve [ destruct H0 ; subst ; auto | destruct H0, H2 ; subst ; auto ].
+- apply qr_red_impl_reducible in H. destruct H ; subst ; auto.
+- admit.
+- apply qr_red_impl_reducible in H. destruct H ; subst ; auto.
+- right ; eapply sreducible_sren ; simp dest_ren ; subst ; easy. 
+- right ; eapply sreducible_sren ; simp dest_ren ; subst ; easy.
+- right ; eapply sreducible_sren ; simp dest_ren ; subst ; easy. 
+- right ; eapply sreducible_sren ; simp dest_ren ; subst ; easy.  
+Admitted.
 
 Lemma es_reducible_impl_red : 
   (forall {k} (t : expr k), ereducible t -> exists t', t =e=> t' /\ t <> t') /\
@@ -446,51 +446,52 @@ all: try solve [ apply qr_reducible_impl_red in H ; destruct H as (i' & H1 & H2)
 - destruct H0 as (i' & H1 & H2). eexists. split ; [now rewrite H1 | intros H3].
   inversion H3. unshelve eapply inj_right_pair in H4.
   + apply Sig.ctor_EqDec.
-  + triv.
-- exists (E_ren r (E_tvar i)). triv.
-- eexists ; triv.
-- eexists ; triv.
-- destruct e ; try solve [ eexists ; triv ]. Unshelve. all: triv.
-  exists (E_subst (S_comp s0 s) e). split ; triv. intros H1. depelim H1. 
+  + auto.
+- now exists (E_ren r (E_var i)).
+- now eexists.
+- now eexists.
+- destruct e ; try solve [ eexists ; easy ]. Unshelve. all: try easy.
+  + exists (E_afunctor f sh) 
+  exists (E_subst (S_comp s0 s) e). split ; auto. intros H1. depelim H1. 
   inv_subterm H0. 
-- exists e. split ; triv. intros H. inv_subterm H.
-- destruct s ; triv. exists e. split ; triv. intros H1. inv_subterm H1.
-- exists s. split ; triv. intros H. inv_subterm H. 
-- exists s. split ; triv. intros H. inv_subterm H. 
-- exists (S_comp s1 (S_comp s2 s3)). split ; triv. intros H. 
+- exists e. split ; auto. intros H. inv_subterm H.
+- destruct s ; auto. exists e. split ; auto. intros H1. inv_subterm H1.
+- exists s. split ; auto. intros H. inv_subterm H. 
+- exists s. split ; auto. intros H. inv_subterm H. 
+- exists (S_comp s1 (S_comp s2 s3)). split ; auto. intros H. 
   depelim H. inv_subterm H.
-- exists (S_cons (E_subst s2 t) (S_comp s1 s2)). split ; triv.
-- destruct s ; triv. exists s. split ; triv. intros H1. inv_subterm H1.
-- exists S_id. triv.
-- destruct r ; eexists ; triv.
+- exists (S_cons (E_subst s2 t) (S_comp s1 s2)). split ; auto.
+- destruct s ; auto. exists s. split ; auto. intros H1. inv_subterm H1.
+- exists S_id. auto.
+- destruct r ; eexists ; auto.
 Qed.   
 
 Lemma qirreducible_qreducible i : qirreducible i <-> ~qreducible i.
 Proof.
 split.
-- intros H H'. apply qr_reducible_impl_red in H'. destruct H' as (i' & H1 & H2). triv.
-- intros H i' Hi. apply qr_red_impl_reducible in Hi. destruct Hi ; triv.
+- intros H H'. apply qr_reducible_impl_red in H'. destruct H' as (i' & H1 & H2). auto.
+- intros H i' Hi. apply qr_red_impl_reducible in Hi. destruct Hi ; auto.
 Qed.
 
 Lemma rirreducible_rreducible r : rirreducible r <-> ~rreducible r.
 Proof.
 split.
-- intros H H'. apply qr_reducible_impl_red in H'. destruct H' as (r' & H1 & H2). triv.
-- intros H r' Hr. apply qr_red_impl_reducible in Hr. destruct Hr ; triv.
+- intros H H'. apply qr_reducible_impl_red in H'. destruct H' as (r' & H1 & H2). auto.
+- intros H r' Hr. apply qr_red_impl_reducible in Hr. destruct Hr ; auto.
 Qed.
 
 Lemma eirreducible_ereducible {k} (t : expr k) : eirreducible t <-> ~ereducible t.
 Proof.
 split.
-- intros H H'. apply es_reducible_impl_red in H'. destruct H' as (t' & H1 & H2). triv.
-- intros H t' Ht. apply es_red_impl_reducible in Ht. destruct Ht ; triv.
+- intros H H'. apply es_reducible_impl_red in H'. destruct H' as (t' & H1 & H2). auto.
+- intros H t' Ht. apply es_red_impl_reducible in Ht. destruct Ht ; auto.
 Qed.
 
 Lemma sirreducible_sreducible s : sirreducible s <-> ~sreducible s.
 Proof.
 split.
-- intros H H'. apply es_reducible_impl_red in H'. destruct H' as (s' & H1 & H2). triv.
-- intros H s' Hs. apply es_red_impl_reducible in Hs. destruct Hs ; triv.
+- intros H H'. apply es_reducible_impl_red in H'. destruct H' as (s' & H1 & H2). auto.
+- intros H s' Hs. apply es_red_impl_reducible in Hs. destruct Hs ; auto.
 Qed.
 
 Ltac change_irred :=
@@ -504,7 +505,7 @@ Ltac change_irred :=
 (*********************************************************************************)
 
 Lemma qirreducible_zero : qirreducible Q_zero.
-Proof. change_irred. triv. Qed.
+Proof. change_irred. auto. Qed.
 #[local] Hint Resolve qirreducible_zero : core.
 
 Lemma qirreducible_succ i : ~qirreducible (Q_succ i).
@@ -517,12 +518,12 @@ Lemma qirreducible_rapply r i :
     ~(is_rcons r /\ i = Q_zero).
 Proof. 
 change_irred. split ; intros H. 
-- split5 ; intros H' ; apply H ; triv.
-  + destruct i ; triv.
-  + destruct r ; triv. destruct H' as (_ & ->). triv.
-- intros H' ; depelim H' ; triv.
-  + destruct H as (_ & _ & _ & H & _). triv.
-  + destruct r ; triv. destruct H as (_ & _ & _ & _ & H). triv.
+- split5 ; intros H' ; apply H ; auto.
+  + destruct i ; auto.
+  + destruct r ; auto. destruct H' as (_ & ->). auto.
+- intros H' ; depelim H' ; auto.
+  + destruct H as (_ & _ & _ & H & _). auto.
+  + destruct r ; auto. destruct H as (_ & _ & _ & _ & H). auto.
 Qed.
 
 Lemma qirreducible_mvar m : qirreducible (Q_mvar m).
@@ -543,9 +544,9 @@ Lemma rirreducible_cons i r :
     ~(i = Q_zero /\ r = R_shift) /\ ~rspecial (R_cons i r).
 Proof.
 change_irred. split.
-- intros H. split4 ; intros H' ; apply H ; triv.
+- intros H. split4 ; intros H' ; apply H ; auto.
   destruct H' ; subst. now constructor.
-- intros (H1 & H2 & H3 & H4) H. depelim H ; triv. 
+- intros (H1 & H2 & H3 & H4) H. depelim H ; auto. 
 Qed.
 
 Lemma rirreducible_comp r1 r2 : 
@@ -554,36 +555,36 @@ Lemma rirreducible_comp r1 r2 :
     r1 <> R_id /\ r2 <> R_id /\ ~(r1 = R_shift /\ is_rcons r2).
 Proof.
 change_irred. split ; intros H.
-- split7 ; intros H' ; apply H ; triv.
-  + destruct r1 ; triv.
-  + destruct r1 ; triv.
-  + destruct H' as [-> H']. destruct r2 ; triv.
-- intros H' ; depelim H' ; triv.
-  + destruct H as (_ & _ & H & _) ; triv.
-  + destruct H as (_ & _ & _ & H & _) ; triv.
-  + destruct r2 ; triv. destruct H as (_ & _ & _ & _ & _ & _ & H). triv.
+- split7 ; intros H' ; apply H ; auto.
+  + destruct r1 ; auto.
+  + destruct r1 ; auto.
+  + destruct H' as [-> H']. destruct r2 ; auto.
+- intros H' ; depelim H' ; auto.
+  + destruct H as (_ & _ & H & _) ; auto.
+  + destruct H as (_ & _ & _ & H & _) ; auto.
+  + destruct r2 ; auto. destruct H as (_ & _ & _ & _ & _ & _ & H). auto.
 Qed. 
 
 Lemma rirreducible_mvar m : rirreducible (R_mvar m).
 Proof. change_irred. intros H. depelim H. depelim H. Qed.
 #[local] Hint Resolve rirreducible_mvar : core.
 
-Lemma eirreducible_tvar i : 
-  eirreducible (E_tvar i) <-> ~is_qrapply i /\ ~is_qsucc i.
+Lemma eirreduciblE_var i : 
+  eirreducible (E_var i) <-> ~is_qrapply i /\ ~is_qsucc i.
 Proof. 
 change_irred. split ; intros H.
-- split ; intros H' ; apply H ; destruct i ; triv.
-- intros H'. destruct H. destruct i ; triv.
-  + depelim H' ; triv.
-  + depelim H' ; triv.
+- split ; intros H' ; apply H ; destruct i ; auto.
+- intros H'. destruct H. destruct i ; auto.
+  + depelim H' ; auto.
+  + depelim H' ; auto.
 Qed.
 
-Lemma eirreducible_tvar_zero : eirreducible (E_tvar Q_zero).
-Proof. change_irred. intros H. depelim H ; triv. Qed.
-#[local] Hint Resolve eirreducible_tvar_zero : core.
+Lemma eirreduciblE_var_zero : eirreducible (E_var Q_zero).
+Proof. change_irred. intros H. depelim H ; auto. Qed.
+#[local] Hint Resolve eirreduciblE_var_zero : core.
 
-Lemma eirreducible_tctor c al : eirreducible (E_tctor c al) <-> eirreducible al.
-Proof. change_irred. split ; intros H H' ; apply H ; triv. now depelim H'. Qed.
+Lemma eirreduciblE_ctor c al : eirreducible (E_ctor c al) <-> eirreducible al.
+Proof. change_irred. split ; intros H H' ; apply H ; auto. now depelim H'. Qed.
 
 Lemma eirreducible_al_nil : eirreducible E_al_nil.
 Proof. change_irred. intros H ; depelim H. Qed.
@@ -593,26 +594,26 @@ Lemma eirreducible_al_cons {ty tys} (a : expr (Ka ty)) (al : expr (Kal tys)) :
   eirreducible (E_al_cons a al) <-> eirreducible a /\ eirreducible al.
 Proof.
 change_irred. split ; intros H.
-- split ; intros H' ; apply H ; triv.
-- intros H' ; depelim H' ; triv.
+- split ; intros H' ; apply H ; auto.
+- intros H' ; depelim H' ; auto.
 Qed.
 
 Lemma eirreducible_abase b x : eirreducible (E_abase b x).
-Proof. change_irred. triv. Qed.
+Proof. change_irred. auto. Qed.
 #[local] Hint Resolve eirreducible_abase : core.
 
 Lemma eirreducible_aterm t : eirreducible (E_aterm t) <-> eirreducible t.
-Proof. change_irred. split ; intros H H' ; apply H ; triv. now depelim H'. Qed.
+Proof. change_irred. split ; intros H H' ; apply H ; auto. now depelim H'. Qed.
 
 Lemma eirreducible_abind {ty} (a : expr (Ka ty)) : 
   eirreducible (E_abind a) <-> eirreducible a.
-Proof. change_irred. split ; intros H H' ; apply H ; triv. now depelim H'. Qed.
+Proof. change_irred. split ; intros H H' ; apply H ; auto. now depelim H'. Qed.
 
 Lemma eirreducible_sapply s i : ~eirreducible (E_sapply s i).
-Proof. change_irred. triv. Qed.
+Proof. change_irred. auto. Qed.
 
 Lemma eirreducible_ren {k} (e : expr k) r : ~eirreducible (E_ren r e).
-Proof. change_irred. triv. Qed.
+Proof. change_irred. auto. Qed.
     
 Lemma eirreducible_subst {k} (e : expr k) s :
   eirreducible (E_subst s e) <->
@@ -620,31 +621,31 @@ Lemma eirreducible_subst {k} (e : expr k) s :
     ~(is_tvar_zero e /\ is_scons s) /\ s <> S_id.
 Proof.
 change_irred. split ; intros H.
-- split5 ; triv. destruct e ; triv. destruct q ; triv. destruct s ; triv.
-- intros H' ; depelim H' ; triv.
-  destruct s ; triv. destruct H as (_ & _ & _ & H & _). triv.
+- split5 ; auto. destruct e ; auto. destruct q ; auto. destruct s ; auto.
+- intros H' ; depelim H' ; auto.
+  destruct s ; auto. destruct H as (_ & _ & _ & H & _). auto.
 Qed.     
 
 Lemma eirreducible_mvar m : eirreducible (E_mvar m).
-Proof. change_irred. triv. Qed.
+Proof. change_irred. auto. Qed.
 #[local] Hint Resolve eirreducible_mvar : core.
 
 Lemma sirreducible_id : sirreducible S_id.
-Proof. change_irred. triv. Qed.
+Proof. change_irred. auto. Qed.
 #[local] Hint Resolve sirreducible_id : core.
 
 Lemma sirreducible_shift : sirreducible S_shift.
-Proof. change_irred. triv. Qed.
+Proof. change_irred. auto. Qed.
 #[local] Hint Resolve sirreducible_shift : core.
 
 Lemma sirreducible_cons t s : 
   sirreducible (S_cons t s) <-> 
-    eirreducible t /\ sirreducible s /\ ~(t = E_tvar Q_zero /\ s = S_shift).
+    eirreducible t /\ sirreducible s /\ ~(t = E_var Q_zero /\ s = S_shift).
 Proof.
 change_irred. split ; intros H.
-- split3 ; intros H' ; apply H ; triv.
+- split3 ; intros H' ; apply H ; auto.
   destruct H' ; subst. now constructor. 
-- intros H'. depelim H' ; triv. destruct H as (_ & _ & H). triv.
+- intros H'. depelim H' ; auto. destruct H as (_ & _ & H). auto.
 Qed.   
 
 Lemma sirreducible_comp s1 s2 : 
@@ -653,21 +654,21 @@ Lemma sirreducible_comp s1 s2 :
     s1 <> S_id /\ s2 <> S_id /\ ~(s1 = S_shift /\ is_scons s2).
 Proof.
 change_irred. split ; intros H.
-- split7 ; intros H' ; apply H ; triv.
-  + destruct s1 ; triv.
-  + destruct s1 ; triv.
-  + destruct H' as [-> H']. destruct s2 ; triv.
-- intros H' ; depelim H' ; triv.
-  + destruct H as (_ & _ & H & _) ; triv.
-  + destruct H as (_ & _ & _ & H & _) ; triv.
-  + destruct s2 ; triv. destruct H as (_ & _ & _ & _ & _ & _ & H). triv.
+- split7 ; intros H' ; apply H ; auto.
+  + destruct s1 ; auto.
+  + destruct s1 ; auto.
+  + destruct H' as [-> H']. destruct s2 ; auto.
+- intros H' ; depelim H' ; auto.
+  + destruct H as (_ & _ & H & _) ; auto.
+  + destruct H as (_ & _ & _ & H & _) ; auto.
+  + destruct s2 ; auto. destruct H as (_ & _ & _ & _ & _ & _ & H). auto.
 Qed. 
 
 Lemma sirreducible_ren r : sirreducible (S_ren r) <-> is_rmvar r.
 Proof.
 change_irred. split ; intros H.
-- destruct r ; triv. all: exfalso ; apply H ; now constructor.
-- intros H' ; depelim H' ; triv. destruct r ; triv. depelim H0. depelim H0.
+- destruct r ; auto. all: exfalso ; apply H ; now constructor.
+- intros H' ; depelim H' ; auto. destruct r ; auto. depelim H0. depelim H0.
 Qed.
 
 Lemma sirreducible_mvar m : sirreducible (S_mvar m).
@@ -690,10 +691,10 @@ Lemma dest_rspecial_spec i r :
   (exists r', dest_rspecial i r = Some r') <-> rspecial (R_cons i r).
 Proof.
 split ; intros H.
-- destruct H. destruct i ; triv. destruct i ; triv. destruct r ; triv. destruct r1 ; triv.
-  simp dest_rspecial in H. destruct (eq_ren_spec r0 r2) ; triv. subst.
+- destruct H. destruct i ; auto. destruct i ; auto. destruct r ; auto. destruct r1 ; auto.
+  simp dest_rspecial in H. destruct (eq_ren_spec r0 r2) ; auto. subst.
   depelim H. constructor.
-- depelim H. exists r0. simp dest_rspecial. destruct (eq_ren_spec r0 r0) ; triv.
+- depelim H. exists r0. simp dest_rspecial. destruct (eq_ren_spec r0 r0) ; auto.
 Qed.
 
 Lemma dest_rspecial_red i r r' : 
@@ -701,8 +702,8 @@ Lemma dest_rspecial_red i r r' :
 Proof.
 intros H. assert (H1 : rspecial (R_cons i r)). 
 { rewrite <-dest_rspecial_spec. eauto. }
-depelim H1. simp dest_rspecial in H. destruct (eq_ren_spec r0 r0) ; triv.
-depelim H. triv.
+depelim H1. simp dest_rspecial in H. destruct (eq_ren_spec r0 r0) ; auto.
+depelim H. auto.
 Qed.
 
 Lemma dest_rspecial_irreducible i r r' : 
@@ -711,7 +712,7 @@ Lemma dest_rspecial_irreducible i r r' :
 Proof. 
 intros H1 H2 H3. assert (H4 : rspecial (R_cons i r)).
 { rewrite <-dest_rspecial_spec. eauto. }
-depelim H4. simp dest_rspecial in H3. destruct (eq_ren_spec r0 r0) ; triv.
+depelim H4. simp dest_rspecial in H3. destruct (eq_ren_spec r0 r0) ; auto.
 depelim H3. now rewrite rirreducible_comp in H2.
 Qed.
 
@@ -729,21 +730,21 @@ rcons a b with dest_rspecial a b := {
   
 Lemma rcons_red i r : R_cons i r =r=> rcons i r.
 Proof. 
-funelim (rcons i r) ; triv. remember (Q_rapply r0 q0) as a. clear Heqa.
-rewrite dest_rspecial_red ; [|eassumption]. triv.
+funelim (rcons i r) ; auto. remember (Q_rapply r0 q0) as a. clear Heqa.
+rewrite dest_rspecial_red ; [|eassumption]. auto.
 Qed.
 #[local] Hint Rewrite <-rcons_red : red.
 
 Lemma rcons_irreducible i r :
   qirreducible i -> rirreducible r -> rirreducible (rcons i r).
 Proof.
-intros H1 H2. funelim (rcons i r) ; triv.
-all: try solve [ rewrite rirreducible_cons ; triv ].
-- apply dest_rspecial_irreducible in Heq ; triv.
+intros H1 H2. funelim (rcons i r) ; auto.
+all: try solve [ rewrite rirreducible_cons ; auto ].
+- apply dest_rspecial_irreducible in Heq ; auto.
 - remember (Q_rapply r0 q0) as a. clear Heqa. rewrite rirreducible_cons.
-  split4 ; triv.
-  + intros (-> & ->). triv.
-  + rewrite <-dest_rspecial_spec. intros (? & H3). rewrite H3 in Heq. triv.
+  split4 ; auto.
+  + intros (-> & ->). auto.
+  + rewrite <-dest_rspecial_spec. intros (? & H3). rewrite H3 in Heq. auto.
 Qed. 
 
 (*********************************************************************************)
@@ -759,7 +760,7 @@ rapply_aux (R_cons k r) Q_zero := k ;
 rapply_aux r i := Q_rapply r i.
 
 Lemma rapply_aux_red r i : Q_rapply r i =q=> rapply_aux r i.
-Proof. funelim (rapply_aux r i) ; triv. Qed.
+Proof. funelim (rapply_aux r i) ; auto. Qed.
 #[local] Hint Rewrite <-rapply_aux_red : red.
 
 Lemma rapply_aux_irreducible r i : 
@@ -767,9 +768,9 @@ Lemma rapply_aux_irreducible r i :
   (r <> R_id -> ~(is_rcons r /\ i = Q_zero) -> qirreducible (Q_rapply r i)) -> 
   qirreducible (rapply_aux r i).
 Proof.
-intros H1 H2 H3. funelim (rapply_aux r i) ; triv.
-all: try solve [ apply H3 ; triv ].
-rewrite rirreducible_cons in H1 ; triv.
+intros H1 H2 H3. funelim (rapply_aux r i) ; auto.
+all: try solve [ apply H3 ; auto ].
+rewrite rirreducible_cons in H1 ; auto.
 Qed.   
 
 (*********************************************************************************)
@@ -785,7 +786,7 @@ rcomp_aux R_shift (R_cons _ r) := r ;
 rcomp_aux r1 r2 := R_comp r1 r2.
 
 Lemma rcomp_aux_red r1 r2 : R_comp r1 r2 =r=> rcomp_aux r1 r2.
-Proof. funelim (rcomp_aux r1 r2) ; triv. Qed.
+Proof. funelim (rcomp_aux r1 r2) ; auto. Qed.
 #[local] Hint Rewrite <-rcomp_aux_red : red.
 
 Lemma rcomp_aux_irreducible r1 r2 : 
@@ -793,8 +794,8 @@ Lemma rcomp_aux_irreducible r1 r2 :
   (r2 <> R_id -> ~(r1 = R_shift /\ is_rcons r2) -> rirreducible (R_comp r1 r2)) -> 
   rirreducible (rcomp_aux r1 r2).
 Proof.
-intros H1 H2 H3. funelim (rcomp_aux r1 r2) ; triv.
-all: try solve [ apply H3 ; now triv ].
+intros H1 H2 H3. funelim (rcomp_aux r1 r2) ; auto.
+all: try solve [ apply H3 ; now auto ].
 now rewrite rirreducible_cons in H2.
 Qed.
 
@@ -821,10 +822,10 @@ Proof.
 apply rapply_elim with 
   (P := fun r i res => Q_rapply r i =q=> res)
   (P0 := fun r1 r2 res => R_comp r1 r2 =r=> res).
-all: intros ; simp red ; triv.
-- rewrite <-H. triv.
-- rewrite <-H, <-H0. triv. 
-- rewrite <-H0, <-H. triv. 
+all: intros ; simp red ; auto.
+- rewrite <-H. auto.
+- rewrite <-H, <-H0. auto. 
+- rewrite <-H0, <-H. auto. 
 Qed.
 
 Lemma rapply_red r i : Q_rapply r i =q=> rapply r i.
@@ -842,21 +843,21 @@ Proof.
 apply rapply_elim with 
   (P := fun r i res => rirreducible r -> qirreducible i -> qirreducible res)
   (P0 := fun r1 r2 res => rirreducible r1 -> rirreducible r2 -> rirreducible res).
-all: intros ; triv.
-- apply rapply_aux_irreducible ; triv. intros H1 H2. rewrite qirreducible_rapply ; triv.
+all: intros ; auto.
+- apply rapply_aux_irreducible ; auto. intros H1 H2. rewrite qirreducible_rapply ; auto.
 - now apply qirreducible_succ in H0.
-- rewrite qirreducible_rapply in H1. apply rapply_aux_irreducible ; triv. 
+- rewrite qirreducible_rapply in H1. apply rapply_aux_irreducible ; auto. 
   + now apply H.
-  + intros H2 H3. rewrite qirreducible_rapply. split5 ; triv. now apply H.
-- apply rapply_aux_irreducible ; triv. intros H1 H2. rewrite qirreducible_rapply.
-  split5 ; triv.
-- apply rcomp_aux_irreducible ; triv. intros H1 H2. rewrite rirreducible_comp.
-  split3 ; triv.
+  + intros H2 H3. rewrite qirreducible_rapply. split5 ; auto. now apply H.
+- apply rapply_aux_irreducible ; auto. intros H1 H2. rewrite qirreducible_rapply.
+  split5 ; auto.
+- apply rcomp_aux_irreducible ; auto. intros H1 H2. rewrite rirreducible_comp.
+  split3 ; auto.
 - rewrite rirreducible_cons in *. apply rcons_irreducible.
   + now apply H.
   + now apply H0.
-- rewrite rirreducible_comp in H1. apply H0 ; triv. apply H ; triv.
-- apply rcomp_aux_irreducible ; triv. intros H1 H2. rewrite rirreducible_comp. triv.
+- rewrite rirreducible_comp in H1. apply H0 ; auto. apply H ; auto.
+- apply rcomp_aux_irreducible ; auto. intros H1 H2. rewrite rirreducible_comp. auto.
 Qed. 
 
 (*********************************************************************************)
@@ -884,7 +885,7 @@ Proof.
 apply qsimp_elim with 
   (P := fun i res => i =q=> res)
   (P0 := fun r res => r =r=> res).
-all: intros ; simp red ; triv.
+all: intros ; simp red ; auto.
 - now rewrite <-H, <-H0.
 - now rewrite <-H, <-H0.
 - now rewrite <-H, <-H0. 
@@ -904,7 +905,7 @@ Proof.
 apply qsimp_elim with 
   (P := fun _ res => qirreducible res) 
   (P0 := fun _ res => rirreducible res).
-all: intros ; try solve [ triv | change_irred ; triv ].
+all: intros ; try solve [ auto | change_irred ; auto ].
 - now apply rapply_rcomp_irreducible.
 - now apply rapply_rcomp_irreducible.
 - now apply rcons_irreducible.
@@ -930,10 +931,10 @@ Inductive sexpr : subst -> Prop :=
 #[local] Hint Constructors sexpr : core.
 
 (** A nat expression is a term of the form [Q_zero] or 
-    [E_subst si (E_tvar Q_zero)] where [si] is a shift expression. *)
+    [E_subst si (E_var Q_zero)] where [si] is a shift expression. *)
 Inductive nexpr : expr Kt -> Prop :=
-| nexpr_zero : nexpr (E_tvar Q_zero) 
-| nexpr_subst s : sexpr s -> nexpr (E_subst s (E_tvar Q_zero)).
+| nexpr_zero : nexpr (E_var Q_zero) 
+| nexpr_subst s : sexpr s -> nexpr (E_subst s (E_var Q_zero)).
 #[local] Hint Constructors nexpr : core.
 
 (** A cons expression is a substitution of the form 
@@ -953,22 +954,22 @@ Derive Signature for sexpr nexpr cexpr.
 
 (** Simplify [S_cons t s]. *)
 Equations scons (t : expr Kt) (s : subst) : subst :=
-scons (E_tvar Q_zero) S_shift := S_id ;
+scons (E_var Q_zero) S_shift := S_id ;
 scons t s := S_cons t s. 
 
 Lemma scons_red t s : S_cons t s =s=> scons t s. 
-Proof. funelim (scons t s) ; triv. Qed.
+Proof. funelim (scons t s) ; auto. Qed.
 #[local] Hint Rewrite <-scons_red : red.
 
 Lemma scons_cexpr t s : 
   nexpr t -> cexpr s -> cexpr (scons t s).
-Proof. intros H1 H2. funelim (scons t s) ; triv. Qed.
+Proof. intros H1 H2. funelim (scons t s) ; auto. Qed.
 
 Lemma scons_irreducible t s :
   eirreducible t -> sirreducible s -> sirreducible (scons t s).
 Proof.
 intros H1 H2. 
-funelim (scons t s) ; try solve [ triv | rewrite sirreducible_cons ; triv ].
+funelim (scons t s) ; try solve [ auto | rewrite sirreducible_cons ; auto ].
 Qed. 
 
 (*********************************************************************************)
@@ -982,13 +983,13 @@ ctail (S_cons _ t) := t ;
 ctail s := S_comp S_shift s.
 
 Lemma ctail_red s : S_comp S_shift s =s=> ctail s.
-Proof. funelim (ctail s) ; triv. Qed.
+Proof. funelim (ctail s) ; auto. Qed.
 #[local] Hint Rewrite <-ctail_red : red.
 
 Lemma ctail_cexpr s : cexpr s -> cexpr (ctail s). 
 Proof.
 intros H. depelim H.
-- depelim H ; simp ctail ; triv.  
+- depelim H ; simp ctail ; auto.  
 - simp ctail.
 Qed.
 
@@ -996,10 +997,10 @@ Lemma ctail_irreducible s :
   cexpr s -> sirreducible s -> sirreducible (ctail s).
 Proof.
 intros H1 H2. depelim H1.
-- depelim H ; simp ctail ; triv.
-  + rewrite sirreducible_comp. split7 ; triv.
-  + rewrite sirreducible_comp. split7 ; triv.
-- simp ctail. rewrite sirreducible_cons in H2. triv.
+- depelim H ; simp ctail ; auto.
+  + rewrite sirreducible_comp. split7 ; auto.
+  + rewrite sirreducible_comp. split7 ; auto.
+- simp ctail. rewrite sirreducible_cons in H2. auto.
 Qed.
 
 (*********************************************************************************)
@@ -1009,17 +1010,17 @@ Qed.
 (** Apply a cons expression to [Q_zero]. *)
 Equations capply_zero : subst -> expr Kt :=
 capply_zero (S_cons t _) := t ;
-capply_zero S_id := E_tvar Q_zero ;
-capply_zero s := E_subst s (E_tvar Q_zero).
+capply_zero S_id := E_var Q_zero ;
+capply_zero s := E_subst s (E_var Q_zero).
 
-Lemma capply_zero_red s : E_subst s (E_tvar Q_zero) =e=> capply_zero s.
-Proof. funelim (capply_zero s) ; triv. Qed.
+Lemma capply_zero_red s : E_subst s (E_var Q_zero) =e=> capply_zero s.
+Proof. funelim (capply_zero s) ; auto. Qed.
 #[local] Hint Rewrite <-capply_zero_red : red.
 
 Lemma capply_zero_nexpr s : cexpr s -> nexpr (capply_zero s).
 Proof.
 intros H. depelim H.
-- depelim H ; simp capply_zero ; triv.
+- depelim H ; simp capply_zero ; auto.
 - simp capply_zero.
 Qed.  
 
@@ -1028,10 +1029,10 @@ Lemma capply_zero_irreducible s :
 Proof.
 intros H1 H2. depelim H1.
 - depelim H ; simp capply_zero.
-  + rewrite eirreducible_tvar. triv.
-  + rewrite eirreducible_subst. split5 ; triv.
-  + rewrite eirreducible_subst. split5 ; triv.
-- simp capply_zero. rewrite sirreducible_cons in H2. triv.
+  + rewrite eirreduciblE_var. auto.
+  + rewrite eirreducible_subst. split5 ; auto.
+  + rewrite eirreducible_subst. split5 ; auto.
+- simp capply_zero. rewrite sirreducible_cons in H2. auto.
 Qed.
 
 (*********************************************************************************)
@@ -1044,17 +1045,17 @@ ccomp S_id s := s ;
 ccomp S_shift s := ctail s ;
 ccomp (S_comp S_shift s1) s2 := ctail (ccomp s1 s2) ;
 ccomp (S_cons t s1) s2 with t := {
-  | E_tvar Q_zero => scons (capply_zero s2) (ccomp s1 s2)
-  | E_subst s (E_tvar Q_zero) => scons (capply_zero (ccomp s s2)) (ccomp s1 s2)
+  | E_var Q_zero => scons (capply_zero s2) (ccomp s1 s2)
+  | E_subst s (E_var Q_zero) => scons (capply_zero (ccomp s s2)) (ccomp s1 s2)
   | _ => S_comp (S_cons t s1) s2 
   } ;
 ccomp x y := S_comp x y.
 
 Lemma ccomp_red s1 s2 : S_comp s1 s2 =s=> ccomp s1 s2.
 Proof. 
-funelim (ccomp s1 s2) ; simp red ; triv.
-- rewrite <-H. triv.
-- rewrite <-H. triv.
+funelim (ccomp s1 s2) ; simp red ; auto.
+- rewrite <-H. auto.
+- rewrite <-H. auto.
 - rewrite <-H, <-H0. rewrite sred_cons_l, ered_subst_subst. reflexivity.
 Qed.  
 #[local] Hint Rewrite <-ccomp_red : red.   
@@ -1067,8 +1068,8 @@ Proof.
 intros H1 H2. induction H1.
 - now apply ccomp_cexpr_helper.
 - depelim H ; simp ccomp.
-  + apply scons_cexpr ; triv. now apply capply_zero_nexpr.
-  + apply scons_cexpr ; triv. apply capply_zero_nexpr. 
+  + apply scons_cexpr ; auto. now apply capply_zero_nexpr.
+  + apply scons_cexpr ; auto. apply capply_zero_nexpr. 
     now apply ccomp_cexpr_helper.
 Qed.
 
@@ -1076,10 +1077,10 @@ Lemma ccomp_irreducible_helper s1 s2 :
   sexpr s1 -> cexpr s2 -> sirreducible s1 -> sirreducible s2 -> sirreducible (ccomp s1 s2).
 Proof. 
 intros H1 H2 H3 H4. induction H1 ; simp ccomp.
-- apply ctail_irreducible ; triv.
+- apply ctail_irreducible ; auto.
 - apply ctail_irreducible.
   + now apply ccomp_cexpr_helper.
-  + apply IHsexpr. rewrite sirreducible_comp in H3. triv.  
+  + apply IHsexpr. rewrite sirreducible_comp in H3. auto.  
 Qed.
 
 Lemma ccomp_irreducible s1 s2 : 
@@ -1088,15 +1089,15 @@ Proof.
 intros H1 H2 H3 H4. revert s2 H2 H4. induction H1 ; intros s2 H2 H4.
 - now apply ccomp_irreducible_helper.   
 - destruct H ; simp ccomp.
-  + rewrite sirreducible_cons in H3. apply scons_irreducible ; triv.
-    * apply capply_zero_irreducible ; triv. 
-    * apply IHcexpr ; triv.
+  + rewrite sirreducible_cons in H3. apply scons_irreducible ; auto.
+    * apply capply_zero_irreducible ; auto. 
+    * apply IHcexpr ; auto.
   + rewrite sirreducible_cons in H3. destruct H3 as (H3 & H5 & H6).
     rewrite eirreducible_subst in H3. apply scons_irreducible.
     * apply capply_zero_irreducible.
-      --apply ccomp_cexpr ; triv.
-      --apply ccomp_irreducible_helper ; triv.
-    * apply IHcexpr ; triv.
+      --apply ccomp_cexpr ; auto.
+      --apply ccomp_irreducible_helper ; auto.
+    * apply IHcexpr ; auto.
 Qed.
 
 (*********************************************************************************)
@@ -1105,22 +1106,22 @@ Qed.
 
 (** Lift a [cexpr] through a binder. *)
 Definition cup (s : subst) : subst := 
-  scons (E_tvar Q_zero) (ccomp s S_shift).
+  scons (E_var Q_zero) (ccomp s S_shift).
 
-Lemma cup_red s : S_cons (E_tvar Q_zero) (S_comp s S_shift) =s=> cup s.
+Lemma cup_red s : S_cons (E_var Q_zero) (S_comp s S_shift) =s=> cup s.
 Proof. unfold cup. now simp red. Qed.
 #[local] Hint Rewrite <-cup_red : red.
 
 Lemma cup_cexpr s : cexpr s -> cexpr (cup s).
 Proof.
-intros H. unfold cup. apply scons_cexpr ; triv. apply ccomp_cexpr ; triv.
+intros H. unfold cup. apply scons_cexpr ; auto. apply ccomp_cexpr ; auto.
 Qed.
 
 Lemma cup_irreducible s : 
   cexpr s -> sirreducible s -> sirreducible (cup s).
 Proof.
-intros H1 H2. unfold cup. apply scons_irreducible ; triv.
-apply ccomp_irreducible ; triv.
+intros H1 H2. unfold cup. apply scons_irreducible ; auto.
+apply ccomp_irreducible ; auto.
 Qed.
 
 (*********************************************************************************)
@@ -1130,15 +1131,15 @@ Qed.
 (** Helper function for [csubstitute] (and also [substitute]) 
     which takes care of the cases:
     - [s] is the identity.
-    - [e] is [E_tvar Q_zero] and [s] is [S_cons _ _]. *)
+    - [e] is [E_var Q_zero] and [s] is [S_cons _ _]. *)
 Equations csubstitute_aux {k} : subst -> expr k -> expr k :=
 csubstitute_aux S_id t := t ;
-csubstitute_aux (S_cons t _) (E_tvar Q_zero) := t ;
+csubstitute_aux (S_cons t _) (E_var Q_zero) := t ;
 csubstitute_aux s t := E_subst s t.
 
 Lemma csubstitute_aux_red {k} s (t : expr k) : 
   E_subst s t =e=> csubstitute_aux s t.
-Proof. funelim (csubstitute_aux s t) ; triv. Qed.
+Proof. funelim (csubstitute_aux s t) ; auto. Qed.
 #[local] Hint Rewrite <-@csubstitute_aux_red : red.
 
 Lemma csubstitute_aux_irreducible {k} s (t : expr k) : 
@@ -1146,9 +1147,9 @@ Lemma csubstitute_aux_irreducible {k} s (t : expr k) :
   (s <> S_id -> ~(is_scons s /\ is_tvar_zero t) -> eirreducible (E_subst s t)) ->
   eirreducible (csubstitute_aux s t).
 Proof.
-intros H1 H2 H3. funelim (csubstitute_aux s t) ; triv.
-all: try solve [ apply H3 ; triv ].
-rewrite sirreducible_cons in H1. triv.
+intros H1 H2 H3. funelim (csubstitute_aux s t) ; auto.
+all: try solve [ apply H3 ; auto ].
+rewrite sirreducible_cons in H1. auto.
 Qed.
 
 (*********************************************************************************)
@@ -1165,7 +1166,7 @@ sccomp_aux s S_id := s ;
 sccomp_aux s1 s2 := S_comp s1 s2.
 
 Lemma sccomp_aux_red s1 s2 : S_comp s1 s2 =s=> sccomp_aux s1 s2.
-Proof. funelim (sccomp_aux s1 s2) ; triv. Qed.
+Proof. funelim (sccomp_aux s1 s2) ; auto. Qed.
 #[local] Hint Rewrite <-sccomp_aux_red : red.
 
 Lemma sccomp_aux_irreducible s1 s2 : 
@@ -1173,9 +1174,9 @@ Lemma sccomp_aux_irreducible s1 s2 :
   (s2 <> S_id -> ~(s1 = S_shift /\ is_scons s2) -> sirreducible (S_comp s1 s2)) ->
   sirreducible (sccomp_aux s1 s2).
 Proof.
-intros H1 H2 H3. funelim (sccomp_aux s1 s2) ; triv.
-all: try solve [apply H3 ; triv ].
-rewrite sirreducible_cons in H2. triv.
+intros H1 H2 H3. funelim (sccomp_aux s1 s2) ; auto.
+all: try solve [apply H3 ; auto ].
+rewrite sirreducible_cons in H2. auto.
 Qed.
 
 (*********************************************************************************)
@@ -1184,8 +1185,8 @@ Qed.
 
 (** Substitute with a [cexpr]. *)
 Equations csubstitute {k} (s : subst) (e : expr k) : expr k by struct e :=
-csubstitute s (E_tvar i) := csubstitute_aux s (E_tvar i) ;
-csubstitute s (E_tctor c al) := E_tctor c (csubstitute s al) ;
+csubstitute s (E_var i) := csubstitute_aux s (E_var i) ;
+csubstitute s (E_ctor c al) := E_ctor c (csubstitute s al) ;
 csubstitute s E_al_nil := E_al_nil ;
 csubstitute s (E_al_cons a al) := E_al_cons (csubstitute s a) (csubstitute s al) ;
 csubstitute s (E_abase b x) := E_abase b x ;
@@ -1209,11 +1210,11 @@ Proof.
 apply csubstitute_elim with 
   (P := fun _ s t res => E_subst s t =e=> res)
   (P0 := fun s1 s2 res => S_comp s1 s2 =s=> res).
-all: intros ; simp red ; triv.
+all: intros ; simp red ; auto.
 all: try solve [ now rewrite <-H ].
 - now rewrite <-H, <-H0.
-- rewrite <-H. simp red. triv.
-- rewrite <-H, <-H0. triv.
+- rewrite <-H. simp red. auto.
+- rewrite <-H, <-H0. auto.
 Qed.    
 
 Lemma csubstitute_red {k} s (t : expr k) : E_subst s t =e=> csubstitute s t.
@@ -1235,40 +1236,40 @@ apply csubstitute_elim with
     cexpr s -> sirreducible s -> eirreducible t -> eirreducible res)
   (P0 := fun s1 s2 res =>
     cexpr s2 -> sirreducible s1 -> sirreducible s2 -> sirreducible res).
-all: intros ; triv.
-- apply csubstitute_aux_irreducible ; triv. intros H2 H3. rewrite eirreducible_subst.
-  split5 ; triv. intros (H4 & H5) ; triv.
-- rewrite eirreducible_tctor in *. apply H ; triv.
-- apply csubstitute_aux_irreducible ; triv. intros H2 H3. rewrite eirreducible_subst.
-  split5 ; triv.
-- rewrite eirreducible_al_cons in *. split ; [apply H | apply H0] ; triv.
-- rewrite eirreducible_aterm in *. apply H ; triv.
-- rewrite eirreducible_abind in *. apply H ; triv.
-  * apply cup_cexpr ; triv.
-  * apply cup_irreducible ; triv.  
-- apply csubstitute_aux_irreducible ; triv. intros H2 H3. rewrite eirreducible_subst.
-  split5 ; triv.
+all: intros ; auto.
+- apply csubstitute_aux_irreducible ; auto. intros H2 H3. rewrite eirreducible_subst.
+  split5 ; auto. intros (H4 & H5) ; auto.
+- rewrite eirreduciblE_ctor in *. apply H ; auto.
+- apply csubstitute_aux_irreducible ; auto. intros H2 H3. rewrite eirreducible_subst.
+  split5 ; auto.
+- rewrite eirreducible_al_cons in *. split ; [apply H | apply H0] ; auto.
+- rewrite eirreducible_aterm in *. apply H ; auto.
+- rewrite eirreducible_abind in *. apply H ; auto.
+  * apply cup_cexpr ; auto.
+  * apply cup_irreducible ; auto.  
+- apply csubstitute_aux_irreducible ; auto. intros H2 H3. rewrite eirreducible_subst.
+  split5 ; auto.
 - now apply eirreducible_ren in H1.
-- rewrite eirreducible_subst in H2. apply csubstitute_aux_irreducible ; triv.
+- rewrite eirreducible_subst in H2. apply csubstitute_aux_irreducible ; auto.
   + now apply H.
-  + intros H3 H4. rewrite eirreducible_subst. split5 ; triv.
+  + intros H3 H4. rewrite eirreducible_subst. split5 ; auto.
     * now apply H.
-    * intros (? & ?) ; triv.
-- simp csubstitute. apply ctail_irreducible ; triv.
+    * intros (? & ?) ; auto.
+- simp csubstitute. apply ctail_irreducible ; auto.
 - rewrite sirreducible_cons in H2. simp csubstitute. apply scons_irreducible.
   + now apply H.  
   + now apply H0.
 - simp csubstitute. rewrite sirreducible_comp in H1.
-  apply sccomp_aux_irreducible ; triv.
-  + apply H ; triv. 
-  + intros H3 H4. rewrite sirreducible_comp. split7 ; triv. apply H ; triv.
-- rewrite sirreducible_ren in H0. destruct r ; triv. simp csubstitute.
-  apply sccomp_aux_irreducible ; triv.
+  apply sccomp_aux_irreducible ; auto.
+  + apply H ; auto. 
+  + intros H3 H4. rewrite sirreducible_comp. split7 ; auto. apply H ; auto.
+- rewrite sirreducible_ren in H0. destruct r ; auto. simp csubstitute.
+  apply sccomp_aux_irreducible ; auto.
   + now rewrite sirreducible_ren.
-  + intros H2 H3. rewrite sirreducible_comp. split7 ; triv.
+  + intros H2 H3. rewrite sirreducible_comp. split7 ; auto.
     now rewrite sirreducible_ren.
-- simp csubstitute. apply sccomp_aux_irreducible ; triv.
-  intros H2 H3. rewrite sirreducible_comp. split7 ; triv.
+- simp csubstitute. apply sccomp_aux_irreducible ; auto.
+  intros H2 H3. rewrite sirreducible_comp. split7 ; auto.
 Qed.
 
 (*********************************************************************************)
@@ -1277,17 +1278,17 @@ Qed.
 
 (** Lift a substitution through a binder. *)
 Definition sup (s : subst) : subst :=
-  scons (E_tvar Q_zero) (sccomp s S_shift).
+  scons (E_var Q_zero) (sccomp s S_shift).
 
-Lemma sup_red s : S_cons (E_tvar Q_zero) (S_comp s S_shift) =s=> sup s.
-Proof. unfold sup. simp red. triv. Qed.
+Lemma sup_red s : S_cons (E_var Q_zero) (S_comp s S_shift) =s=> sup s.
+Proof. unfold sup. simp red. auto. Qed.
 #[local] Hint Rewrite <-sup_red : red.
 
 Lemma sup_irreducible s : 
   sirreducible s -> sirreducible (sup s).
 Proof.
-intros H. unfold sup. apply scons_irreducible ; triv.
-apply csubstitute_sccomp_irreducible ; triv.
+intros H. unfold sup. apply scons_irreducible ; auto.
+apply csubstitute_sccomp_irreducible ; auto.
 Qed.
 
 (*********************************************************************************)
@@ -1299,8 +1300,8 @@ Qed.
 
 (** Substitute in an expression. *)
 Equations substitute {k} (s : subst) (e : expr k) : expr k by struct e :=
-substitute s (E_tvar i) := csubstitute_aux s (E_tvar i) ;
-substitute s (E_tctor c al) := E_tctor c (substitute s al) ;
+substitute s (E_var i) := csubstitute_aux s (E_var i) ;
+substitute s (E_ctor c al) := E_ctor c (substitute s al) ;
 substitute s E_al_nil := E_al_nil ;
 substitute s (E_al_cons a al) := E_al_cons (substitute s a) (substitute s al) ;
 substitute s (E_abase b x) := E_abase b x ;
@@ -1324,11 +1325,11 @@ Proof.
 apply substitute_elim with 
   (P := fun _ s t res => E_subst s t =e=> res)
   (P0 := fun s1 s2 res => S_comp s1 s2 =s=> res).
-all: intros ; simp red ; triv.
+all: intros ; simp red ; auto.
 all: try solve [ now rewrite <-H ].
 - now rewrite <-H, <-H0.
-- rewrite <-H. simp red. triv.
-- rewrite <-H, <-H0. triv.
+- rewrite <-H. simp red. auto.
+- rewrite <-H, <-H0. auto.
 Qed.    
 
 Lemma substitute_red {k} s (t : expr k) : E_subst s t =e=> substitute s t.
@@ -1346,50 +1347,50 @@ Proof.
 apply substitute_elim with 
   (P := fun _ s t res => sirreducible s -> eirreducible t -> eirreducible res)
   (P0 := fun s1 s2 res => sirreducible s1 -> sirreducible s2 -> sirreducible res).
-all: intros ; simp substitute ; triv.
-- apply csubstitute_aux_irreducible ; triv. intros H2 H3. rewrite eirreducible_subst.
-  split5 ; triv. intros (H4 & H5) ; triv.
-- rewrite eirreducible_tctor in *. apply H ; triv.
-- apply csubstitute_aux_irreducible ; triv. intros H2 H3. rewrite eirreducible_subst.
-  split5 ; triv.
-- rewrite eirreducible_al_cons in *. split ; [apply H | apply H0] ; triv.
-- rewrite eirreducible_aterm in *. apply H ; triv.
-- rewrite eirreducible_abind in *. apply H ; triv.
-  apply sup_irreducible ; triv.  
-- apply csubstitute_aux_irreducible ; triv. intros H2 H3. rewrite eirreducible_subst.
-  split5 ; triv.
+all: intros ; simp substitute ; auto.
+- apply csubstitute_aux_irreducible ; auto. intros H2 H3. rewrite eirreducible_subst.
+  split5 ; auto. intros (H4 & H5) ; auto.
+- rewrite eirreduciblE_ctor in *. apply H ; auto.
+- apply csubstitute_aux_irreducible ; auto. intros H2 H3. rewrite eirreducible_subst.
+  split5 ; auto.
+- rewrite eirreducible_al_cons in *. split ; [apply H | apply H0] ; auto.
+- rewrite eirreducible_aterm in *. apply H ; auto.
+- rewrite eirreducible_abind in *. apply H ; auto.
+  apply sup_irreducible ; auto.  
+- apply csubstitute_aux_irreducible ; auto. intros H2 H3. rewrite eirreducible_subst.
+  split5 ; auto.
 - now apply eirreducible_ren in H0.
-- rewrite eirreducible_subst in H1. apply csubstitute_aux_irreducible ; triv.
+- rewrite eirreducible_subst in H1. apply csubstitute_aux_irreducible ; auto.
   + now apply H.
-  + intros H3 H4. rewrite eirreducible_subst. split5 ; triv.
+  + intros H3 H4. rewrite eirreducible_subst. split5 ; auto.
     * now apply H.
-    * intros (? & ?) ; triv.
-- apply sccomp_aux_irreducible ; triv.
-  intros H1 H2. rewrite sirreducible_comp. split7 ; triv.
+    * intros (? & ?) ; auto.
+- apply sccomp_aux_irreducible ; auto.
+  intros H1 H2. rewrite sirreducible_comp. split7 ; auto.
 - rewrite sirreducible_cons in H1. apply scons_irreducible.
   + now apply H.  
   + now apply H0.
 - rewrite sirreducible_comp in H0.
-  apply sccomp_aux_irreducible ; triv.
-  + apply H ; triv. 
-  + intros H3 H4. rewrite sirreducible_comp. split7 ; triv. apply H ; triv.
-- rewrite sirreducible_ren in H. destruct r ; triv.
-  apply sccomp_aux_irreducible ; triv.
+  apply sccomp_aux_irreducible ; auto.
+  + apply H ; auto. 
+  + intros H3 H4. rewrite sirreducible_comp. split7 ; auto. apply H ; auto.
+- rewrite sirreducible_ren in H. destruct r ; auto.
+  apply sccomp_aux_irreducible ; auto.
   + now rewrite sirreducible_ren.
-  + intros H2 H3. rewrite sirreducible_comp. split7 ; triv.
+  + intros H2 H3. rewrite sirreducible_comp. split7 ; auto.
     now rewrite sirreducible_ren.
-- apply sccomp_aux_irreducible ; triv.
-  intros H2 H3. rewrite sirreducible_comp. split7 ; triv.
+- apply sccomp_aux_irreducible ; auto.
+  intros H2 H3. rewrite sirreducible_comp. split7 ; auto.
 Qed.
 
 (*********************************************************************************)
 (** *** [tvar] and [sren] *)
 (*********************************************************************************)
 
-(** Simplify [E_tvar i]. We take care of extracting [Q_rapply] into [E_subst]. *)
+(** Simplify [E_var i]. We take care of extracting [Q_rapply] into [E_subst]. *)
 Equations tvar : qnat -> expr Kt :=
-tvar (Q_rapply r i) := E_subst (sren r) (E_tvar i) ; 
-tvar i := E_tvar i
+tvar (Q_rapply r i) := E_subst (sren r) (E_var i) ; 
+tvar i := E_var i
 
 (** Simplify [S_ren r]. We rely crucially on the fact that [r] must already 
     be irreducible, so we can use [S_cons] and [S_comp] instead of 
@@ -1403,18 +1404,18 @@ sren (R_comp r1 r2) := S_comp (sren r1) (sren r2) ;
 sren (R_mvar r) := S_ren (R_mvar r).
 
 Lemma tvar_sren_red : 
-  (forall i, E_tvar i =e=> tvar i) * (forall r, S_ren r =s=> sren r).
+  (forall i, E_var i =e=> tvar i) * (forall r, S_ren r =s=> sren r).
 Proof.
 apply tvar_elim with 
-  (P := fun i res => E_tvar i =e=> res) 
+  (P := fun i res => E_var i =e=> res) 
   (P0 := fun r res => S_ren r =s=> res).
-all: intros ; simp red ; triv.
-- rewrite <-H. rewrite ered_rapply. triv.
-- rewrite <-H, <-H0. triv.
-- rewrite <-H, <-H0. triv.
+all: intros ; simp red ; auto.
+- rewrite <-H. rewrite ered_rapply. auto.
+- rewrite <-H, <-H0. auto.
+- rewrite <-H, <-H0. auto.
 Qed.
 
-Lemma tvar_red i : E_tvar i =e=> tvar i.
+Lemma tvar_red i : E_var i =e=> tvar i.
 Proof. now apply tvar_sren_red. Qed.
 #[local] Hint Rewrite <-tvar_red : red.
 
@@ -1429,28 +1430,28 @@ Proof.
 apply tvar_elim with 
   (P := fun i res => qirreducible i -> eirreducible res)
   (P0 := fun r res => rirreducible r -> sirreducible res).
-all: intros ; triv.
+all: intros ; auto.
 - now apply qirreducible_succ in H.
-- rewrite qirreducible_rapply in H0. rewrite eirreducible_subst. split5 ; triv.
-  + rewrite eirreducible_tvar. destruct i ; triv. destruct H0 as (_ & H0 & _). 
+- rewrite qirreducible_rapply in H0. rewrite eirreducible_subst. split5 ; auto.
+  + rewrite eirreduciblE_var. destruct i ; auto. destruct H0 as (_ & H0 & _). 
     now apply qirreducible_succ in H0.
   + now apply H.
-  + intros (? & ?) ; triv. destruct i ; triv. destruct r ; triv. now apply H0.
+  + intros (? & ?) ; auto. destruct i ; auto. destruct r ; auto. now apply H0.
   + now destruct r.
-- rewrite eirreducible_tvar. triv.
-- rewrite rirreducible_cons in H1. rewrite sirreducible_cons. split3 ; triv.
+- rewrite eirreduciblE_var. auto.
+- rewrite rirreducible_cons in H1. rewrite sirreducible_cons. split3 ; auto.
   + now apply H.
   + now apply H0.
-  + intros (? & ?). destruct i ; triv. destruct r ; triv.
+  + intros (? & ?). destruct i ; auto. destruct r ; auto.
     destruct H1 as (_ & _ & H1 & _). now apply H1.
-- rewrite rirreducible_comp in H1. rewrite sirreducible_comp. split7 ; triv.
+- rewrite rirreducible_comp in H1. rewrite sirreducible_comp. split7 ; auto.
   + now apply H.
   + now apply H0.
-  + destruct r1 ; triv. 
-  + destruct r1 ; triv.
-  + destruct r1 ; triv.
-  + destruct r2 ; triv.
-  + destruct r1, r2 ; triv. exfalso. now apply H1.
+  + destruct r1 ; auto. 
+  + destruct r1 ; auto.
+  + destruct r1 ; auto.
+  + destruct r2 ; auto.
+  + destruct r1, r2 ; auto. exfalso. now apply H1.
 - now rewrite sirreducible_ren.
 Qed. 
 
@@ -1460,8 +1461,8 @@ Qed.
 
 (** Simplify an expression. *)
 Equations esimp {k} (t : expr k) : expr k :=
-esimp (E_tvar i) := tvar (qsimp i) ;
-esimp (E_tctor c al) := E_tctor c (esimp al) ;
+esimp (E_var i) := tvar (qsimp i) ;
+esimp (E_ctor c al) := E_ctor c (esimp al) ;
 esimp E_al_nil := E_al_nil ;
 esimp (E_al_cons a al) := E_al_cons (esimp a) (esimp al) ;
 esimp (E_abase b x) := E_abase b x ;
@@ -1488,7 +1489,7 @@ Proof.
 apply esimp_elim with 
   (P := fun _ t res => t =e=> res)
   (P0 := fun s res => s =s=> res).
-all: intros ; simp red ; triv.
+all: intros ; simp red ; auto.
 all: solve [ now rewrite <-H | now rewrite <-H, <-H0 ]. 
 Qed.
 
@@ -1507,19 +1508,19 @@ Proof.
 apply esimp_elim with 
   (P := fun _ _ res => eirreducible res) 
   (P0 := fun _ res => sirreducible res).
-all: intros ; triv.
+all: intros ; auto.
 - apply tvar_sren_irreducible. apply qsimp_irreducible. 
-- now rewrite eirreducible_tctor.
+- now rewrite eirreduciblE_ctor.
 - now rewrite eirreducible_al_cons.
 - now rewrite eirreducible_aterm.
 - now rewrite eirreducible_abind.
-- apply substitute_scomp_irreducible ; triv.
+- apply substitute_scomp_irreducible ; auto.
   apply tvar_sren_irreducible. now apply qsimp_irreducible.
-- apply substitute_scomp_irreducible ; triv.
+- apply substitute_scomp_irreducible ; auto.
   apply tvar_sren_irreducible. now apply rsimp_irreducible.
-- apply substitute_scomp_irreducible ; triv.
+- apply substitute_scomp_irreducible ; auto.
 - now apply scons_irreducible.
-- apply substitute_scomp_irreducible ; triv. 
+- apply substitute_scomp_irreducible ; auto. 
 - apply tvar_sren_irreducible. now apply rsimp_irreducible.
 Qed.
 

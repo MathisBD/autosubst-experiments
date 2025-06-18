@@ -7,8 +7,6 @@ From Coq Require Import Bool.
 (** Enable reducing constants defined using [Equations]. *)
 Set Equations Transparent.
 
-Set Universe Polymorphism.
-
 (*********************************************************************************)
 (** *** Finite sets. *)
 (*********************************************************************************)
