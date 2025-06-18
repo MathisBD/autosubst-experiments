@@ -229,7 +229,7 @@ Proof. intros H. simp up_ren. apply congr_rcons. now apply congr_rcomp. Qed.
 (*********************************************************************************)
 
 (** [fin n] represents the finite set with [n] elements [0], [1], ..., [n-1]. *)
-Inductive fin : nat -> Type :=
+(*Inductive fin : nat -> Type :=
 | (** [0] is in [fin n] whenever [n > 0]. *)
   finO {n} : fin (S n)
 | (** Injection from [fin n] to [fin (S n)], which maps [i] to [i+1]. *)
@@ -298,4 +298,4 @@ Fixpoint vector_nth {T n} (i : fin n) (xs : vector T n) : T :=
     | vnil => fun _ => tt
     | vcons x xs => fun i => vector_nth i xs 
     end i
-  end xs.  
+  end xs.*)  
