@@ -1,8 +1,13 @@
-(** This file defines finite sets [fin n], which can be thought of
-    as the set [{0, 1, 2, ..., n-1 }]. *)
+(** This file defines finite sets [fin n] which can be thought of
+    as sets [{ 0, 1, 2, ..., n-1 }]. *)
 
 From Equations Require Import Equations.
 From Coq Require Import Bool.
+
+(** Enable reducing constants defined using [Equations]. *)
+Set Equations Transparent.
+
+Set Universe Polymorphism.
 
 (*********************************************************************************)
 (** *** Finite sets. *)

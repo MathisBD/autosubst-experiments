@@ -5,6 +5,11 @@ From Coq Require Import Relations Morphisms.
 From Equations Require Import Equations.
 From Utils Require Import Fin.
 
+(** Enable reducing constants defined using [Equations]. *)
+Set Equations Transparent.
+
+Set Universe Polymorphism.
+
 (*********************************************************************************)
 (** *** Vectors. *)
 (*********************************************************************************)

@@ -50,6 +50,45 @@ where "'term' m" := (expr (Kt m))
 Derive Signature NoConfusion NoConfusionHom for expr.
 
 (*********************************************************************************)
+(** *** Inversion lemmas. *)
+(*********************************************************************************)
+
+(** Calling [depelim] by hand can be quite slow in some cases so we provide
+    inversion lemmas to use instead. These are notably used when generating
+    the custom induction principle on parameterized terms (generated from OCaml). *)
+
+Lemma inv_term {m} (P : term m -> Prop) :
+  (forall i, P (E_var i)) -> 
+  (forall c al, P (E_ctor c al)) -> 
+  forall t, P t.
+Proof. intros H1 H2 t. depelim t ; eauto. Qed.
+
+Lemma inv_args_nil (P : args [] -> Prop) : 
+  P E_al_nil -> 
+  forall al, P al.
+Proof. intros H al. depelim al ; eauto. Qed.
+
+Lemma inv_args_cons {ty tys} (P : args (ty :: tys) -> Prop) :
+  (forall a al', P (E_al_cons a al')) -> 
+  forall al, P al.
+Proof. intros H al. depelim al ; eauto. Qed.
+
+Lemma inv_arg_term {m} (P : arg (AT_term m) -> Prop) : 
+  (forall t, P (E_aterm t)) -> 
+  forall a, P a.
+Proof. intros H a. depelim a ; eauto. Qed.
+
+Lemma inv_arg_base {b} (P : arg (AT_base b) -> Prop) :
+  (forall x, P (E_abase b x)) ->
+  forall a, P a.
+Proof. intros H a. depelim a ; eauto. Qed.
+
+Lemma inv_arg_bind {m ty} (P : arg (AT_bind m ty) -> Prop) :
+  (forall a', P (E_abind m a')) -> 
+  forall a, P a.
+Proof. intros H a. depelim a ; eauto. Qed.
+
+(*********************************************************************************)
 (** *** Induction on terms based on their size. *)
 (*********************************************************************************)
 

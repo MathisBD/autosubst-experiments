@@ -5,9 +5,20 @@ From Coq Require Import Relations Morphisms.
 From Equations Require Import Equations.
 From Utils Require Import Fin Vector.
 
+(** Enable reducing constants defined using [Equations]. *)
+Set Equations Transparent.
+
+Set Universe Polymorphism.
+
 (*********************************************************************************)
 (** *** Heterogeneous vectors. *)
 (*********************************************************************************)
+
+(*Inductive hvec {n : nat} (T : fin n -> Type) : 
+  forall k : nat, (fin k -> fin n) -> Type :=
+| hnil : hvec T finO
+| hcons (k : fin n) : T k -> hvec T k -> hvec T (finS k).*)
+
 
 (** [hvec n T] is the type of vectors of length [n] with the [i]-th element
     of type [T i]. Note that we use a function [fin n -> Type] to give the types
@@ -16,6 +27,7 @@ From Utils Require Import Fin Vector.
 Inductive hvec : forall n, (fin n -> Type) -> Type :=
 | hnil {T} : hvec 0 T
 | hcons {n T} : T finO -> hvec n (fun i => T (finS i)) -> hvec (S n) T.
+
 
 Derive Signature NoConfusion NoConfusionHom for hvec.
 
