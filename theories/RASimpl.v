@@ -164,12 +164,13 @@ Tactic Notation "rasimpl" "in" hyp(H) :=
 
 Definition t := 3.
 
-Autosubst Generate 
+Sulfur Generate 
 {{
   option : Functor
   list : Functor
   
   term : Type
-  app : term -> (option (bind term in (option term))) -> term
+  
+  app : term -> (list (bind term in (option term))) -> term
   lam : (bind term in term) -> term
 }}.

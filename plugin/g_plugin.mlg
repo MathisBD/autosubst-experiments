@@ -54,12 +54,10 @@ END
 VERNAC ARGUMENT EXTEND signature 
 | [ "{{" decl_list(decls) "}}" ] -> 
   { 
-    ()
-    (* We validate pre-signatures at parsing time. *)
-    (*validate_psignature (CAst.make ~loc { fctors ; sort ; ctors }) *)
+    CAst.make ~loc { decls }
   }
 END
 
-VERNAC COMMAND EXTEND AutosubstGenerate CLASSIFIED AS SIDEFF
-| [ "Autosubst" "Generate" signature(s) ] -> { (*Main.generate s*) () }
+VERNAC COMMAND EXTEND SulfurGenerate CLASSIFIED AS SIDEFF
+| [ "Sulfur" "Generate" signature(s) ] -> { Main.generate s }
 END

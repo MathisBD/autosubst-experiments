@@ -1,6 +1,6 @@
 open Prelude
 open Signature
-module C = Constants
+(*module C = Constants*)
 
 (**************************************************************************************)
 (** *** Saving the names of generated constants and lemmas. *)
@@ -82,9 +82,11 @@ let generate_term (gen_sign : Constrexpr.constr_expr gen_signature) :
 
 (** Main entry point for the plugin: generate the term inductive as well as level zero
     terms, operations, and lemmas. *)
-let generate (gen_sign : Constrexpr.constr_expr gen_signature) : unit =
+let generate (psign : psignature) : unit =
+  (* Check the pre-signature. *)
+  let _sign = monad_run @@ check_psignature psign in
   (* Generate the term inductive. *)
-  let _sign, _term = generate_term gen_sign in
+  (*let _sign, _term = generate_term gen_sign in*)
   ()
 
 (* Generate the operations. *)
