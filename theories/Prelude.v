@@ -77,13 +77,13 @@ up_ren r := rcons 0 (rcomp r rshift).
 Definition eq1 {A B} : relation (A -> B) := pointwise_relation _ eq.
 Notation "f =₁ g" := (eq1 f g) (at level 75).
 
-Lemma peq_refl {A B} {x : A -> B} : x =₁ x.
+Lemma eq1_refl {A B} {x : A -> B} : x =₁ x.
 Proof. reflexivity. Qed.
 
-Lemma peq_sym {A B} {x y : A -> B} : x =₁ y -> y =₁ x.
+Lemma eq1_sym {A B} {x y : A -> B} : x =₁ y -> y =₁ x.
 Proof. now intros ->. Qed.
 
-Lemma peq_trans {A B} {x y z : A -> B} : x =₁ y -> y =₁ z -> x =₁ z.
+Lemma eq1_trans {A B} {x y z : A -> B} : x =₁ y -> y =₁ z -> x =₁ z.
 Proof. now intros -> ->. Qed.
 
 Lemma congr_rcons i {r r'} :

@@ -129,7 +129,7 @@ Section InvLemmas.
     (forall a', P (E_abind a')) -> P a.
   Proof. depelim a ; eauto. Qed.
 
-  Lemma inv_Ka_fctor {f ty} (P : arg (AT_functor f ty) -> Prop) (a : arg (AT_functor f ty)) :
+  Lemma inv_Ka_functor {f ty} (P : arg (AT_functor f ty) -> Prop) (a : arg (AT_functor f ty)) :
     (forall s al, P (E_afunctor f s al)) -> P a.
   Proof. depelim a ; eauto. Qed. 
 End InvLemmas.

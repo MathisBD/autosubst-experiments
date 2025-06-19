@@ -473,6 +473,7 @@ Ltac2 decompose_sapply (sig : constr) (t : constr) : (constr * constr) option :=
   | _ => None
   end.
 
+(** Reify an expression [t : P.expr k]. *)
 Ltac2 rec reify_expr (sig : constr) (e : env) (t : constr) : env * constr :=
   lazy_match! t with 
   | P.E_var ?i => 
@@ -493,6 +494,9 @@ Ltac2 rec reify_expr (sig : constr) (e : env) (t : constr) : env * constr :=
   | P.E_abind ?a =>
     let (e, a) := reify_expr sig e a in
     e, constr:(@E_abind $sig _ $a)
+  | P.E_afunctor ?f ?sh ?al =>
+    let (e, al) := reify_expr_vec sig e al in
+    e, constr:(@E_afunctor $sig _ $f $sh $al)
   | P.rename ?r ?t =>
     let (e, r) := reify_ren e r in
     let (e, t) := reify_expr sig e t in
@@ -515,6 +519,17 @@ Ltac2 rec reify_expr (sig : constr) (e : env) (t : constr) : env * constr :=
     end
   end
 
+(** Reify a vector of expressions [ts : vec (P.expr k) n]. *)
+with reify_expr_vec (sig : constr) (e : env) (ts : constr) : env * constr :=
+  lazy_match! ts with 
+  | @vnil ?ty => e, constr:(@vnil $ty)
+  | @vcons ?ty ?n ?t ?ts => 
+    let (e, t) := reify_expr sig e t in
+    let (e, ts) := reify_expr_vec sig e ts in
+    e, constr:(@vcons $ty $n $t $ts)
+  end
+
+(** Reify a substitutions [s : P.subst]. *)
 with reify_subst (sig : constr) (e : env) (s : constr) : env * constr :=
   lazy_match! s with 
   | P.sid => e, constr:(@S_id $sig)
