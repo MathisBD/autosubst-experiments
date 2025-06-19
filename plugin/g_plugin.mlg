@@ -9,8 +9,14 @@ DECLARE PLUGIN "autosubst-experiments.plugin"
 (** A single argument type, e.g. "(bind ty in term)".
     For technical reasons we have to move the rule for single identifiers to [ctor_ty]. *)
 VERNAC ARGUMENT EXTEND arg_ty 
-| [ "{{" lconstr(c) "}}" ] -> { CAst.make ~loc (PAT_base c) }
-| [ "(" "bind" ne_identref_list(ids) "in" identref(id) ")" ] -> { CAst.make (PAT_bind (ids, id)) }
+| [ identref(id) ] ->
+    { CAst.make ~loc (PAT_sort id) }
+| [ "{{" lconstr(c) "}}" ] -> 
+    { CAst.make ~loc (PAT_base c) }
+| [ "(" "bind" ne_identref_list(ids) "in" arg_ty(ty) ")" ] -> 
+    { CAst.make ~loc (PAT_bind (ids, ty)) }
+| [ "(" identref(id) arg_ty(ty) ")" ] -> 
+    { CAst.make ~loc (PAT_fctor (id, ty)) }
 END
 
 (** The type of a constructor, e.g. "ty -> (bind term in term) -> term". *)
@@ -24,20 +30,20 @@ VERNAC ARGUMENT EXTEND pctor_ty
 | [ arg_ty(ty) "->" pctor_ty(cty) ] -> { let (tys, rty) = cty in (ty :: tys, rty) }
 END
 
-(** A declaration for a new sort, e.g. "term : Type". *)
-VERNAC ARGUMENT EXTEND sort_decl 
-| [ identref(sort) "(" identref(var_ctor) ")" ":" "Type" ] -> 
+(** A single functor/sort/constructor declaration. *)
+VERNAC ARGUMENT EXTEND decl 
+| [ identref(name) ":" "Functor" ] ->
   { 
-    CAst.make ~loc (SortDecl { sort ; var_ctor = Some var_ctor }) 
+    CAst.make ~loc (FctorDecl { name }) 
   }
-| [ identref(sort) ":" "Type" ] -> 
+| [ identref(name) "(" identref(var_ctor) ")" ":" "Type" ] -> 
   { 
-    CAst.make ~loc (SortDecl { sort ; var_ctor = None }) 
+    CAst.make ~loc (SortDecl { name ; var_ctor = Some var_ctor }) 
   }
-END
-
-(** A declaration for a new constructor, e.g. "app : term -> term -> term". *)
-VERNAC ARGUMENT EXTEND ctor_decl
+| [ identref(name) ":" "Type" ] -> 
+  { 
+    CAst.make ~loc (SortDecl { name ; var_ctor = None }) 
+  }
 | [ identref(name) ":" pctor_ty(cty) ] -> 
   { 
     let (arg_tys, ret_ty) = cty in 
@@ -46,13 +52,14 @@ VERNAC ARGUMENT EXTEND ctor_decl
 END
 
 VERNAC ARGUMENT EXTEND signature 
-| [ "{{" sort_decl(sort) ctor_decl_list(ctors) "}}" ] -> 
+| [ "{{" decl_list(decls) "}}" ] -> 
   { 
+    ()
     (* We validate pre-signatures at parsing time. *)
-    validate_psignature (CAst.make ~loc { sort ; ctors }) 
+    (*validate_psignature (CAst.make ~loc { fctors ; sort ; ctors }) *)
   }
 END
 
 VERNAC COMMAND EXTEND AutosubstGenerate CLASSIFIED AS SIDEFF
-| [ "Autosubst" "Generate" signature(s) ] -> { Main.generate s }
+| [ "Autosubst" "Generate" signature(s) ] -> { (*Main.generate s*) () }
 END

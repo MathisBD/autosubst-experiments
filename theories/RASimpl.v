@@ -1,12 +1,12 @@
 From Prototype Require Import Prelude Sig Constants.
-From Prototype Require LevelOne LevelTwo LevelTwoClean LevelTwoSimp.
+From Prototype Require ParamSyntax ExplicitSyntax Simplification Cleanup.
 From Ltac2 Require Import RedFlags Printf.
 From Ltac2 Require Ltac2.
 
-Module O := LevelOne.
-Module T := LevelTwo.
-Module Simp := LevelTwoSimp.
-Module Clean := LevelTwoClean.
+Module P := ParamSyntax.
+Module E := ExplicitSyntax.
+Module Simp := Simplification.
+Module Clean := Cleanup.
 
 (*********************************************************************************)
 (** *** Simplifying level one terms/substitutions. *)
@@ -16,19 +16,19 @@ Module Clean := LevelTwoClean.
     functions (LevelTwo.v). *)
 Ltac2 red_flags_eval () : RedFlags.t :=
   red_flags:(beta iota delta   
-    [T.eeval T.seval T.eeval_functional T.seval_functional
-     T.reval T.qeval T.reval_functional T.qeval_functional
-     T.assign_qnat T.assign_ren T.assign_term T.assign_subst
-     T.list_nth
+    [E.eeval E.seval E.eeval_functional E.seval_functional
+     E.reval E.qeval E.reval_functional E.qeval_functional
+     E.assign_qnat E.assign_ren E.assign_term E.assign_subst
+     E.list_nth
      ]).
    
 (** Simplify a level one term. Returns [(t1', eq)] where [eq : t1 = t1'].  *)
 Ltac2 simpl_term_one (sig : constr) (t1 : constr) : constr * constr :=
   printf "t1: %t" t1;
   (* Reify Level 1 -> Level 2. *)
-  let env := T.empty_env () in
-  let (env, t2) := T.reify_expr sig env t1 in
-  let env := T.build_env sig env in
+  let env := E.empty_env () in
+  let (env, t2) := E.reify_expr sig env t1 in
+  let env := E.build_env sig env in
   printf "t2: %t" t2;
   (* Simplify on Level 2. *)
   let t2' := Std.eval_cbn RedFlags.all constr:(Simp.esimp $t2) in
@@ -36,7 +36,7 @@ Ltac2 simpl_term_one (sig : constr) (t1 : constr) : constr * constr :=
   let t2'' := Std.eval_cbn RedFlags.all constr:(Clean.eclean $t2') in
   printf "t2'': %t" t2'';
   (* Eval Level 2 -> Level 1. *)
-  let t1' := Std.eval_cbn (red_flags_eval ()) constr:(T.eeval $env $t2'') in
+  let t1' := Std.eval_cbn (red_flags_eval ()) constr:(E.eeval $env $t2'') in
   printf "t1': %t" t1';
   (* [eq1 : t1 = t1']. *)
   let eq1 := constr:(eq_trans
@@ -51,9 +51,9 @@ Ltac2 simpl_term_one (sig : constr) (t1 : constr) : constr * constr :=
 Ltac2 simpl_subst_one (sig : constr) (s1 : constr) : constr * constr :=
   printf "s1: %t" s1;
   (* Reify Level 1 -> Level 2. *)
-  let env := T.empty_env () in
-  let (env, s2) := T.reify_subst sig env s1 in
-  let env := T.build_env sig env in
+  let env := E.empty_env () in
+  let (env, s2) := E.reify_subst sig env s1 in
+  let env := E.build_env sig env in
   printf "s2: %t" s2;
   (* Simplify on Level 2. *)
   let s2' := Std.eval_cbn RedFlags.all constr:(Simp.ssimp $s2) in
@@ -61,10 +61,10 @@ Ltac2 simpl_subst_one (sig : constr) (s1 : constr) : constr * constr :=
   let s2'' := Std.eval_cbn RedFlags.all constr:(Clean.sclean $s2') in
   printf "s2'': %t" s2'';
   (* Eval Level 2 -> Level 1. *)
-  let s1' := Std.eval_cbv (red_flags_eval ()) constr:(T.seval $env $s2'') in
+  let s1' := Std.eval_cbv (red_flags_eval ()) constr:(E.seval $env $s2'') in
   printf "s1': %t" s1';
   (* [eq1 : s1 =₁ s1']. *)
-  let eq1 := constr:(peq_trans
+  let eq1 := constr:(eq1_trans
     (Simp.sred_sound $env _ _ (Simp.ssimp_red $s2))
     (Clean.sred_sound $env _ _ (Clean.sclean_red $s2'))) 
   in
@@ -76,8 +76,8 @@ Ltac2 simpl_subst_one (sig : constr) (s1 : constr) : constr * constr :=
 
 Declare ML Module "autosubst-experiments.plugin".
 
-Ltac2 @external simpl_term_zero : constr -> constr * constr := "autosubst-experiments.plugin" "simpl_term_zero".
-Ltac2 @external simpl_subst_zero : constr -> constr * constr := "autosubst-experiments.plugin" "simpl_subst_zero".
+(*Ltac2 @external simpl_term_zero : constr -> constr * constr := "autosubst-experiments.plugin" "simpl_term_zero".
+Ltac2 @external simpl_subst_zero : constr -> constr * constr := "autosubst-experiments.plugin" "simpl_subst_zero".*)
 
 (*********************************************************************************)
 (** *** Boilerplate for [rasimpl]. *)
@@ -87,7 +87,7 @@ Ltac2 @external simpl_subst_zero : constr -> constr * constr := "autosubst-exper
     Typically [x] is a ground term and [y] is an evar, and a proof of 
     [Simplification x y] instantiates [y] with a simplified version of [x]. *)
 
-Class NatSimplification (x y : nat) :=
+(*Class NatSimplification (x y : nat) :=
   MkNatSimplification { nat_simplification : x = y }.
 
 Class RenSimplification (x y : nat -> nat) :=
@@ -158,4 +158,18 @@ Tactic Notation "rasimpl_outermost" "in" hyp(H) :=
 Tactic Notation "rasimpl" "in" hyp(H) := 
   repeat aunfold in H ;
   repeat rasimpl_topdown in H ;
-  repeat rasimpl_outermost in H.
+  repeat rasimpl_outermost in H.*)
+
+(** Tests. *)
+
+Definition t := 3.
+
+Autosubst Generate 
+{{
+  option : Functor
+  list : Functor
+  
+  term : Type
+  app : term -> (option (bind term in (option term))) -> term
+  lam : (bind term in term) -> term
+}}.

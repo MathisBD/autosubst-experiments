@@ -1,8 +1,6 @@
 (** This file defines the OCaml representation of signatures, as well utilities for
     parsing and validating signatures written by the user. *)
 
-open Prelude
-
 (**************************************************************************************)
 (** *** Pre-signature. *)
 (**************************************************************************************)
@@ -12,29 +10,28 @@ open Prelude
     constructor twice). A pre-signature can be checked and turned into a real signature
     using [validate_psignature] followed by [interp_signature_base_types]. *)
 
-(** An argument type. *)
+(** Argument type. *)
 type parg_ty_r =
   | PAT_base of Constrexpr.constr_expr
   | PAT_sort of Names.lident
-  | PAT_bind of Names.lident list * Names.lident
+  | PAT_bind of Names.lident list * parg_ty
+  | PAT_fctor of Names.lident * parg_ty
 
 and parg_ty = parg_ty_r CAst.t
 
-(** Declaration for a new sort. [var_ctor] is the name of the variable constructor, if
-    provided by the user. *)
-type sort_decl_r = SortDecl of { sort : Names.lident; var_ctor : Names.lident option }
-
-and sort_decl = sort_decl_r CAst.t
-
-(** Declaration for a new constructor. *)
-type pctor_decl_r =
+(** Declaration. *)
+type decl_r =
+  | FctorDecl of { name : Names.lident }
+      (** Functor declaration, e.g. [option : Functor]. *)
+  | SortDecl of { name : Names.lident; var_ctor : Names.lident option }
+      (** Sort declaration, e.g. [term : Type]. *)
   | CtorDecl of { name : Names.lident; arg_tys : parg_ty list; ret_ty : Names.lident }
+      (** Constructor declaration, e.g. [app : term -> option term -> term]. *)
 
-and pctor_decl = pctor_decl_r CAst.t
+and decl = decl_r CAst.t
 
-(** A signature is a list of declarations. For now we require a single term declaration.
-*)
-type psignature_r = { sort : sort_decl; ctors : pctor_decl list }
+(** Pre-signature. *)
+type psignature_r = { decls : decl list }
 
 and psignature = psignature_r CAst.t
 
@@ -43,7 +40,7 @@ and psignature = psignature_r CAst.t
 (**************************************************************************************)
 
 (** Argument type. Base types store the index of the type in the [base_types] array. *)
-type arg_ty = AT_base of int | AT_term | AT_bind of arg_ty
+(*type arg_ty = AT_base of int | AT_term | AT_bind of arg_ty
 
 (** An abstract signature:
     - [sort] is the name of the (unique) sort of terms.
@@ -188,4 +185,4 @@ let interp_signature_base_types (s : Constrexpr.constr_expr gen_signature) : sig
     (sigma, Evarutil.nf_evar sigma c)
   in
   let* new_base_types = List.monad_map interp_one @@ Array.to_list s.base_types in
-  ret { s with base_types = Array.of_list new_base_types }
+  ret { s with base_types = Array.of_list new_base_types }*)
