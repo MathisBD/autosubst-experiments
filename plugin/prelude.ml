@@ -36,16 +36,16 @@ type ops_one =
 (** Helper function to build the kind of terms [Kt]. *)
 let kt (ops1 : ops_one) : EConstr.t = app (mkglob' Constants.k_t) @@ mkind ops1.base
 
-(** Helper function to build the type of level one terms [O.expr Kt]. *)
+(** Helper function to build the type of parameterized terms [P.expr Kt]. *)
 let term1 (ops1 : ops_one) : EConstr.t =
-  apps (mkglob' Constants.O.expr) [| mkconst ops1.sign; kt ops1 |]
+  apps (mkglob' Constants.P.expr) [| mkconst ops1.sign; kt ops1 |]
 
-(** Helper function to build the type of level one substitutions [O.subst]. *)
+(** Helper function to build the type of parameterized substitutions [P.subst]. *)
 let subst1 (ops1 : ops_one) : EConstr.t =
-  app (mkglob' Constants.O.subst) (mkconst ops1.sign)
+  app (mkglob' Constants.P.subst) (mkconst ops1.sign)
 
-(** Reification functions (level zero -> level one) and evaluation functions (level one ->
-    level zero). *)
+(** Reification functions (concrete syntax -> parameterized syntax) and evaluation
+    functions (parameterized syntax -> concrete syntax). *)
 type ops_reify_eval =
   { reify : Names.Constant.t
   ; sreify : Names.Constant.t
@@ -72,8 +72,8 @@ type ops_congr =
   ; congr_seval : Names.Constant.t
   }
 
-(** Proof of bijection between level zero and level one, and custom induction principle on
-    level one terms. *)
+(** Proof of bijection between concrete and parameterized syntax, and custom induction
+    principle on parameterized terms. *)
 type ops_bijection =
   { eval_reify_inv : Names.Constant.t
   ; seval_sreify_inv : Names.Constant.t

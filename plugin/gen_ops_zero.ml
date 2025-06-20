@@ -2,6 +2,12 @@ open Prelude
 open Signature
 module C = Constants
 
+let eval_cbn ?(whd = false) ?(red_flags = RedFlags.all) (t : EConstr.t) : EConstr.t m =
+ fun env sigma ->
+  if whd
+  then (sigma, Cbn.whd_cbn red_flags env sigma t)
+  else (sigma, Cbn.norm_cbn red_flags env sigma t)
+
 module Make (P : sig
   val sign : signature
 end) =
@@ -10,14 +16,21 @@ struct
   (** *** Build level zero operations (renaming, substitution). *)
   (**************************************************************************************)
 
-  let rec rename_arg (rename : EConstr.t) (r : EConstr.t) (arg : EConstr.t) (ty : arg_ty)
-      : EConstr.t =
+  (** Given that [rename : ren -> term -> term], build a function [fn : ren -> ty -> ty]
+      which maps renames arguments of type [ty]. *)
+  let rec rename_func (rename : EConstr.t) (r : EConstr.t) (ty : arg_ty) : EConstr.t m =
     match ty with
-    | AT_base _ -> arg
-    | AT_term -> apps rename [| r; arg |]
+    | AT_base _ ->
+        let* ty = fresh_evar None in
+        lambda "t" ty @@ fun t -> ret (EConstr.mkVar t)
+    | AT_term -> ret @@ app rename r
     | AT_bind ty ->
         let r' = app (mkglob' C.up_ren) r in
-        rename_arg rename r' arg ty
+        rename_func rename r' ty
+    | AT_fctor (i, ty) ->
+        let* fn = rename_func rename r ty in
+        let map = app (mkglob' C.NF.map) (mkglob P.sign.functors.(i)) in
+        apps_ev map 3 [| fn |]
 
   (** Build [rename : ren -> term -> term]. *)
   let build_rename (term : Names.Ind.t) : EConstr.t m =
@@ -34,13 +47,20 @@ struct
       ret @@ app (mkctor (term, 1)) @@ app (mkVar r) (mkVar @@ List.hd args)
     else
       (* Other branches. *)
-      let args' =
-        List.map2
-          (rename_arg (mkVar rename) (mkVar r))
+      let* args' =
+        List.monad_map2
+          (fun arg ty ->
+            let* fn = rename_func (mkVar rename) (mkVar r) ty in
+            ret @@ app fn arg)
           (List.map mkVar args)
           P.sign.ctor_types.(i - 1)
       in
-      ret @@ apps (mkctor (term, i + 1)) @@ Array.of_list args'
+      let t' = apps (mkctor (term, i + 1)) @@ Array.of_list args' in
+      (* Typecheck to solve evars and typeclass instances. *)
+      let* _ = typecheck ~solve_tc:true t' (Some (mkind term)) in
+      (* Use [cbn] to obtain a term that is nicer for the user and
+         to make the guard checker happy. *)
+      eval_cbn t'
 
   (** Build [subst : Type := nat -> term]. *)
   let build_subst (term : Names.Ind.t) : EConstr.t m =
@@ -93,12 +113,20 @@ struct
           ; apps (mkconst srcomp) [| mkVar s; mkglob' C.rshift |]
          |]
 
-  let rec substitute_arg (substitute : EConstr.t) (up_subst : EConstr.t) (s : EConstr.t)
-      (arg : EConstr.t) (ty : arg_ty) : EConstr.t =
+  (** Given that [substitute : subst -> term -> term], build a function
+      [fn : subst -> ty -> ty] which substitutes in arguments of type [ty]. *)
+  let rec substitute_func (substitute : EConstr.t) (up_subst : EConstr.t) (s : EConstr.t)
+      (ty : arg_ty) : EConstr.t m =
     match ty with
-    | AT_base _ -> arg
-    | AT_term -> apps substitute [| s; arg |]
-    | AT_bind ty -> substitute_arg substitute up_subst (app up_subst s) arg ty
+    | AT_base _ ->
+        let* ty = fresh_evar None in
+        lambda "t" ty @@ fun t -> ret (EConstr.mkVar t)
+    | AT_term -> ret @@ apps substitute [| s |]
+    | AT_bind ty -> substitute_func substitute up_subst (app up_subst s) ty
+    | AT_fctor (i, ty) ->
+        let* fn = substitute_func substitute up_subst s ty in
+        let map = app (mkglob' C.NF.map) (mkglob P.sign.functors.(i)) in
+        apps_ev map 3 [| fn |]
 
   (** Build [substitute : susbt -> term -> term]. *)
   let build_substitute (term : Names.Ind.t) (subst : Names.Constant.t)
@@ -116,13 +144,22 @@ struct
       ret @@ app (mkVar s) (mkVar @@ List.hd args)
     else
       (* Other branches. *)
-      let args' =
-        List.map2
-          (substitute_arg (mkVar substitute) (mkconst up_subst) (mkVar s))
+      let* args' =
+        List.monad_map2
+          (fun arg ty ->
+            let* fn =
+              substitute_func (mkVar substitute) (mkconst up_subst) (mkVar s) ty
+            in
+            ret @@ app fn arg)
           (List.map mkVar args)
           P.sign.ctor_types.(i - 1)
       in
-      ret @@ apps (mkctor (term, i + 1)) @@ Array.of_list args'
+      let t' = apps (mkctor (term, i + 1)) @@ Array.of_list args' in
+      (* Typecheck to solve evars and typeclass instances. *)
+      let* _ = typecheck ~solve_tc:true t' (Some (mkind term)) in
+      (* Use [cbn] to obtain a term that is nicer for the user and
+         to make the guard checker happy. *)
+      eval_cbn t'
 
   (** Build [scomp : subst -> subst -> subst]. *)
   let build_scomp (term : Names.Ind.t) (subst : Names.Constant.t)

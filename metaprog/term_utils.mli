@@ -19,13 +19,14 @@ val unify : ?pb:Conversion.conv_pb -> EConstr.t -> EConstr.t -> unit m
 (** [pretype t] turns a [Contrexpr.constr_expr] into an [EConstr.t] using pretyping. *)
 val pretype : Constrexpr.constr_expr -> EConstr.t m
 
-(** [typecheck t ty] checks that [t] is well-typed and computes the type of [t], using
-    typing information to resolve evars.
+(** [typecheck ?solve_tc t ty] checks that [t] is well-typed and computes the type of [t],
+    using typing information to resolve evars. If [solve_tc] is [true] we also attempt to
+    solve evars using typeclass resolution (by default [solve_tc] is [false]).
 
     If [ty] is provided we additionally check that the type of [t] is a subtype of [ty]
     (using unification, and raising an exception if unification fails). [ty] should be
     well-typed. *)
-val typecheck : EConstr.t -> EConstr.t option -> EConstr.types m
+val typecheck : ?solve_tc:bool -> EConstr.t -> EConstr.t option -> EConstr.types m
 
 (** [retype t] computes the type of [t], assuming [t] is already well-typed. [retype] is
     much more efficient than [typecheck]. *)

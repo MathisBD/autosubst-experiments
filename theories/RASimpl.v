@@ -162,8 +162,6 @@ Tactic Notation "rasimpl" "in" hyp(H) :=
 
 (** Tests. *)
 
-Definition t := 3.
-
 Sulfur Generate 
 {{
   option : Functor
@@ -176,3 +174,5 @@ Sulfur Generate
 }}.
 
 Print term.
+Print rename.
+Print substitute.

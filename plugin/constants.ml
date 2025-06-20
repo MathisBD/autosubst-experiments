@@ -44,6 +44,18 @@ let congr_rcons = resolve "sulfur.ren.congr_rcons"
 let congr_rcomp = resolve "sulfur.ren.congr_rcomp"
 let congr_up_ren = resolve "sulfur.ren.congr_up_ren"
 
+module NF = struct
+  let t = resolve "sulfur.normal_functor.type"
+  let map = resolve "sulfur.normal_functor.map"
+  let map_id = resolve "sulfur.normal_functor.map_id"
+  let map_comp = resolve "sulfur.normal_functor.map_comp"
+  let shape = resolve "sulfur.normal_functor.shape"
+  let size = resolve "sulfur.normal_functor.size"
+  let encode = resolve "sulfur.normal_functor.encode"
+  let decode = resolve "sulfur.normal_functor.decode"
+  let encode_decode_inv = resolve "sulfur.normal_functor.encode_decode_inv"
+end
+
 (**************************************************************************************)
 (** *** Signatures. *)
 (**************************************************************************************)
@@ -60,34 +72,34 @@ let signature = resolve "sulfur.signature.type"
 let build_signature = resolve "sulfur.signature.ctor"
 
 (**************************************************************************************)
-(** *** Level One. *)
+(** *** Parameterized syntax. *)
 (**************************************************************************************)
 
-module O = struct
-  let expr = resolve "sulfur.levelone.expr.type"
-  let e_var = resolve "sulfur.levelone.expr.var"
-  let e_ctor = resolve "sulfur.levelone.expr.ctor"
-  let e_al_nil = resolve "sulfur.levelone.expr.al_nil"
-  let e_al_cons = resolve "sulfur.levelone.expr.al_cons"
-  let e_abase = resolve "sulfur.levelone.expr.abase"
-  let e_aterm = resolve "sulfur.levelone.expr.aterm"
-  let e_abind = resolve "sulfur.levelone.expr.abind"
-  let subst = resolve "sulfur.levelone.subst"
-  let esize = resolve "sulfur.levelone.esize"
-  let rename = resolve "sulfur.levelone.rename"
-  let substitute = resolve "sulfur.levelone.substitute"
-  let sid = resolve "sulfur.levelone.sid"
-  let sshift = resolve "sulfur.levelone.sshift"
-  let scons = resolve "sulfur.levelone.scons"
-  let up_subst = resolve "sulfur.levelone.up_subst"
-  let scomp = resolve "sulfur.levelone.scomp"
-  let rscomp = resolve "sulfur.levelone.rscomp"
-  let srcomp = resolve "sulfur.levelone.srcomp"
-  let inv_Kt = resolve "sulfur.levelone.inv_Kt"
-  let inv_Kal_nil = resolve "sulfur.levelone.inv_Kal_nil"
-  let inv_Kal_cons = resolve "sulfur.levelone.inv_Kal_cons"
-  let inv_Ka_term = resolve "sulfur.levelone.inv_Ka_term"
-  let inv_Ka_base = resolve "sulfur.levelone.inv_Ka_base"
-  let inv_Ka_bind = resolve "sulfur.levelone.inv_Ka_bind"
-  let inv_Ka_functor = resolve "sulfur.levelone.inv_Ka_functor"
+module P = struct
+  let expr = resolve "sulfur.param.expr.type"
+  let e_var = resolve "sulfur.param.expr.var"
+  let e_ctor = resolve "sulfur.param.expr.ctor"
+  let e_al_nil = resolve "sulfur.param.expr.al_nil"
+  let e_al_cons = resolve "sulfur.param.expr.al_cons"
+  let e_abase = resolve "sulfur.param.expr.abase"
+  let e_aterm = resolve "sulfur.param.expr.aterm"
+  let e_abind = resolve "sulfur.param.expr.abind"
+  let subst = resolve "sulfur.param.subst"
+  let esize = resolve "sulfur.param.esize"
+  let rename = resolve "sulfur.param.rename"
+  let substitute = resolve "sulfur.param.substitute"
+  let sid = resolve "sulfur.param.sid"
+  let sshift = resolve "sulfur.param.sshift"
+  let scons = resolve "sulfur.param.scons"
+  let up_subst = resolve "sulfur.param.up_subst"
+  let scomp = resolve "sulfur.param.scomp"
+  let rscomp = resolve "sulfur.param.rscomp"
+  let srcomp = resolve "sulfur.param.srcomp"
+  let inv_Kt = resolve "sulfur.param.inv_Kt"
+  let inv_Kal_nil = resolve "sulfur.param.inv_Kal_nil"
+  let inv_Kal_cons = resolve "sulfur.param.inv_Kal_cons"
+  let inv_Ka_term = resolve "sulfur.param.inv_Ka_term"
+  let inv_Ka_base = resolve "sulfur.param.inv_Ka_base"
+  let inv_Ka_bind = resolve "sulfur.param.inv_Ka_bind"
+  let inv_Ka_functor = resolve "sulfur.param.inv_Ka_functor"
 end

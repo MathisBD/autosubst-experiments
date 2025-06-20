@@ -145,7 +145,7 @@ Proof.
 - intros A [a|] ; cbn ; reflexivity.
 - intros A B C g f [a|] ; cbn ; reflexivity.
 - intros A [a|] ; cbn ; reflexivity.
-Qed. 
+Defined. 
 
 Module ListNF.
   Definition Shape := nat.
@@ -166,7 +166,7 @@ Proof.
 - intros A x. now rewrite List.map_id.
 - intros A B C g f x. now rewrite List.map_map.
 - intros A x. induction x ; cbn; [reflexivity | now f_equal].
-Qed.
+Defined.
 
 (*Equations vec_of_fin {n A} (f : fin n -> A) : vec A n :=
 @vec_of_fin 0 _ _ := vnil ;

@@ -21,9 +21,11 @@ let pretype (t : Constrexpr.constr_expr) : EConstr.t m =
   let t, ustate = Pretyping.understand env sigma t in
   (Evd.merge_universe_context sigma ustate, t)
 
-let typecheck (t : EConstr.t) (expected_ty : EConstr.t option) : EConstr.types m =
+let typecheck ?(solve_tc = false) (t : EConstr.t) (expected_ty : EConstr.t option) :
+    EConstr.types m =
  fun env sigma ->
   let sigma, actual_ty = Typing.type_of env sigma t in
+  let sigma = if solve_tc then Typeclasses.resolve_typeclasses env sigma else sigma in
   match expected_ty with
   | None -> (sigma, actual_ty)
   | Some expected_ty ->

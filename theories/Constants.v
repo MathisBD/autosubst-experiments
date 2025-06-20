@@ -1,10 +1,12 @@
+(** This module exposes various constants to the OCaml plugin.
+    Constants are accessed in the plugin from [plugin/constants.ml]. *)
+   
 From Prototype Require Import Prelude Sig.
 From Prototype Require ParamSyntax.
 
-(** This module exposes various constants to the OCaml plugin.
-    Constants are accessed in the plugin from [plugin/constants.ml]. *)
-
+(*********************************************************************************)
 (** *** Basic constants. *)
+(*********************************************************************************)
 
 Register unit as sulfur.unit.type.
 Register tt as sulfur.unit.tt.
@@ -33,8 +35,18 @@ Register eq1_sym as sulfur.eq1.sym.
 Register eq1_trans as sulfur.eq1.trans.
 
 Register NormalFunctor as sulfur.normal_functor.type.
+Register map as sulfur.normal_functor.map.
+Register map_id as sulfur.normal_functor.map_id.
+Register map_comp as sulfur.normal_functor.map_comp.
+Register Shape as sulfur.normal_functor.Shape.
+Register size as sulfur.normal_functor.size.
+Register encode as sulfur.normal_functor.encode.
+Register decode as sulfur.normal_functor.decode.
+Register encode_decode_inv as sulfur.normal_functor.encode_decode_inv.
 
+(*********************************************************************************)
 (** *** Renamings. *)
+(*********************************************************************************)
 
 Register ren as sulfur.ren.type.
 
@@ -48,7 +60,9 @@ Register congr_rcons as sulfur.ren.congr_rcons.
 Register congr_rcomp as sulfur.ren.congr_rcomp.
 Register congr_up_ren as sulfur.ren.congr_up_ren.
 
+(*********************************************************************************)
 (** *** Signatures. *)
+(*********************************************************************************)
 
 Register arg_ty  as sulfur.arg_ty.type.
 Register AT_base as sulfur.arg_ty.base.
@@ -64,7 +78,9 @@ Register Kal as sulfur.kind.al.
 Register signature as sulfur.signature.type.
 Register Build_signature as sulfur.signature.ctor.
 
+(*********************************************************************************)
 (** *** Parameterized syntax. *)
+(*********************************************************************************)
 
 Register ParamSyntax.expr as sulfur.param.expr.type.
 Register ParamSyntax.E_var as sulfur.param.expr.var.
