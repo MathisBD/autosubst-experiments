@@ -1,6 +1,6 @@
 (library
  (name metaprog)
- (public_name autosubst-experiments.metaprog)
+ (public_name coq-sulfur.metaprog)
  (flags
   (:standard -warn-error +A -w -27-32-69))
  (libraries coq-core.vernac coq-core.tactics))

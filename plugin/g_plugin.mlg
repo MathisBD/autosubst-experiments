@@ -1,4 +1,4 @@
-DECLARE PLUGIN "autosubst-experiments.plugin"
+DECLARE PLUGIN "coq-sulfur.plugin"
 
 {
   open Signature

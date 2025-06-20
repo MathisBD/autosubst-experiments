@@ -1,5 +1,5 @@
 (coq.theory
  (name Prototype)
- (package autosubst-experiments)
+ (package coq-sulfur)
  (theories Ltac2 Equations Utils)
- (plugins autosubst-experiments.plugin))
+ (plugins coq-sulfur.plugin))

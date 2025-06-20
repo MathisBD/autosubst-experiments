@@ -1,4 +1,4 @@
 (coq.theory
  (name Utils)
- (package autosubst-experiments)
+ (package coq-sulfur)
  (theories Equations))

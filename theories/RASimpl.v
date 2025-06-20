@@ -74,10 +74,10 @@ Ltac2 simpl_subst_one (sig : constr) (s1 : constr) : constr * constr :=
 (** *** Load the plugin. *)
 (*********************************************************************************)
 
-Declare ML Module "autosubst-experiments.plugin".
+Declare ML Module "coq-sulfur.plugin".
 
-(*Ltac2 @external simpl_term_zero : constr -> constr * constr := "autosubst-experiments.plugin" "simpl_term_zero".
-Ltac2 @external simpl_subst_zero : constr -> constr * constr := "autosubst-experiments.plugin" "simpl_subst_zero".*)
+(*Ltac2 @external simpl_term_zero : constr -> constr * constr := "coq-sulfur.plugin" "simpl_term_zero".
+Ltac2 @external simpl_subst_zero : constr -> constr * constr := "coq-sulfur.plugin" "simpl_subst_zero".*)
 
 (*********************************************************************************)
 (** *** Boilerplate for [rasimpl]. *)
