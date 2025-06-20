@@ -1,6 +1,6 @@
 (library
  (name plugin)
- (public_name coq-sulfur.plugin)
+ (public_name rocq-sulfur.plugin)
  (flags
   (:standard -warn-error +A -w -27-32-69 -rectypes))
  (libraries
@@ -8,7 +8,7 @@
   coq-core.tactics
   coq-core.plugins.ltac2
   coq-equations.plugin
-  coq-sulfur.metaprog))
+  rocq-sulfur.metaprog))
 
 (coq.pp
  (modules g_plugin))

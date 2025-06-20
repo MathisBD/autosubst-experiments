@@ -2,12 +2,12 @@
 
 (using coq 0.9)
 
-(name coq-sulfur)
+(name rocq-sulfur)
 
 (generate_opam_files true)
 
 (package
- (name coq-sulfur)
+ (name rocq-sulfur)
  (maintainers "Mathis Bouverot-Dupuis (mathis.bouverot@ens.psl.eu)")
  (authors "Mathis Bouverot-Dupuis")
  (homepage "https://github.com/MathisBD/autosubst-experiments")

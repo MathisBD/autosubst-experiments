@@ -1,4 +1,4 @@
 (coq.theory
  (name Utils)
- (package coq-sulfur)
+ (package rocq-sulfur)
  (theories Equations))

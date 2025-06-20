@@ -1,4 +1,4 @@
 (coq.theory
  (name GhostTT)
- (package coq-sulfur)
+ (package rocq-sulfur)
  (theories Prototype))
