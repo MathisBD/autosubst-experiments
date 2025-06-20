@@ -1,5 +1,5 @@
-From Prototype Require Import Prelude Sig.
-From Prototype Require ParamSyntax.
+From Sulfur Require Import Prelude Sig.
+From Sulfur Require ParamSyntax.
 Module P := ParamSyntax.
 
 (** This file defines a parameterized term grammar with _explicit_ renamings 

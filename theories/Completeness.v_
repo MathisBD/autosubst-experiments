@@ -1,5 +1,5 @@
-From Prototype Require Import Prelude Sig LevelTwo LevelTwoSimp.
-From Prototype Require LevelOne.
+From Sulfur Require Import Prelude Sig LevelTwo LevelTwoSimp.
+From Sulfur Require LevelOne.
 Module O := LevelOne.
 
 

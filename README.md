@@ -8,6 +8,7 @@ opam switch create . 4.14.2 --repos=default,rocq-released='https://coq.inria.fr/
 Optionally install development packages, e.g. for VS Code:
 ```
 opam install ocaml-lsp-server user-setup ocamlformat vscoq-language-server
+opam user-setup install
 ```
 
 Build and install with:

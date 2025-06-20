@@ -1,4 +1,4 @@
-From Prototype Require Import Prelude Sig ExplicitSyntax.
+From Sulfur Require Import Prelude Sig ExplicitSyntax.
 
 (** This file defines a simplification algorithm on explicit syntax. 
     

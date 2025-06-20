@@ -1,5 +1,5 @@
-From Prototype Require Import Prelude Sig Constants.
-From Prototype Require ParamSyntax ExplicitSyntax Simplification Cleanup.
+From Sulfur Require Import Prelude Sig Constants.
+From Sulfur Require ParamSyntax ExplicitSyntax Simplification Cleanup.
 From Ltac2 Require Import RedFlags Printf.
 From Ltac2 Require Ltac2.
 

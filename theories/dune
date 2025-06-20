@@ -1,5 +1,5 @@
 (coq.theory
- (name Prototype)
+ (name Sulfur)
  (package rocq-sulfur)
  (theories Ltac2 Equations Utils)
  (plugins rocq-sulfur.plugin))

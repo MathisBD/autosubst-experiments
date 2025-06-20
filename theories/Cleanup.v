@@ -1,4 +1,4 @@
-From Prototype Require Import Prelude Sig ExplicitSyntax.
+From Sulfur Require Import Prelude Sig ExplicitSyntax.
 
 (** The output of simplification (Simplification.v) is good for comparing
     terms/substitutions for equality, but not very nice to work with for the user. 

@@ -1,4 +1,4 @@
-From Prototype Require Export All.
+From Sulfur Require Export All.
 From GhostTT Require Import BasicAST. 
 
 (*********************************************************************************)

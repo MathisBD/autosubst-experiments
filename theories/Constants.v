@@ -1,8 +1,8 @@
 (** This module exposes various constants to the OCaml plugin.
     Constants are accessed in the plugin from [plugin/constants.ml]. *)
    
-From Prototype Require Import Prelude Sig.
-From Prototype Require ParamSyntax.
+From Sulfur Require Import Prelude Sig.
+From Sulfur Require ParamSyntax.
 
 (*********************************************************************************)
 (** *** Basic constants. *)

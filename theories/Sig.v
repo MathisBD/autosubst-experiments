@@ -1,4 +1,4 @@
-From Prototype Require Import Prelude.
+From Sulfur Require Import Prelude.
 
 (** This file defines the notion of abstract signature of a language. *)
 
