@@ -123,6 +123,11 @@ Class NormalFunctor (F : Type -> Type) :=
   ; decode {A} : encoding Shape size A -> F A
   ; encode_decode_inv {A} : forall x : F A, decode (encode x) = x
   }.
+Arguments map F {NormalFunctor} {A} {B}.
+Arguments Shape F {NormalFunctor}.
+Arguments size F {NormalFunctor} {s}.
+Arguments encode F {NormalFunctor} {A}.
+Arguments decode F {NormalFunctor} {A}.
 
 Module OptionNF.
   Definition Shape := bool.

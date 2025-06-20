@@ -79,7 +79,8 @@ let generate (psign : psignature) : unit =
   (* Generate the term inductive. *)
   let term = monad_run @@ build_term sign in
   (* Generate all operations. *)
-  let _ops0 = Gen_ops_zero.generate sign term in
+  let ops_conc = Gen_ops_concrete.generate sign term in
+  let _ops_sign = Gen_ops_sign.generate sign ops_conc in
   ()
 
 (* Generate the operations. *)

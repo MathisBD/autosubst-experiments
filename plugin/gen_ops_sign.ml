@@ -4,11 +4,11 @@ module C = Constants
 
 module Make (P : sig
   val sign : signature
-  val ops0 : ops_zero
+  val ops_conc : ops_concrete
 end) =
 struct
   (**************************************************************************************)
-  (** *** Build the level one signature. *)
+  (** *** Build the signature. *)
   (**************************************************************************************)
 
   (** Build the inductive [Inductive base := B0 | B1 | ...] which indexes base types. *)
@@ -31,6 +31,36 @@ struct
     in
     case (EConstr.mkVar b) ~return @@ fun i _ -> ret P.sign.base_types.(i)
 
+  (** Build the inductive [Inductive fctor := Foption | Flist | ...] which indexes
+      functors. *)
+  let build_fctor () : Names.Ind.t m =
+    let names =
+      List.init (Array.length P.sign.functors) @@ fun i ->
+      Names.Id.of_string_soft ("F" ^ string_of_int i)
+    in
+    let types =
+      List.init (Array.length P.sign.functors) @@ fun _ ind -> ret @@ EConstr.mkVar ind
+    in
+    declare_ind (Names.Id.of_string_soft "fctor") EConstr.mkSet names types
+
+  (** Build the function [fctor_shape : fctor -> Type]. *)
+  let build_fctor_shape (fctor : Names.Ind.t) : EConstr.t m =
+    lambda "f" (mkind fctor) @@ fun f ->
+    case (EConstr.mkVar f) @@ fun i _ ->
+    let* inst = fresh_evar None in
+    ret @@ apps (mkglob' C.NF.shape) [| mkglob P.sign.functors.(i); inst |]
+
+  (** Build the function [fctor_size : forall f : fctor, fctor_shape f -> nat]. *)
+  let build_fctor_size (fctor : Names.Ind.t) (fctor_shape : Names.Constant.t) :
+      EConstr.t m =
+    lambda "f" (mkind fctor) @@ fun f ->
+    let return _ f0 : EConstr.t m =
+      ret @@ arrow (app (mkconst fctor_shape) (EConstr.mkVar f0)) (mkglob' C.nat)
+    in
+    case (EConstr.mkVar f) ~return @@ fun i _ ->
+    let* inst = fresh_evar None in
+    ret @@ apps (mkglob' C.NF.size) [| mkglob P.sign.functors.(i); inst |]
+
   (** Build the inductive [Inductive ctor := CApp | CLam | ...] which indexes non-variable
       constructors. *)
   let build_ctor () : Names.Ind.t m =
@@ -48,22 +78,27 @@ struct
     | [] -> app (mkglob' C.nil) ty
     | x :: xs -> apps (mkglob' C.cons) [| ty; x; mklist ty xs |]
 
-  (** Build the function [ctor_type : ctor -> list (@arg_ty base)]. *)
-  let build_ctor_type (ctor : Names.Ind.t) (base : Names.Ind.t) : EConstr.t m =
+  (** Build the function [ctor_type : ctor -> list (@arg_ty base fctor)]. *)
+  let build_ctor_type (ctor : Names.Ind.t) (base : Names.Ind.t) (fctor : Names.Ind.t) :
+      EConstr.t m =
     let rec on_arg_ty (ty : arg_ty) : EConstr.t =
       match ty with
-      | AT_base i -> apps (mkglob' C.at_base) [| mkind base; mkctor (base, i + 1) |]
-      | AT_term -> apps (mkglob' C.at_term) [| mkind base |]
-      | AT_bind ty -> apps (mkglob' C.at_bind) [| mkind base; on_arg_ty ty |]
+      | AT_base i ->
+          apps (mkglob' C.at_base) [| mkind base; mkind fctor; mkctor (base, i + 1) |]
+      | AT_term -> apps (mkglob' C.at_term) [| mkind base; mkind fctor |]
+      | AT_bind ty -> apps (mkglob' C.at_bind) [| mkind base; mkind fctor; on_arg_ty ty |]
+      | AT_fctor (i, ty) ->
+          apps (mkglob' C.at_fctor)
+            [| mkind base; mkind fctor; mkctor (fctor, i + 1); on_arg_ty ty |]
     in
     lambda "c" (mkind ctor) @@ fun c ->
     (* When [ctor] is empty, Rocq can't infer the return type of the pattern match. *)
     let return _ _ : EConstr.t m =
-      ret @@ app (mkglob' C.list) @@ app (mkglob' C.arg_ty) @@ mkind base
+      ret @@ app (mkglob' C.list) @@ apps (mkglob' C.arg_ty) [| mkind base; mkind fctor |]
     in
     case (EConstr.mkVar c) ~return @@ fun i _ ->
     ret
-    @@ mklist (app (mkglob' C.arg_ty) (mkind base))
+    @@ mklist (apps (mkglob' C.arg_ty) [| mkind base; mkind fctor |])
     @@ List.map on_arg_ty P.sign.ctor_types.(i)
 end
 
@@ -89,28 +124,47 @@ let derive_eqdec (ind : Names.Ind.t) : Names.Constant.t =
   Names.Constant.make1 @@ Names.KerName.make modpath label
 
 (** Generate the level one signature. *)
-let generate (s : signature) (ops0 : ops_zero) : ops_one =
+let generate (sign : signature) (ops_conc : ops_concrete) : ops_sign =
   let module M = Make (struct
-    let sign = s
-    let ops0 = ops0
+    let sign = sign
+    let ops_conc = ops_conc
   end) in
   (* Build the signature. *)
   let base = monad_run @@ M.build_base () in
   let base_eqdec = derive_eqdec base in
   let eval_base = def "eval_base" @@ M.build_eval_base base in
+  let fctor = monad_run @@ M.build_fctor () in
+  let fctor_eqdec = derive_eqdec fctor in
+  let fctor_shape = def "fctor_shape" @@ M.build_fctor_shape fctor in
+  let fctor_size = def "fctor_size" @@ M.build_fctor_size fctor fctor_shape in
   let ctor = monad_run @@ M.build_ctor () in
   let ctor_eqdec = derive_eqdec ctor in
-  let ctor_type = def "ctor_type" @@ M.build_ctor_type ctor base in
+  let ctor_type = def "ctor_type" @@ M.build_ctor_type ctor base fctor in
   let sign =
-    def "sig" @@ ret
+    def "sign" @@ ret
     @@ apps (mkglob' C.build_signature)
          [| mkind base
           ; mkconst base_eqdec
           ; mkconst eval_base
+          ; mkind fctor
+          ; mkconst fctor_eqdec
+          ; mkconst fctor_shape
+          ; mkconst fctor_size
           ; mkind ctor
           ; mkconst ctor_eqdec
           ; mkconst ctor_type
          |]
   in
   (* Assemble everything. *)
-  { base; base_eqdec; eval_base; ctor; ctor_eqdec; ctor_type; sign }
+  { base
+  ; base_eqdec
+  ; eval_base
+  ; fctor
+  ; fctor_eqdec
+  ; fctor_shape
+  ; fctor_size
+  ; ctor
+  ; ctor_eqdec
+  ; ctor_type
+  ; sign
+  }

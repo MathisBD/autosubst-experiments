@@ -92,7 +92,7 @@ Inductive expr : kind -> Type :=
 | E_abind {ty} : arg ty -> arg (AT_bind ty)
 (** Functor argument. *)
 | E_afunctor {ty : arg_ty} : 
-  forall f (sh : fctor_shape f), vec (arg ty) (fctor_size f sh) -> arg (AT_functor f ty)
+  forall f (sh : fctor_shape f), vec (arg ty) (fctor_size f sh) -> arg (AT_fctor f ty)
 
 (** Explicit substitution applied to a quoted natural. *)
 | E_sapply : subst -> qnat -> term

@@ -38,7 +38,7 @@ Register NormalFunctor as sulfur.normal_functor.type.
 Register map as sulfur.normal_functor.map.
 Register map_id as sulfur.normal_functor.map_id.
 Register map_comp as sulfur.normal_functor.map_comp.
-Register Shape as sulfur.normal_functor.Shape.
+Register Shape as sulfur.normal_functor.shape.
 Register size as sulfur.normal_functor.size.
 Register encode as sulfur.normal_functor.encode.
 Register decode as sulfur.normal_functor.decode.
@@ -68,7 +68,7 @@ Register arg_ty  as sulfur.arg_ty.type.
 Register AT_base as sulfur.arg_ty.base.
 Register AT_term as sulfur.arg_ty.term.
 Register AT_bind as sulfur.arg_ty.bind.
-Register AT_functor as sulfur.arg_ty.functor.
+Register AT_fctor as sulfur.arg_ty.fctor.
 
 Register kind as sulfur.kind.type.
 Register Kt as sulfur.kind.t.

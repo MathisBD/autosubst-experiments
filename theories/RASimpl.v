@@ -162,6 +162,7 @@ Tactic Notation "rasimpl" "in" hyp(H) :=
 
 (** Tests. *)
 
+Module G.
 Sulfur Generate 
 {{
   option : Functor
@@ -172,7 +173,6 @@ Sulfur Generate
   app : term -> (list (bind term in (option term))) -> term
   lam : (bind term in term) -> term
 }}.
+End G.
 
-Print term.
-Print rename.
-Print substitute.
+Print G.sign.

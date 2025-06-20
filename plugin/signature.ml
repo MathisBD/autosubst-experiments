@@ -44,7 +44,7 @@ and psignature = psignature_r CAst.t
 
 (** Argument type.
     - [AT_base] contains the index of the base type in the [base_types] array.
-    - [AT_functor] contains the index of the functor in the [functors] array. *)
+    - [AT_fctor] contains the index of the functor in the [functors] array. *)
 type arg_ty = AT_base of int | AT_term | AT_bind of arg_ty | AT_fctor of int * arg_ty
 
 (** An abstract signature:
@@ -209,7 +209,7 @@ let check_decl (st : state) (d : decl) : state =
       end;
       (* Check there is a [NormalFunctor] instance. *)
       begin
-        let clss = app (mkglob' C.normal_functor) (mkglob gref) in
+        let clss = app (mkglob' C.NF.t) (mkglob gref) in
         try ignore @@ Typeclasses.resolve_one_typeclass st.env st.sigma clss
         with _ ->
           Log.error ?loc:d'.name.loc "No instance of NormalFunctor %s was found."

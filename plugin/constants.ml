@@ -28,7 +28,18 @@ let eq1 = resolve "sulfur.eq1.type"
 let eq1_refl = resolve "sulfur.eq1.refl"
 let eq1_sym = resolve "sulfur.eq1.sym"
 let eq1_trans = resolve "sulfur.eq1.trans"
-let normal_functor = resolve "sulfur.normal_functor.type"
+
+module NF = struct
+  let t = resolve "sulfur.normal_functor.type"
+  let map = resolve "sulfur.normal_functor.map"
+  let map_id = resolve "sulfur.normal_functor.map_id"
+  let map_comp = resolve "sulfur.normal_functor.map_comp"
+  let shape = resolve "sulfur.normal_functor.shape"
+  let size = resolve "sulfur.normal_functor.size"
+  let encode = resolve "sulfur.normal_functor.encode"
+  let decode = resolve "sulfur.normal_functor.decode"
+  let encode_decode_inv = resolve "sulfur.normal_functor.encode_decode_inv"
+end
 
 (**************************************************************************************)
 (** *** Renamings. *)
@@ -44,18 +55,6 @@ let congr_rcons = resolve "sulfur.ren.congr_rcons"
 let congr_rcomp = resolve "sulfur.ren.congr_rcomp"
 let congr_up_ren = resolve "sulfur.ren.congr_up_ren"
 
-module NF = struct
-  let t = resolve "sulfur.normal_functor.type"
-  let map = resolve "sulfur.normal_functor.map"
-  let map_id = resolve "sulfur.normal_functor.map_id"
-  let map_comp = resolve "sulfur.normal_functor.map_comp"
-  let shape = resolve "sulfur.normal_functor.shape"
-  let size = resolve "sulfur.normal_functor.size"
-  let encode = resolve "sulfur.normal_functor.encode"
-  let decode = resolve "sulfur.normal_functor.decode"
-  let encode_decode_inv = resolve "sulfur.normal_functor.encode_decode_inv"
-end
-
 (**************************************************************************************)
 (** *** Signatures. *)
 (**************************************************************************************)
@@ -64,6 +63,7 @@ let arg_ty = resolve "sulfur.arg_ty.type"
 let at_base = resolve "sulfur.arg_ty.base"
 let at_term = resolve "sulfur.arg_ty.term"
 let at_bind = resolve "sulfur.arg_ty.bind"
+let at_fctor = resolve "sulfur.arg_ty.fctor"
 let kind = resolve "sulfur.kind.type"
 let k_t = resolve "sulfur.kind.t"
 let k_a = resolve "sulfur.kind.a"

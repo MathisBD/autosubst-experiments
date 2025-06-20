@@ -7,8 +7,8 @@ include Metaprog
 (** We gather the names of generated constants & lemmas in records. Once everything has
     been generated, we store the names using the [Libobject] API (see [main.ml]). *)
 
-(** Level zero terms, renaming functions, and substitution functions. *)
-type ops_zero =
+(** Concrete terms, renaming functions, and substitution functions. *)
+type ops_concrete =
   { term : Names.Ind.t
   ; subst : Names.Constant.t
   ; sid : Names.Constant.t
@@ -22,11 +22,15 @@ type ops_zero =
   ; up_subst : Names.Constant.t
   }
 
-(** Level one signature. *)
-type ops_one =
+(** Rocq signature. *)
+type ops_sign =
   { base : Names.Ind.t
   ; base_eqdec : Names.Constant.t
   ; eval_base : Names.Constant.t
+  ; fctor : Names.Ind.t
+  ; fctor_eqdec : Names.Constant.t
+  ; fctor_shape : Names.Constant.t
+  ; fctor_size : Names.Constant.t
   ; ctor : Names.Ind.t
   ; ctor_eqdec : Names.Constant.t
   ; ctor_type : Names.Constant.t
@@ -34,15 +38,15 @@ type ops_one =
   }
 
 (** Helper function to build the kind of terms [Kt]. *)
-let kt (ops1 : ops_one) : EConstr.t = app (mkglob' Constants.k_t) @@ mkind ops1.base
+let kt (ops : ops_sign) : EConstr.t = app (mkglob' Constants.k_t) @@ mkind ops.base
 
 (** Helper function to build the type of parameterized terms [P.expr Kt]. *)
-let term1 (ops1 : ops_one) : EConstr.t =
-  apps (mkglob' Constants.P.expr) [| mkconst ops1.sign; kt ops1 |]
+let term1 (ops : ops_sign) : EConstr.t =
+  apps (mkglob' Constants.P.expr) [| mkconst ops.sign; kt ops |]
 
 (** Helper function to build the type of parameterized substitutions [P.subst]. *)
-let subst1 (ops1 : ops_one) : EConstr.t =
-  app (mkglob' Constants.P.subst) (mkconst ops1.sign)
+let subst1 (ops : ops_sign) : EConstr.t =
+  app (mkglob' Constants.P.subst) (mkconst ops.sign)
 
 (** Reification functions (concrete syntax -> parameterized syntax) and evaluation
     functions (parameterized syntax -> concrete syntax). *)
@@ -93,8 +97,8 @@ type ops_push_eval =
 
 (** All generated operations. *)
 type ops_all =
-  { ops_ops0 : ops_zero
-  ; ops_ops1 : ops_one
+  { ops_conc : ops_concrete
+  ; ops_si : ops_sign
   ; ops_re : ops_reify_eval
   ; ops_congr : ops_congr
   ; ops_bij : ops_bijection

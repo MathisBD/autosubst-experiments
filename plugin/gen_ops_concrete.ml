@@ -176,7 +176,7 @@ end
 (**************************************************************************************)
 
 (** Generate the renaming and substitution functions. *)
-let generate (sign : signature) (term : Names.Ind.t) : ops_zero =
+let generate (sign : signature) (term : Names.Ind.t) : ops_concrete =
   let module M = Make (struct
     let sign = sign
   end) in

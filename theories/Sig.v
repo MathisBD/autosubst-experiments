@@ -7,7 +7,7 @@ Inductive arg_ty {base fctor} :=
 | AT_base : base -> arg_ty
 | AT_term : arg_ty
 | AT_bind : arg_ty -> arg_ty
-| AT_functor : fctor -> arg_ty -> arg_ty.
+| AT_fctor : fctor -> arg_ty -> arg_ty.
 
 Derive NoConfusion NoConfusionHom for arg_ty.
 

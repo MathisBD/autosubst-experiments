@@ -300,10 +300,12 @@ let case (scrutinee : EConstr.t)
 
 let declare_def (kind : Decls.definition_object_kind) (name : Names.Id.t)
     ?(ty : EConstr.t option) (body : EConstr.t) : Names.Constant.t m =
-  (* Typecheck to resolve evars. *)
-  let* _ = typecheck body None in
+  (* Typecheck to solve evars and typeclasses. *)
+  let* _ = typecheck ~solve_tc:true body None in
   let* _ =
-    match ty with None -> ret () | Some ty -> monad_ignore @@ typecheck ty None
+    match ty with
+    | None -> ret ()
+    | Some ty -> monad_ignore @@ typecheck ~solve_tc:true ty None
   in
   (* Constant info. *)
   let info =
@@ -329,7 +331,7 @@ let declare_def (kind : Decls.definition_object_kind) (name : Names.Id.t)
 let declare_theorem (kind : Decls.theorem_kind) (name : Names.Id.t) (stmt : EConstr.t)
     (tac : unit Proofview.tactic) : Names.Constant.t m =
   (* Typecheck to solve evars. *)
-  let* _ = typecheck stmt None in
+  let* _ = typecheck ~solve_tc:true stmt None in
   (* Build the proof. *)
   let* env = get_env in
   let* sigma = get_sigma in
@@ -360,13 +362,13 @@ let declare_theorem (kind : Decls.theorem_kind) (name : Names.Id.t) (stmt : ECon
 let declare_ind (name : Names.Id.t) (arity : EConstr.t) (ctor_names : Names.Id.t list)
     (ctor_types : (Names.Id.t -> EConstr.t m) list) : Names.Ind.t m =
   let open Entries in
-  (* Typecheck to solve evars. *)
-  let* _ = typecheck arity None in
+  (* Typecheck to solve evars and typeclasses. *)
+  let* _ = typecheck ~solve_tc:true arity None in
   (* Build the constructor types. *)
   let build_ctor_type (mk_ty : Names.Id.t -> EConstr.t m) : EConstr.t m =
     with_local_decl (vass (Names.Id.to_string name) arity) @@ fun ind ->
     let* ty = mk_ty ind in
-    let* _ = typecheck ty None in
+    let* _ = typecheck ~solve_tc:true ty None in
     let* sigma = get_sigma in
     ret @@ EConstr.Vars.subst_var sigma ind ty
   in

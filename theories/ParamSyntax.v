@@ -39,7 +39,7 @@ Inductive expr : kind -> Type :=
   E_abind {ty} : arg ty -> arg (AT_bind ty)
 | (** Apply a functor (e.g. option or list) to some arguments. *)
   E_afunctor {ty : arg_ty} : 
-    forall f (sh : fctor_shape f), vec (arg ty) (fctor_size f sh) -> arg (AT_functor f ty)
+    forall f (sh : fctor_shape f), vec (arg ty) (fctor_size f sh) -> arg (AT_fctor f ty)
 
 where "'term'" := (expr Kt)
   and "'arg' ty" := (expr (Ka ty))
@@ -129,7 +129,7 @@ Section InvLemmas.
     (forall a', P (E_abind a')) -> P a.
   Proof. depelim a ; eauto. Qed.
 
-  Lemma inv_Ka_functor {f ty} (P : arg (AT_functor f ty) -> Prop) (a : arg (AT_functor f ty)) :
+  Lemma inv_Ka_functor {f ty} (P : arg (AT_fctor f ty) -> Prop) (a : arg (AT_fctor f ty)) :
     (forall s al, P (E_afunctor f s al)) -> P a.
   Proof. depelim a ; eauto. Qed. 
 End InvLemmas.
