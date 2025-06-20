@@ -2,6 +2,7 @@
     parsing and validating signatures written by the user. *)
 
 open Prelude
+module C = Constants
 
 (**************************************************************************************)
 (** *** Pre-signature. *)
@@ -58,7 +59,7 @@ type signature =
   { sort_name : Names.Id.t
   ; var_ctor_name : Names.Id.t
   ; base_types : EConstr.t array
-  ; functors : Names.Id.t array
+  ; functors : Names.GlobRef.t array
   ; n_ctors : int
   ; ctor_names : Names.Id.t array
   ; ctor_types : arg_ty list array
@@ -66,16 +67,19 @@ type signature =
 
 (** [arg_ty_constr sign ty ind] builds the [EConstr.t] corresponding to [ty]. We use [ind]
     as a placeholder for the inductive type of terms. *)
-(*let rec arg_ty_constr (sign : signature) (ty : arg_ty) (ind : EConstr.t) : EConstr.t =
+let rec arg_ty_constr (sign : signature) (ty : arg_ty) (ind : EConstr.t) : EConstr.t =
   match ty with
   | AT_base i -> sign.base_types.(i)
   | AT_term -> ind
   | AT_bind ty -> arg_ty_constr sign ty ind
+  | AT_fctor (i, ty) ->
+      let ty' = arg_ty_constr sign ty ind in
+      app (mkglob sign.functors.(i)) ty'
 
-(** [ctor_ty_constr sign tys ind] build the type of a constructor as a [EConstr.t]. We use
-    [ind] as a placeholder for the inductive type of terms. *)
+(** [ctor_ty_constr sign tys ind] builds the type of a constructor as a [EConstr.t]. We
+    use [ind] as a placeholder for the inductive type of terms. *)
 let ctor_ty_constr (sign : signature) (tys : arg_ty list) (ind : EConstr.t) : EConstr.t =
-  arrows (List.map (fun ty -> arg_ty_constr sign ty ind) tys) ind*)
+  arrows (List.map (fun ty -> arg_ty_constr sign ty ind) tys) ind
 
 (**************************************************************************************)
 (** *** Checking a pre-signature. *)
@@ -85,9 +89,9 @@ let ctor_ty_constr (sign : signature) (tys : arg_ty list) (ind : EConstr.t) : EC
     the command [Sulfur Generate ...]. We can't check a signature during parsing because
     we need access to the global environment. *)
 
-type checked_functor = { name : Names.Id.t }
-type checked_sort = { name : Names.Id.t; var_ctor : Names.Id.t }
-type checked_ctor = { name : Names.Id.t; arg_tys : arg_ty list }
+type checked_functor = { fname : Names.Id.t; gref : Names.GlobRef.t }
+type checked_sort = { sname : Names.Id.t; var_ctor : Names.Id.t }
+type checked_ctor = { cname : Names.Id.t; arg_tys : arg_ty list }
 
 (** State we maintain while validating a pre-signature. *)
 type state =
@@ -108,16 +112,12 @@ type state =
 
 (** Check a name is fresh, i.e. it is not already present in the state. *)
 let check_fresh (st : state) (name : Names.lident) : unit =
-  let b1 =
-    List.exists (fun (f : checked_functor) -> Names.Id.equal name.v f.name) st.functors
-  in
-  let b2 =
-    List.exists (fun (c : checked_ctor) -> Names.Id.equal name.v c.name) st.ctors
-  in
+  let b1 = List.exists (fun f -> Names.Id.equal name.v f.fname) st.functors in
+  let b2 = List.exists (fun c -> Names.Id.equal name.v c.cname) st.ctors in
   let b3 =
     match st.sort with
     | None -> false
-    | Some s -> Names.Id.equal name.v s.name || Names.Id.equal name.v s.var_ctor
+    | Some s -> Names.Id.equal name.v s.sname || Names.Id.equal name.v s.var_ctor
   in
   (* TODO: check in the global env as well. *)
   if b1 || b2 || b3
@@ -126,18 +126,14 @@ let check_fresh (st : state) (name : Names.lident) : unit =
 (** Check a functor is declared. *)
 let check_fctor (st : state) (fctor : Names.lident) : int =
   let fctors = List.mapi (fun i f -> (i, f)) st.functors in
-  match
-    List.find_opt
-      (fun ((i, f) : int * checked_functor) -> Names.Id.equal fctor.v f.name)
-      fctors
-  with
+  match List.find_opt (fun (i, f) -> Names.Id.equal fctor.v f.fname) fctors with
   | None -> Log.error ?loc:fctor.loc "Undeclared functor %s." (Names.Id.to_string fctor.v)
   | Some (i, _) -> i
 
 (** Check a sort is declared. *)
 let check_sort (st : state) (sort : Names.lident) : unit =
   match st.sort with
-  | Some s when Names.Id.equal sort.v s.name -> ()
+  | Some s when Names.Id.equal sort.v s.sname -> ()
   | _ -> Log.error ?loc:sort.loc "Undeclared sort %s." (Names.Id.to_string sort.v)
 
 (** Internalize a base type and add it to the list of base types. *)
@@ -178,6 +174,12 @@ let rec check_arg_tys (st : state) (ptys : parg_ty list) : state * arg_ty list =
       let st, tys = check_arg_tys st ptys in
       (st, ty :: tys)
 
+let typecheck_fctor (f : Names.GlobRef.t) : unit m =
+  let* t1 = fresh_type in
+  let* t2 = fresh_type in
+  let* _ = typecheck (mkglob f) (Some (arrow t1 t2)) in
+  ret ()
+
 (** Check a declaration. *)
 let check_decl (st : state) (d : decl) : state =
   match d.v with
@@ -186,12 +188,34 @@ let check_decl (st : state) (d : decl) : state =
       check_fresh st d'.name;
       let st, tys = check_arg_tys st d'.arg_tys in
       check_sort st d'.ret_ty;
-      { st with ctors = st.ctors @ [ { name = d'.name.v; arg_tys = tys } ] }
+      { st with ctors = st.ctors @ [ { cname = d'.name.v; arg_tys = tys } ] }
   (* Functor declaration. *)
   | FctorDecl d' ->
       check_fresh st d'.name;
-      (* TODO: check it's actually a functor and retrieve the [NormalFunctor] instance. *)
-      { st with functors = st.functors @ [ { name = d'.name.v } ] }
+      (* Get the global reference of the functor. *)
+      let qid = Libnames.make_qualid Names.DirPath.empty d'.name.v in
+      let gref =
+        try Smartlocate.locate_global_with_alias qid
+        with _ ->
+          Log.error ?loc:d'.name.loc "%s was not found in the global environment."
+            (Names.Id.to_string d'.name.v)
+      in
+      (* Check the functor has type [Type -> Type]. *)
+      begin
+        try ignore @@ typecheck_fctor gref st.env st.sigma
+        with _ ->
+          Log.error ?loc:d'.name.loc "%s should be a constant of type [Type -> Type]."
+            (Pp.string_of_ppcmds @@ Printer.pr_global gref)
+      end;
+      (* Check there is a [NormalFunctor] instance. *)
+      begin
+        let clss = app (mkglob' C.normal_functor) (mkglob gref) in
+        try ignore @@ Typeclasses.resolve_one_typeclass st.env st.sigma clss
+        with _ ->
+          Log.error ?loc:d'.name.loc "No instance of NormalFunctor %s was found."
+            (Pp.string_of_ppcmds @@ Printer.pr_global gref)
+      end;
+      { st with functors = st.functors @ [ { fname = d'.name.v; gref } ] }
   (* Sort declaration. *)
   | SortDecl d' ->
       (* Check we haven't declared a sort yet. *)
@@ -205,7 +229,7 @@ let check_decl (st : state) (d : decl) : state =
       let var_ctor =
         match d'.var_ctor with None -> Names.Id.of_string_soft "Var" | Some var -> var.v
       in
-      { st with sort = Some { name = d'.name.v; var_ctor } }
+      { st with sort = Some { sname = d'.name.v; var_ctor } }
 
 (** Check a pre-signature. Raises an error (using Rocq's error reporting mechanism) if the
     pre-signature is not valid. *)
@@ -223,13 +247,12 @@ let check_psignature (s : psignature) : signature m =
   in
   (* Build the signature. *)
   let sign =
-    { functors =
-        st.functors |> List.map (fun (f : checked_functor) -> f.name) |> Array.of_list
-    ; sort_name = sort.name
+    { functors = st.functors |> List.map (fun f -> f.gref) |> Array.of_list
+    ; sort_name = sort.sname
     ; var_ctor_name = sort.var_ctor
     ; n_ctors = List.length st.ctors
     ; base_types = st.base_types |> Array.of_list
-    ; ctor_names = st.ctors |> List.map (fun c -> c.name) |> Array.of_list
+    ; ctor_names = st.ctors |> List.map (fun c -> c.cname) |> Array.of_list
     ; ctor_types = st.ctors |> List.map (fun c -> c.arg_tys) |> Array.of_list
     }
   in

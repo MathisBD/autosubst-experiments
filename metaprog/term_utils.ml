@@ -23,16 +23,11 @@ let pretype (t : Constrexpr.constr_expr) : EConstr.t m =
 
 let typecheck (t : EConstr.t) (expected_ty : EConstr.t option) : EConstr.types m =
  fun env sigma ->
-  Feedback.msg_notice (Pp.str "A");
   let sigma, actual_ty = Typing.type_of env sigma t in
-  Feedback.msg_notice (Pp.str "B");
   match expected_ty with
-  | None ->
-      Feedback.msg_notice (Pp.str "C");
-      (sigma, actual_ty)
+  | None -> (sigma, actual_ty)
   | Some expected_ty ->
       let sigma = Unification.w_unify env sigma Conversion.CUMUL actual_ty expected_ty in
-      Feedback.msg_notice (Pp.str "C");
       (sigma, actual_ty)
 
 let retype (t : EConstr.t) : EConstr.types m =

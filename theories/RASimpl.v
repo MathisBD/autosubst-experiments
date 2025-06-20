@@ -168,9 +168,11 @@ Sulfur Generate
 {{
   option : Functor
   list : Functor
-  
+
   term : Type
   
   app : term -> (list (bind term in (option term))) -> term
   lam : (bind term in term) -> term
 }}.
+
+Print term.

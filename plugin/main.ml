@@ -22,7 +22,7 @@ let update_saved_ops : (signature * ops_all) option -> Libobject.obj =
       cache_function = (fun v -> saved_ops := v)
     ; load_function = (fun _ v -> saved_ops := v)
     ; classify_function = (fun _ -> Keep)
-    }
+    }*)
 
 (**************************************************************************************)
 (** *** Generating operations/lemmas. *)
@@ -41,15 +41,6 @@ let build_term (sign : signature) : Names.Ind.t m =
   in
   (* Declare the inductive. *)
   declare_ind sign.sort_name EConstr.mkSet ctor_names ctor_types
-
-(** Given a signature, generate the term inductive and internalize all base types. *)
-let generate_term (gen_sign : Constrexpr.constr_expr gen_signature) :
-    signature * Names.Ind.t =
-  monad_run
-  @@
-  let* sign = interp_signature_base_types gen_sign in
-  let* term = build_term sign in
-  ret (sign, term)*)
 
 (** Given a signature, generate all relevant definitions and lemmas (i.e. add them to the
     global environment), and return the names of the generated operations. *)
@@ -84,9 +75,9 @@ let generate_term (gen_sign : Constrexpr.constr_expr gen_signature) :
     terms, operations, and lemmas. *)
 let generate (psign : psignature) : unit =
   (* Check the pre-signature. *)
-  let _sign = monad_run @@ check_psignature psign in
+  let sign = monad_run @@ check_psignature psign in
   (* Generate the term inductive. *)
-  (*let _sign, _term = generate_term gen_sign in*)
+  let _term = monad_run @@ build_term sign in
   ()
 
 (* Generate the operations. *)
