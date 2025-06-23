@@ -5,7 +5,7 @@ From GhostTT Require Import BasicAST.
 (** *** Generate all operations and lemmas. *)
 (*********************************************************************************)
 
-Autosubst Generate 
+Sulfur Generate 
 {{
   term : Type
   
@@ -50,16 +50,16 @@ Autosubst Generate
 (*********************************************************************************)
 
 (** Trigger [rasimpl] on [rename _ _]. *)
-Lemma autosubst_simpl_term_rename (r : ren) (t res : term) :
+Lemma sulfur_simpl_term_rename (r : ren) (t res : term) :
   TermSimplification (rename r t) res -> rename r t = res.
 Proof. intros H. now apply term_simplification. Qed.
-#[export] Hint Rewrite -> autosubst_simpl_term_rename : asimpl_topdown.
+#[export] Hint Rewrite -> sulfur_simpl_term_rename : asimpl_topdown.
 
 (** Trigger [rasimpl] on [substitute _ _]. *)
-Lemma autosubst_simpl_term_substitute (s : subst) (t res : term) :
+Lemma sulfur_simpl_term_substitute (s : subst) (t res : term) :
   TermSimplification (substitute s t) res -> substitute s t = res.
 Proof. intros H. now apply term_simplification. Qed.
-#[export] Hint Rewrite -> autosubst_simpl_term_substitute : asimpl_topdown.
+#[export] Hint Rewrite -> sulfur_simpl_term_substitute : asimpl_topdown.
 
 Axiom r : ren.
 Axiom t : term.

@@ -102,75 +102,88 @@ Proof. intros H. simp up_ren. apply congr_rcons. now apply congr_rcomp. Qed.
 (** *** Normal functors. *)
 (*********************************************************************************)
 
-Record encoding (Shape : Type) (size : Shape -> nat) (A : Type) : Type :=
+(*Record encoding (Shape : Type) (size : Shape -> nat) (A : Type) : Type :=
   { shape : Shape 
   ; elems : vec A (size shape) 
   }.
 Arguments shape {Shape} {size} {A} e.
-Arguments elems {Shape} {size} {A} e.
+Arguments elems {Shape} {size} {A} e.*)
 
 Class NormalFunctor (F : Type -> Type) :=
   (** Usual functor stuff. *)
-  { map A B : (A -> B) -> F A -> F B
+  { map {A B} : (A -> B) -> F A -> F B
   ; map_id A (x : F A) : 
-      map A A (fun a => a) x = x
+      map (fun a => a) x = x
   ; map_comp A B C (g : B -> C) (f : A -> B) (x : F A) :
-      map B C g (map A B f x) = map A C (fun a => g (f a)) x
+      map g (map f x) = map (fun a => g (f a)) x
   (** Encoding as a vector. *)
-  ; Shape : Type
-  ; size : Shape -> nat
-  ; encode {A} : F A -> encoding Shape size A
-  ; decode {A} : encoding Shape size A -> F A
-  ; encode_decode_inv {A} : forall x : F A, decode (encode x) = x
+  ; shape : Type
+  ; size : shape -> nat
+  ; encode_shape {A} : F A -> shape
+  ; encode_elems {A B} : forall (f : A -> B) (x : F A), vec B (size (encode_shape x))
+  ; decode {A} : forall sh, vec A (size sh) -> F A
+  ; encode_decode {A B} (f : A -> B) (x : F A) : 
+      decode (encode_shape x) (encode_elems f x) = map f x
   }.
 Arguments map F {NormalFunctor} {A} {B}.
-Arguments Shape F {NormalFunctor}.
+Arguments shape F {NormalFunctor}.
 Arguments size F {NormalFunctor} {s}.
-Arguments encode F {NormalFunctor} {A}.
+Arguments encode_shape F {NormalFunctor} {A}.
+Arguments encode_elems F {NormalFunctor} {A} {B}.
 Arguments decode F {NormalFunctor} {A}.
 
 Module OptionNF.
-  Definition Shape := bool.
+  Definition shape := bool.
   Definition size (b : bool) := if b then 1 else 0.
 
-  Equations encode {A} (x : option A) : encoding Shape size A :=
-  encode (Some a) := {| shape := true ; elems := [ a ] |} ;
-  encode None := {| shape := false ; elems := [] |}.
+  Equations encode_shape {A} (x : option A) : shape :=
+  encode_shape (Some _) := true ;
+  encode_shape None := false.
+
+  Equations encode_elems {A B} (f : A -> B) (x : option A) : vec B (size (encode_shape x)) :=
+  encode_elems f (Some a) := [ f a ] ;
+  encode_elems f None := [].
     
-  Equations decode {A} (x : encoding Shape size A) : option A :=
-  decode {| shape := true ; elems := [ a ] |} := Some a ;
-  decode {| shape := false ; elems := [] |} := None.
+  Equations decode {A} (sh : shape) (x : vec A (size sh)) : option A :=
+  decode true  [ a ] := Some a ;
+  decode false []    := None.
 End OptionNF.
 
 #[export, refine] 
 Instance option_normal_functor : NormalFunctor option :=
-  Build_NormalFunctor option option_map _ _ OptionNF.Shape OptionNF.size 
-    (@OptionNF.encode) (@OptionNF.decode) _.
+  Build_NormalFunctor option option_map _ _ OptionNF.shape OptionNF.size 
+    (@OptionNF.encode_shape) (@OptionNF.encode_elems) (@OptionNF.decode) _.
 Proof.
 - intros A [a|] ; cbn ; reflexivity.
 - intros A B C g f [a|] ; cbn ; reflexivity.
-- intros A [a|] ; cbn ; reflexivity.
+- intros A B f [a|] ; cbn ; reflexivity.
 Defined. 
 
 Module ListNF.
-  Definition Shape := nat.
+  Definition shape := nat.
   Definition size (n : nat) := n.
 
-  Definition encode {A} (x : list A) : encoding Shape size A :=
-    {| shape := List.length x ; elems := vec_of_list x |}.
+  Definition encode_shape {A} (xs : list A) : shape :=
+    List.length xs.
+
+  Fixpoint encode_elems {A B} (f : A -> B) (xs : list A) : vec B (size (encode_shape xs)) :=
+    match xs with 
+    | [] => vnil
+    | x :: xs => vcons (f x) (encode_elems f xs)
+    end. 
     
-  Definition decode {A} (x : encoding Shape size A) : list A :=
-    list_of_vec (elems x).
+  Definition decode {A} (sh : shape) (elems : vec A (size sh)) : list A :=
+    list_of_vec elems.
 End ListNF.
 
 #[export, refine] 
 Instance list_normal_functor : NormalFunctor list :=
-  Build_NormalFunctor list List.map _ _ ListNF.Shape ListNF.size 
-    (@ListNF.encode) (@ListNF.decode) _.
+  Build_NormalFunctor list List.map _ _ ListNF.shape ListNF.size 
+    (@ListNF.encode_shape) (@ListNF.encode_elems) (@ListNF.decode) _.
 Proof.
 - intros A x. now rewrite List.map_id.
 - intros A B C g f x. now rewrite List.map_map.
-- intros A x. induction x ; cbn; [reflexivity | now f_equal].
+- intros A B f x. induction x ; cbn ; [reflexivity | now f_equal].
 Defined.
 
 (*Equations vec_of_fin {n A} (f : fin n -> A) : vec A n :=

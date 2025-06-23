@@ -36,9 +36,10 @@ module NF = struct
   let map_comp = resolve "sulfur.normal_functor.map_comp"
   let shape = resolve "sulfur.normal_functor.shape"
   let size = resolve "sulfur.normal_functor.size"
-  let encode = resolve "sulfur.normal_functor.encode"
+  let encode_shape = resolve "sulfur.normal_functor.encode_shape"
+  let encode_elems = resolve "sulfur.normal_functor.encode_elems"
   let decode = resolve "sulfur.normal_functor.decode"
-  let encode_decode_inv = resolve "sulfur.normal_functor.encode_decode_inv"
+  let encode_decode = resolve "sulfur.normal_functor.encode_decode"
 end
 
 (**************************************************************************************)

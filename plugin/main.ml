@@ -81,6 +81,7 @@ let generate (psign : psignature) : unit =
   (* Generate all operations. *)
   let ops_conc = Gen_ops_concrete.generate sign term in
   let _ops_sign = Gen_ops_sign.generate sign ops_conc in
+  (*let _ops_re = Gen_ops_reify_eval.generate sign ops_conc ops_sign in*)
   ()
 
 (* Generate the operations. *)

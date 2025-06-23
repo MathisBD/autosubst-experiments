@@ -170,9 +170,35 @@ Sulfur Generate
 
   term : Type
   
-  app : term -> (list (bind term in (option term))) -> term
+  app : term -> (list (bind term in term)) -> term
   lam : (bind term in term) -> term
 }}.
+
+(*About ListNF.encode.
+Print encoding.
+
+Fixpoint vec_of_list' {A B} (f : A -> B) (xs : list A) : vec B (List.length xs) :=
+  match xs with 
+  | [] => vnil 
+  | x :: xs => vcons (f x) (vec_of_list' f xs)
+  end.
+
+Definition list_encode {A B} (f : A -> B) (x : list A) : encoding ListNF.Shape ListNF.size B :=
+  {| shape := List.length x ; elems := vec_of_list' f x |}.*)
+  
+Fixpoint reify (t : term) : @P.expr sign Kt :=
+  match t with 
+  | Var i => P.E_var i 
+  | app t ts => 
+    let t' := P.E_aterm (reify t) in 
+
+    let ts' := @P.E_afunctor sign _ F1 
+      (encode_shape list ts) 
+      (encode_elems list (fun t => P.E_abind (P.E_aterm (reify t))) ts) 
+    in
+    
+    @P.E_ctor sign Capp (P.E_al_cons t' (P.E_al_cons ts' P.E_al_nil))
+  | lam t => @P.E_ctor sign Clam (P.E_al_cons (P.E_abind (P.E_aterm (reify t))) P.E_al_nil)
+  end.
 End G.
 
-Print G.sign.
