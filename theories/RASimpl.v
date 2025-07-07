@@ -192,13 +192,112 @@ Fixpoint reify (t : term) : @P.expr sign Kt :=
   | app t ts => 
     let t' := P.E_aterm (reify t) in 
 
+    let ts' := map list (fun t => P.E_abind (P.E_aterm (reify t))) ts in
     let ts' := @P.E_afunctor sign _ F1 
-      (encode_shape list ts) 
-      (encode_elems list (fun t => P.E_abind (P.E_aterm (reify t))) ts) 
+      (encode_shape list ts') 
+      (encode_elems list ts') 
     in
     
     @P.E_ctor sign Capp (P.E_al_cons t' (P.E_al_cons ts' P.E_al_nil))
   | lam t => @P.E_ctor sign Clam (P.E_al_cons (P.E_abind (P.E_aterm (reify t))) P.E_al_nil)
   end.
+
+Fixpoint eval_arg_ty (ty : arg_ty) : Type :=
+  match ty with 
+  | AT_term => term 
+  | AT_base b => eval_base b 
+  | AT_bind ty => eval_arg_ty ty 
+  | AT_fctor f ty => 
+    match f with 
+    | F0 => option (eval_arg_ty ty)
+    | F1 => list (eval_arg_ty ty)
+    end
+  end.
+
+Fixpoint eval_arg_tys (tys : list arg_ty) : Type :=
+  match tys with 
+  | [] => unit 
+  | ty :: tys => eval_arg_ty ty * eval_arg_tys tys
+  end.
+
+Definition eval_kind (k : kind) : Type :=
+  match k with 
+  | Kt => term 
+  | Ka ty => eval_arg_ty ty 
+  | Kal tys => eval_arg_tys tys 
+  end.
+
+Definition eval_ctor (c : ctor) : eval_arg_tys (ctor_type c) -> term :=
+  match c with 
+  | Capp => fun '(t, (ts, tt)) => app t ts
+  | Clam => fun '(t, tt) => lam t
+  end.
+
+Definition eval_fctor {ty} (f : fctor) : 
+  forall (sh : fctor_shape f), vec (eval_arg_ty ty) (fctor_size f sh) -> 
+  eval_kind (Ka (AT_fctor f ty)) :=
+  match f with 
+  | F0 => decode option 
+  | F1 => decode list 
+  end.
+
+Fixpoint eval {k} (t : @P.expr sign k) : eval_kind k :=
+  match t in P.expr k0 return eval_kind k0 with 
+  | P.E_var i => Var i 
+  | P.E_ctor c al => eval_ctor c (eval al)
+  | P.E_al_nil => tt
+  | P.E_al_cons a al => (eval a, eval al)
+  | P.E_aterm t => eval t
+  | P.E_abase b x => x 
+  | P.E_abind a => eval a 
+  | P.E_afunctor f sh al => eval_fctor f sh (vec_map eval al)
+  end.
+
+Section Tmp.
+  Context (F : Type -> Type).
+  Context (NF : NormalFunctor F).
+  Context (A B C : Type).
+
+  Lemma map_id' (x : F A) : map F id x = x.
+  Proof. now apply map_id. Qed.
+
+  Lemma map_comp' (f1 : A -> B) (f2 : B -> C) (x : F A) :
+    map F f2 (map F f1 x) = map F (fun a => f2 (f1 a)) x.
+  Proof. now apply map_comp. Qed.
+
+  Lemma encode_map (f : A -> B) (x : F A) : 
+    encode_elems F (map F f x) = vec_map f (encode_elems F x).
+
+End Tmp.
+
+About PeanoNat.Nat.measure_induction.
+
+Fixpoint size (t : term) : nat :=
+  match t with 
+  | Var _ => 0 
+  | app t ts => 1 + size t + vec_sum (encode_elems list (map list size ts))
+  | lam t => 1 + size t 
+  end.
+
+Lemma eval_reify_inv t : eval (reify t) = t.
+Proof.
+revert t. apply (PeanoNat.Nat.measure_induction term size).
+intros t IH. destruct t ; cbn [eval reify eval_ctor eval_fctor].
+- reflexivity.
+- f_equal.
+  + apply IH. cbn. lia.
+  + apply IH. 
+  (*
+  l => map reify => encode => vec_map eval => decode
+  
+  *)
+  
+  rewrite <-(@encode_decode_map list). rewrite (@encode_decode_map list).
+    rewrite map_comp'. rewrite map_id ; [reflexivity|].
+    intros a ; cbn. apply IH. cbn. admit. (* stuck: we need a good induction principle on concrete terms. *)
+- f_equal.
+  + apply IHt.  
+Admitted.
+
 End G.
 

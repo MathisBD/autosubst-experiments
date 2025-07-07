@@ -43,7 +43,7 @@ Register size as sulfur.normal_functor.size.
 Register encode_shape as sulfur.normal_functor.encode_shape.
 Register encode_elems as sulfur.normal_functor.encode_elems.
 Register decode as sulfur.normal_functor.decode.
-Register encode_decode as sulfur.normal_functor.encode_decode.
+Register encode_decode_map as sulfur.normal_functor.encode_decode_map.
 
 (*********************************************************************************)
 (** *** Renamings. *)
